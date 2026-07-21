@@ -8,7 +8,7 @@
 const { MongoClient } = require("mongodb");
 
 const MONGO_URI        = process.env.MONGO_URI;
-const DB_NAME          = "sar-in-ocean-sales";
+const DB_NAME          = "sar-in-air-sales";  // Option B: shared DB
 const COLLECTION_USERS = "users";
 
 let cachedClient = null;
