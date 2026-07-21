@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-21T-ocean-v13-round-usd"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-21T-ocean-v14-revenue"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -874,6 +874,10 @@ async function computeSalesAggregate(db) {
       const { gp, isProvisional } = pickGP(job, cls);
       const gpProv   = isProvisional ? gp : 0;
       const gpActual = isProvisional ? 0 : gp;
+      // Revenue: use Billed Revenue if locked, else Provisional Revenue
+      const rev = isProvisional
+        ? (parseFloat(job["Provisional Revenue (A)"] || 0) || 0)
+        : (parseFloat(job["Billed Revenue (C)"]      || 0) || 0);
 
       // Tons — only for AIR rows, Chargeable Weight (kg) ÷ 1000
       let tons = 0;
@@ -914,7 +918,7 @@ async function computeSalesAggregate(db) {
 
         const branch = String(job["Location"] || "Unspecified").trim() || "Unspecified";
         if (!branchMonthData[branch]) branchMonthData[branch] = {};
-        if (!branchMonthData[branch][monthLabel]) branchMonthData[branch][monthLabel] = { gp: 0, gpProv: 0, gpActual: 0, ship: 0, tons: 0, teu: 0, lcl: 0 };
+        if (!branchMonthData[branch][monthLabel]) branchMonthData[branch][monthLabel] = { gp: 0, gpProv: 0, gpActual: 0, ship: 0, tons: 0, teu: 0, lcl: 0, rev: 0 };
         branchMonthData[branch][monthLabel].gp   += gp;
         branchMonthData[branch][monthLabel].gpProv   += gpProv;
         branchMonthData[branch][monthLabel].gpActual += gpActual;
@@ -922,6 +926,7 @@ async function computeSalesAggregate(db) {
         branchMonthData[branch][monthLabel].tons += tons;
         branchMonthData[branch][monthLabel].teu  += teu;
         branchMonthData[branch][monthLabel].lcl  += lcl;
+        branchMonthData[branch][monthLabel].rev  += rev;
         // Weekly accumulation — keyed by true ISO week (Mon-Sun), e.g. "2026-W14"
         if (rowDate) {
           const wk = isoWeekInfo(rowDate).key;
@@ -950,7 +955,7 @@ async function computeSalesAggregate(db) {
       const repKey = mapped.displayName + "||" + mapped.zone;
 
       if (!repMonthData[repKey]) repMonthData[repKey] = {};
-      if (!repMonthData[repKey][monthLabel]) repMonthData[repKey][monthLabel] = { gp: 0, gpProv: 0, gpActual: 0, ship: 0, tons: 0, teu: 0, lcl: 0 };
+      if (!repMonthData[repKey][monthLabel]) repMonthData[repKey][monthLabel] = { gp: 0, gpProv: 0, gpActual: 0, ship: 0, tons: 0, teu: 0, lcl: 0, rev: 0 };
       repMonthData[repKey][monthLabel].gp   += gp;
       repMonthData[repKey][monthLabel].gpProv   += gpProv;
       repMonthData[repKey][monthLabel].gpActual += gpActual;
@@ -958,6 +963,7 @@ async function computeSalesAggregate(db) {
       repMonthData[repKey][monthLabel].tons += tons;
       repMonthData[repKey][monthLabel].teu  += teu;
       repMonthData[repKey][monthLabel].lcl  += lcl;
+      repMonthData[repKey][monthLabel].rev  += rev;
       // Weekly accumulation — keyed by true ISO week (Mon-Sun), e.g. "2026-W14"
       if (rowDate) {
         const wk = isoWeekInfo(rowDate).key;
@@ -1027,6 +1033,7 @@ async function computeSalesAggregate(db) {
       email: meta.email,
       hue:   zoneHue(meta.zone),
       gp, gpProv, gpActual, ship, tons, teu, lcl,
+      rev: activeMonths.map(m => monthData[m]?.rev || 0),
       tank:  activeMonths.map(() => 0),
       tgt:          repTgt,
       weeklyTgt:    meta.weeklyTarget  || 0,
@@ -1060,6 +1067,7 @@ async function computeSalesAggregate(db) {
       email: "",
       hue:   zoneHue(CROSS_SALES_ZONE + branchName),
       gp, gpProv, gpActual, ship, tons, teu, lcl,
+      rev: activeMonths.map(m => monthData[m]?.rev || 0),
       tank:  activeMonths.map(() => 0),
       tgt:   0,
       isBranch: true,
