@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v13';
+var CACHE_VERSION = 'ocean-v14';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -1416,7 +1416,7 @@ function updateUserField(email, fields, callback){
     });
 }
 
-var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:false, dateFrom:'', dateTo:'', rate:90.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, pendencyDrill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{}, customerLob:'Air', customerView:'chart', custSortCol:'gp', custSortDir:1, agentLob:'Air', agentView:'chart', agentSortCol:'gp', agentSortDir:1, tradelaneLob:'Air', tradelaneView:'chart', tradelaneSortCol:'gp', tradelaneSortDir:-1, tradelaneShipOpen:{},
+var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:false, dateFrom:'', dateTo:'', rate:90.00, revOpen:{}, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, pendencyDrill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{}, customerLob:'Air', customerView:'chart', custSortCol:'gp', custSortDir:1, agentLob:'Air', agentView:'chart', agentSortCol:'gp', agentSortDir:1, tradelaneLob:'Air', tradelaneView:'chart', tradelaneSortCol:'gp', tradelaneSortDir:-1, tradelaneShipOpen:{},
   tradelaneDateFrom:'', tradelaneDateTo:'', tradelanePeriod:'Monthly', tradelaneWeeklyMonth:'',
   customDateFrom: '', customDateTo: '', customCalOpen: false, customCalMonth: new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'), customSelecting: 'from',
   addUserOpen: false, addUserError: '', addUserDefaultRole: '',
@@ -1907,7 +1907,9 @@ function grandEntity(){
                    : idxs.map(function(i){return sum(repsRaw.map(function(r){return (r.teu&&r.teu[i])||0;}));}),
     lcl:  isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].lcl)||0);},0);})
                    : idxs.map(function(i){return sum(repsRaw.map(function(r){return (r.lcl&&r.lcl[i])||0;}));}),
-    rev:  idxs.map(function(i){return sum(repsRaw.map(function(r){return (r.rev&&r.rev[i])||0;}));}),
+    rev:       idxs.map(function(i){return sum(repsRaw.map(function(r){return (r.rev&&r.rev[i])||0;}));}),
+    revBilled: idxs.map(function(i){return sum(repsRaw.map(function(r){return (r.revBilled&&r.revBilled[i])||0;}));}),
+    revProv:   idxs.map(function(i){return sum(repsRaw.map(function(r){return (r.revProv&&r.revProv[i])||0;}));}),
     gpProv:   idxs.map(function(i){return sum(repsRaw.map(function(r){return (r.gpProv&&r.gpProv[i])||0;}));}),
     gpActual: idxs.map(function(i){return sum(repsRaw.map(function(r){return (r.gpActual&&r.gpActual[i])||0;}));}),
     tank: (isWeekly ? wkeys : idxs).map(function(){return 0;}),
@@ -1988,7 +1990,9 @@ function zoneEntity(zoneName){
                    : idxs.map(function(i){return sum(zReps.map(function(r){return (r.teu&&r.teu[i])||0;}));}),
     lcl:  isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].lcl)||0);},0);})
                    : idxs.map(function(i){return sum(zReps.map(function(r){return (r.lcl&&r.lcl[i])||0;}));}),
-    rev:  idxs.map(function(i){return sum(zReps.map(function(r){return (r.rev&&r.rev[i])||0;}));}),
+    rev:       idxs.map(function(i){return sum(zReps.map(function(r){return (r.rev&&r.rev[i])||0;}));}),
+    revBilled: idxs.map(function(i){return sum(zReps.map(function(r){return (r.revBilled&&r.revBilled[i])||0;}));}),
+    revProv:   idxs.map(function(i){return sum(zReps.map(function(r){return (r.revProv&&r.revProv[i])||0;}));}),
     gpProv:   idxs.map(function(i){ return sum(zReps.map(function(r){ return (r.gpProv&&r.gpProv[i])||0; })); }),
     gpActual: idxs.map(function(i){ return sum(zReps.map(function(r){ return (r.gpActual&&r.gpActual[i])||0; })); }),
     tank: (isWeekly ? wkeys : idxs).map(function(){ return 0; }),
@@ -2072,7 +2076,9 @@ function repEntity(r){
     lcl:  isWeekly ? wkeys.map(function(k){return (wd[k]&&wd[k].lcl) ||0;}) : idxs.map(function(i){return (r.lcl&&r.lcl[i])||0;}),
     gpProv:   idxs.map(function(i){ return (r.gpProv  &&r.gpProv[i]  )||0; }),
     gpActual: idxs.map(function(i){ return (r.gpActual&&r.gpActual[i])||0; }),
-    rev:  isWeekly ? wkeys.map(function(k){return (wd[k]&&wd[k].rev)||0;}) : idxs.map(function(i){return (r.rev&&r.rev[i])||0;}),
+    rev:       isWeekly ? wkeys.map(function(k){return (wd[k]&&wd[k].rev)||0;})       : idxs.map(function(i){return (r.rev&&r.rev[i])||0;}),
+    revBilled: idxs.map(function(i){return (r.revBilled&&r.revBilled[i])||0;}),
+    revProv:   idxs.map(function(i){return (r.revProv&&r.revProv[i])||0;}),
     tank: (isWeekly ? wkeys : idxs).map(function(){ return 0; }),
     tgt:  repTgtForView(r),
     dailyTgt: r.dailyTgt || 0,
@@ -5393,11 +5399,13 @@ function tableRows(){
     var avatarBg = e.avatarBg;
 
     // In Yearly/Quarterly view, aggregate monthly arrays into per-group totals
-    var dispGp, dispRev, dispShip, dispTons, dispTeus, dispLcl, dispTgt, dispAch, dispGpProv, dispGpActual;
+    var dispGp, dispRev, dispRevBilled, dispRevProv, dispShip, dispTons, dispTeus, dispLcl, dispTgt, dispAch, dispGpProv, dispGpActual;
     var activeGroups = activeGroupsRemapped;
     if (activeGroups) {
       dispGp     = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return e.gp[i]||0; })); });
-      dispRev    = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.rev&&e.rev[i])||0; })); });
+      dispRev      = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.rev&&e.rev[i])||0; })); });
+      dispRevBilled= activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.revBilled&&e.revBilled[i])||0; })); });
+      dispRevProv  = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.revProv&&e.revProv[i])||0; })); });
       dispGpProv = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.gpProv&&e.gpProv[i])||0; })); });
       dispGpActual=activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.gpActual&&e.gpActual[i])||0; })); });
       dispShip = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return e.ship[i]||0; })); });
@@ -5426,7 +5434,9 @@ function tableRows(){
       });
     } else {
       dispGp     = e.gp;
-      dispRev    = e.rev || e.gp.map(function(){ return 0; });
+      dispRev      = e.rev       || e.gp.map(function(){ return 0; });
+      dispRevBilled= e.revBilled || e.gp.map(function(){ return 0; });
+      dispRevProv  = e.revProv   || e.gp.map(function(){ return 0; });
       dispGpProv = e.gpProv   || e.gp.map(function(){ return 0; });
       dispGpActual=e.gpActual || e.gp.map(function(){ return 0; });
       dispShip = e.ship;
@@ -5485,7 +5495,8 @@ function tableRows(){
     function metric(label, indent, type, color, vals, fy, toggleType, repInfo){
       var isShip = toggleType === 'ship';
       var isGP   = toggleType === 'gp';
-      var isOpen = isShip ? shipOpen : isGP ? gpOpen : false;
+      var isRev  = toggleType === 'rev';
+      var isOpen = isShip ? shipOpen : isGP ? gpOpen : isRev ? revOpen : false;
       var arrowChar = (isShip || isGP) ? (isOpen ? '◄ ' : '► ') : '';
       // Only hide target/achievement if rep has no target set
       var noTarget = isRep && !e.tgt;
@@ -5546,7 +5557,12 @@ function tableRows(){
       rows.push(metric('Provisional Profit', 1, 'cur', '#10875A', dispGpProv,   sum(dispGpProv),   false));
     }
 
-    rows.push(metric('Revenue', 0, 'cur', '#0D7C6B', dispRev || dispGp.map(function(){return 0;}), sum(dispRev||[]), false));
+    var revOpen = state.revOpen[e.name] === true;
+    rows.push(metric('Revenue', 0, 'cur', '#0D7C6B', dispRev || dispGp.map(function(){return 0;}), sum(dispRev||[]), 'rev'));
+    if (revOpen) {
+      rows.push(metric('Billed Revenue',      1, 'cur', '#0D7C6B', dispRevBilled || dispGp.map(function(){return 0;}), sum(dispRevBilled||[]), false));
+      rows.push(metric('Provisional Revenue', 1, 'cur', '#1A9680', dispRevProv   || dispGp.map(function(){return 0;}), sum(dispRevProv||[]),   false));
+    }
 
     rows.push(metric('Target',        0, 'cur', '#2563EB', tgtArr,  sum(tgtArr), false));
     var achRowColor = achFy >= 75 ? '#15875A' : '#DC2626';
