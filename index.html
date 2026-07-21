@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v17';
+var CACHE_VERSION = 'ocean-v18';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5497,7 +5497,7 @@ function tableRows(){
       var isGP   = toggleType === 'gp';
       var isRev  = toggleType === 'rev';
       var isOpen = isShip ? shipOpen : isGP ? gpOpen : isRev ? revOpen : false;
-      var arrowChar = (isShip || isGP) ? (isOpen ? '◄ ' : '► ') : '';
+      var arrowChar = (isShip || isGP || isRev) ? (isOpen ? '◄ ' : '► ') : '';
       // Only hide target/achievement if rep has no target set
       var noTarget = isRep && !e.tgt;
 
@@ -5560,8 +5560,8 @@ function tableRows(){
     var revOpen = state.revOpen[e.name] === true;
     rows.push(metric('Revenue', 0, 'cur', '#0D7C6B', dispRev || dispGp.map(function(){return 0;}), sum(dispRev||[]), 'rev'));
     if (revOpen) {
-      rows.push(metric('Billed Revenue',      1, 'cur', '#0D7C6B', dispRevBilled || dispGp.map(function(){return 0;}), sum(dispRevBilled||[]), false));
-      rows.push(metric('Provisional Revenue', 1, 'cur', '#1A9680', dispRevProv   || dispGp.map(function(){return 0;}), sum(dispRevProv||[]),   false));
+      rows.push(metric('Billed Revenue',      1, 'cur', '#1D5FCC', dispRevBilled || dispGp.map(function(){return 0;}), sum(dispRevBilled||[]), false));
+      rows.push(metric('Provisional Revenue', 1, 'cur', '#475569', dispRevProv   || dispGp.map(function(){return 0;}), sum(dispRevProv||[]),   false));
     }
 
     rows.push(metric('Target',        0, 'cur', '#2563EB', tgtArr,  sum(tgtArr), false));
