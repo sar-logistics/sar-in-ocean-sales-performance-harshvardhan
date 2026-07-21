@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-21T-ocean-v2-no-drill-bundle"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-21T-ocean-v5-air-lob-default"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2541,6 +2541,8 @@ module.exports = async function handler(req, res) {
             if (copy.lobData['SEA IMPORT'])     oceanOnly['SEA IMPORT']     = copy.lobData['SEA IMPORT'];
             if (copy.lobData['ISOTANK EXPORT']) oceanOnly['ISOTANK EXPORT'] = copy.lobData['ISOTANK EXPORT'];
             if (copy.lobData['ISOTANK IMPORT']) oceanOnly['ISOTANK IMPORT'] = copy.lobData['ISOTANK IMPORT'];
+            if (copy.lobData['AIR EXPORT'])     oceanOnly['AIR EXPORT']     = copy.lobData['AIR EXPORT'];
+            if (copy.lobData['AIR IMPORT'])     oceanOnly['AIR IMPORT']     = copy.lobData['AIR IMPORT'];
             copy.lobData = oceanOnly;
           }
         }
