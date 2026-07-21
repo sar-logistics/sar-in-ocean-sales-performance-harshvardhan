@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v2';
+var CACHE_VERSION = 'ocean-v3';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -2590,7 +2590,7 @@ function kpiRow(M){
 
   var kpis = [
     { label:'TOTAL SHIPMENTS', value: noData ? '—' : String(M.shipGrand),                              delta: noData ? null : momDelta(shipData), deltaLabel:periodLabel, vcolor:'#0D2B5E', tint:'#5678C2' },
-    { label:'TONS (AIR)',      value: noData ? '—' : (M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014'),delta: noData ? null : momDelta(tonsData), deltaLabel:periodLabel, vcolor:'#0D2B5E', tint:'#7C6FE0' },
+    { label:'TEUS (OCEAN)',    value: noData ? '—' : (M.teuGrand  ? M.teuGrand.toFixed(2)  : '\u2014'),delta: noData ? null : momDelta(teuData),  deltaLabel:periodLabel, vcolor:'#0D2B5E', tint:'#0D7C6B' },
     { label:'GROSS PROFIT',    value: noData ? '—' : fmtCur(M.gpGrand),                                delta: noData ? null : momDelta(gpData),   deltaLabel:periodLabel, vcolor:'#0D2B5E', tint:'#D4941E' },
     { label:'GP TARGET',       value: noData ? '—' : fmtCur(M.tgtGrand),                               delta:null, deltaLabel: noData ? 'No data' : 'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)), vcolor:'#0D2B5E', tint:'#D4574A' },
     { label:'ACHIEVEMENT',     value: noData ? '—' : M.achGrand+'%',                                   delta:null, deltaLabel: noData ? 'No data' : 'vs target', vcolor: noData ? '#9AAFC8' : achColor, tint: achColor },
