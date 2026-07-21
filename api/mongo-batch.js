@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-21T-ocean-v8-usd-fields"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-21T-ocean-v9-usd-entry"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -774,10 +774,8 @@ async function computeSalesAggregate(db) {
       displayName:   String(row["Display Name"] || row["Sales Rep Name"] || "").trim(),
       zone:          String(row["Zone"] || "Unassigned").trim(),
       lob:           String(row["LOB"] || "").trim(),
-      monthlyTarget,
-      weeklyTarget,
-      yearlyTarget,
-      dailyTarget,
+      monthlyTarget, weeklyTarget, yearlyTarget, dailyTarget,
+      monthlyTargetUSD, weeklyTargetUSD, yearlyTargetUSD, dailyTargetUSD,
       joinDate:      row["Date of Joining"] ? new Date(row["Date of Joining"]) : null,
       exitDate:      row["Date Of Exit"]    ? new Date(row["Date Of Exit"])    : null,
       email:         String(row["Email ID"] || "").toLowerCase().trim(),
