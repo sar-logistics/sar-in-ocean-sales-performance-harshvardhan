@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v14';
+var CACHE_VERSION = 'ocean-v15';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -8198,7 +8198,8 @@ document.addEventListener('click', function(ev){
   }
   else if(act==='cur'){ ev.stopPropagation(); ev.preventDefault(); state.currency=el.getAttribute('data-cur'); render(); }
   else if(act==='shipToggle'){ ev.stopPropagation(); var n=el.getAttribute('data-name'); state.shipOpen[n]=!state.shipOpen[n]; render(); }
-  else if(act==='gpToggle'){  ev.stopPropagation(); var n=el.getAttribute('data-name'); state.gpOpen[n]  =!state.gpOpen[n];   render(); }
+  else if(act==='revToggle'){ ev.stopPropagation(); var n=el.getAttribute('data-name'); state.revOpen[n] =!state.revOpen[n];  render(); }
+        else if(act==='gpToggle'){  ev.stopPropagation(); var n=el.getAttribute('data-name'); state.gpOpen[n]  =!state.gpOpen[n];   render(); }
   else if(act==='zoneToggle'){ ev.stopPropagation(); var zn=el.getAttribute('data-zone'); state.zoneOpen[zn] = (state.zoneOpen[zn]===false) ? true : false; render(); }
   else if(act==='pendencyZoneToggle'){
     ev.stopPropagation();
