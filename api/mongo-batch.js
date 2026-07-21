@@ -7,7 +7,7 @@ const { MongoClient } = require("mongodb");
 
 const MONGO_URI = process.env.MONGO_URI;
 const DB_NAME   = "sar-in-air-sales";  // Option B: same DB as Air, Ocean dashboard filters differently
-const USD_TO_INR = 94; // Exchange rate used to convert USD targets → INR (same base as GP values)
+const USD_TO_INR = 90; // Ocean dashboard default rate // Exchange rate used to convert USD targets → INR (same base as GP values)
 
 const COLLECTIONS = {
   "Sea Export":        "jobs_sea_export",
@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-21T-ocean-v10-sheet-inr"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-21T-ocean-v11-rate90"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
