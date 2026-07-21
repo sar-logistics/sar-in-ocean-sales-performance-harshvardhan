@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v16';
+var CACHE_VERSION = 'ocean-v17';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5726,13 +5726,16 @@ function salesTable(M){
     var isShipRow = row.toggleType === 'ship';
     var isGpRow   = row.toggleType === 'gp';
     var isRevRow  = row.toggleType === 'rev';
+    var arrowColor = isRevRow ? '#0D7C6B' : '#2563EB';
     var arrowSvg  = row.caret.trim() === '◄'
-      ? '<svg width="8" height="8" viewBox="0 0 8 8" fill="#2563EB"><polygon points="8,0 8,8 0,4"/></svg>'
-      : '<svg width="8" height="8" viewBox="0 0 8 8" fill="#2563EB"><polygon points="0,0 8,4 0,8"/></svg>';
+      ? '<svg width="8" height="8" viewBox="0 0 8 8" fill="'+arrowColor+'"><polygon points="8,0 8,8 0,4"/></svg>'
+      : '<svg width="8" height="8" viewBox="0 0 8 8" fill="'+arrowColor+'"><polygon points="0,0 8,4 0,8"/></svg>';
 
     var labelContent;
     if (isShipRow || isGpRow) {
       labelContent = '<span style="display:flex;align-items:center;gap:5px;color:#2563EB;font-weight:600;font-size:11.5px;cursor:pointer;">'+arrowSvg+row.label+'</span>';
+    } else if (isRevRow) {
+      labelContent = '<span style="display:flex;align-items:center;gap:5px;color:#0D7C6B;font-weight:600;font-size:11.5px;cursor:pointer;">'+arrowSvg+row.label+'</span>';
     } else if (row.labelStyle === 'italic') {
       labelContent = '<span style="color:#94A3B8;font-size:11px;font-style:italic;font-weight:400;">'+row.label+'</span>';
     } else {
