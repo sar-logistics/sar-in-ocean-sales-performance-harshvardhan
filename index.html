@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v8';
+var CACHE_VERSION = 'ocean-v9';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5379,10 +5379,11 @@ function tableRows(){
     var avatarBg = e.avatarBg;
 
     // In Yearly/Quarterly view, aggregate monthly arrays into per-group totals
-    var dispGp, dispShip, dispTons, dispTeus, dispLcl, dispTgt, dispAch, dispGpProv, dispGpActual;
+    var dispGp, dispRev, dispShip, dispTons, dispTeus, dispLcl, dispTgt, dispAch, dispGpProv, dispGpActual;
     var activeGroups = activeGroupsRemapped;
     if (activeGroups) {
       dispGp     = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return e.gp[i]||0; })); });
+      dispRev    = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.rev&&e.rev[i])||0; })); });
       dispGpProv = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.gpProv&&e.gpProv[i])||0; })); });
       dispGpActual=activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.gpActual&&e.gpActual[i])||0; })); });
       dispShip = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return e.ship[i]||0; })); });
@@ -5411,6 +5412,7 @@ function tableRows(){
       });
     } else {
       dispGp     = e.gp;
+      dispRev    = e.rev || e.gp.map(function(){ return 0; });
       dispGpProv = e.gpProv   || e.gp.map(function(){ return 0; });
       dispGpActual=e.gpActual || e.gp.map(function(){ return 0; });
       dispShip = e.ship;
@@ -5529,6 +5531,8 @@ function tableRows(){
       rows.push(metric('Actual Profit',      1, 'cur', '#1D5FCC', dispGpActual, sum(dispGpActual), false));
       rows.push(metric('Provisional Profit', 1, 'cur', '#10875A', dispGpProv,   sum(dispGpProv),   false));
     }
+
+    rows.push(metric('Revenue', 0, 'cur', '#0D7C6B', dispRev || dispGp.map(function(){return 0;}), sum(dispRev||[]), false));
 
     rows.push(metric('Target',        0, 'cur', '#2563EB', tgtArr,  sum(tgtArr), false));
     var achRowColor = achFy >= 75 ? '#15875A' : '#DC2626';
