@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-21T-ocean-init-v1"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-21T-ocean-v2-no-drill-bundle"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2413,9 +2413,7 @@ module.exports = async function handler(req, res) {
         return c;
       })};
       // Bundle allDrillRows from drillRowsCache so client never needs a separate drill fetch
-      if (drillRowsCache && drillRowsCache.allRows && drillRowsCache.allRows.length > 0) {
-        salesStripped.allDrillRows = drillRowsCache.allRows;
-      }
+      // Ocean: do NOT bundle allDrillRows in ping — too large, fetched on demand instead
     }
 
     // Include lastUpdated so client knows if data changed since last cache
