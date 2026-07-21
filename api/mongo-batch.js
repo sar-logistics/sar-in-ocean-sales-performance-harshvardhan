@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-21T-ocean-v7-usd-rate"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-21T-ocean-v8-usd-fields"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1038,6 +1038,10 @@ async function computeSalesAggregate(db) {
       weeklyTgt:    meta.weeklyTarget  || 0,
       yearlyTgt:    meta.yearlyTarget  || 0,
       dailyTgt:     meta.dailyTarget   || 0,
+      tgtUSD:       meta.monthlyTargetUSD || 0,
+      weeklyTgtUSD: meta.weeklyTargetUSD  || 0,
+      yearlyTgtUSD: meta.yearlyTargetUSD  || 0,
+      dailyTgtUSD:  meta.dailyTargetUSD   || 0,
       joinDate:     meta.joinDate && !isNaN(meta.joinDate) ? meta.joinDate.toISOString().slice(0,10) : null,
       exitDate:     meta.exitDate && !isNaN(meta.exitDate) ? meta.exitDate.toISOString().slice(0,10) : null,
       weekData: repWeekData[repKey] || {},
