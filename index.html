@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v19';
+var CACHE_VERSION = 'ocean-v20';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5280,7 +5280,7 @@ function buildSummaryCells(e, colLabels){
     };
   });
 }
-function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, colLabels, noTarget, rawColKeys){
+function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, colLabels, noTarget, rawColKeys, extraFilters){
   // rawColKeys: the actual month labels used as keys (may differ from colLabels display in Yearly view)
   // If not provided, colLabels are the raw keys too
   var keys = rawColKeys || colLabels;
@@ -5493,7 +5493,7 @@ function tableRows(){
     var tgtArr  = dispTgt;
     var achArr  = dispAch;
 
-    function metric(label, indent, type, color, vals, fy, toggleType, repInfo){
+    function metric(label, indent, type, color, vals, fy, toggleType, repInfo, extraFilters){
       var isShip = toggleType === 'ship';
       var isGP   = toggleType === 'gp';
       var isRev  = toggleType === 'rev';
@@ -5526,7 +5526,7 @@ function tableRows(){
         labelWeight:indent?500:600, labelStyle:indent?'italic':'normal',
         caret:arrowChar, toggleType:toggleType||false, entityName: isZone ? e.zone : e.name,
         repInfo:repInfo||null, rowBg: groupBg, isZoneBlock: isZone, isGrandBlock: isGrand,
-        cells:buildCells(fy, vals, type, color, isZone ? e.zone : e.name, label, colLabels, noTarget, rawColKeys)
+        cells:buildCells(fy, vals, type, color, isZone ? e.zone : e.name, label, colLabels, noTarget, rawColKeys, extraFilters)
       };
     }
 
@@ -5560,8 +5560,8 @@ function tableRows(){
 
     rows.push(metric('Revenue', 0, 'cur', '#0D7C6B', dispRev || dispGp.map(function(){return 0;}), sum(dispRev||[]), 'rev'));
     if (revOpen) {
-      rows.push(metric('Billed Revenue',      1, 'cur', '#1D5FCC', dispRevBilled || dispGp.map(function(){return 0;}), sum(dispRevBilled||[]), false));
-      rows.push(metric('Provisional Revenue', 1, 'cur', '#475569', dispRevProv   || dispGp.map(function(){return 0;}), sum(dispRevProv||[]),   false));
+      rows.push(metric('Billed Revenue',      1, 'cur', '#1D5FCC', dispRevBilled || dispGp.map(function(){return 0;}), sum(dispRevBilled||[]), false, null, {prov:[0]}));
+      rows.push(metric('Provisional Revenue', 1, 'cur', '#475569', dispRevProv   || dispGp.map(function(){return 0;}), sum(dispRevProv||[]),   false, null, {prov:[1]}));
     }
 
     rows.push(metric('Target',        0, 'cur', '#2563EB', tgtArr,  sum(tgtArr), false));
@@ -7252,7 +7252,7 @@ function openInsightDrill(drillType, name, drillMonth) {
   }); // end requestAnimationFrame
 }
 
-function openDrill(entity, metric, col, valueFmt){
+function openDrill(entity, metric, col, valueFmt, extraFilters){
   var cacheKey = CACHE_VERSION+'||'+entity+'||'+metric+'||'+col+'||'+(state.filterLobs||[]).join(',')+'||'+(state.filterZones||[]).join(',')+'||'+(state.filterReps||[]).join(',')+'||'+(currentUser?currentUser.email:'');
 
   // 1. In-memory cache — instant repeat clicks
@@ -7262,27 +7262,27 @@ function openDrill(entity, metric, col, valueFmt){
       rows:mem.rows, count:mem.count, totalMetric:mem.totalMetric, totalGP:mem.totalGP,
       totalProvGP:mem.totalProvGP||0, totalActualGP:mem.totalActualGP||0,
       totalRevenue:mem.totalRevenue||0, totalCost:mem.totalCost||0,
-      lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
+      lobTab:_defaultDrillLobTab(), columnFilters:Object.assign(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}, extraFilters||{}), openFilterCol:null, filterDraft:{} };
     render(); return;
   }
 
   // 2. Client-side filter from allDrillRows — zero server round-trip, instant
   if (allDrillRows && allDrillRows.length > 0) {
-    var result = computeDrillResult(entity, metric, col);
+    var result = computeDrillResult(entity, metric, col, extraFilters);
     if (result) {
       _drillResultCache[cacheKey] = result;
       state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:false,
         rows:result.rows, count:result.count, totalMetric:result.totalMetric, totalGP:result.totalGP,
         totalProvGP:result.totalProvGP||0, totalActualGP:result.totalActualGP||0,
         totalRevenue:result.totalRevenue||0, totalCost:result.totalCost||0,
-        lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
+        lobTab:_defaultDrillLobTab(), columnFilters:Object.assign(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}, extraFilters||{}), openFilterCol:null, filterDraft:{} };
       render(); return;
     }
   }
 
   // 3. Fallback: allDrillRows not loaded yet — show loading, fetch, then compute client-side
   state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:true, rows:null,
-    lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
+    lobTab:_defaultDrillLobTab(), columnFilters:Object.assign(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}, extraFilters||{}), openFilterCol:null, filterDraft:{} };
   render();
   // Load drill rows then compute client-side (avoids slow server round-trip)
   loadDrillData(function(){
@@ -7293,7 +7293,7 @@ function openDrill(entity, metric, col, valueFmt){
         rows:result2.rows, count:result2.count, totalMetric:result2.totalMetric, totalGP:result2.totalGP,
         totalProvGP:result2.totalProvGP||0, totalActualGP:result2.totalActualGP||0,
         totalRevenue:result2.totalRevenue||0, totalCost:result2.totalCost||0,
-        lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
+        lobTab:_defaultDrillLobTab(), columnFilters:Object.assign(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}, extraFilters||{}), openFilterCol:null, filterDraft:{} };
       render(); return;
     }
   });
