@@ -358,9 +358,7 @@ async function _getRLSReps(db, currentUser) {
 
   if (role === "admin" || role === "hr") return null; // null = no filter
 
-  const mappingRows = await db.collection("mapping_sales_targets").find(
-    {}, { projection: { "Sales Rep Name":1, "Display Name":1, "Zone":1, "Email ID":1 } }
-  ).toArray();
+  const mappingRows = await _getOceanMappingRows(db, { "Sales Rep Name":1, "Display Name":1, "Zone":1, "Email ID":1 });
 
   const zoneTargetRows = await db.collection("mapping_zone_targets").find(
     {}, { projection: { "Zone":1, "Region":1 } }
@@ -744,7 +742,7 @@ async function computeSalesAggregate(db) {
   // 1. Load sales rep mapping — built as ONE lookup PER FISCAL YEAR, since
   // FY26 and FY27 mapping rows now coexist in the same collection and a
   // rep's zone/target can legitimately differ between the two years.
-  const mappingRows = await db.collection("mapping_sales_targets").find({}).toArray();
+  const mappingRows = await _getOceanMappingRows(db);
   // Sort oldest→newest so newest rows overwrite old ones for the same rep+FY
   mappingRows.sort((a,b) => new Date(a._insertedAt||0) - new Date(b._insertedAt||0));
   const repLookupByFY = { FY26: {}, FY27: {} };
@@ -2335,6 +2333,24 @@ async function computeBothPendency(db) {
   return { op: opResult, finance: finResult };
 }
 
+
+// Helper: get correct mapping collection for Ocean dashboard
+async function _getOceanMappingRows(db, projection) {
+  const proj = projection || {};
+  let rows = await db.collection("ocean_mapping_sales_targets").find({}, Object.keys(proj).length ? {projection:proj} : {}).toArray();
+  if (!rows || rows.length === 0) {
+    rows = await db.collection("mapping_sales_targets").find({}, Object.keys(proj).length ? {projection:proj} : {}).toArray();
+  }
+  return rows;
+}
+async function _getOceanZoneTargetRows(db) {
+  let rows = await db.collection("ocean_mapping_zone_targets").find({}).toArray();
+  if (!rows || rows.length === 0) {
+    rows = await db.collection("mapping_zone_targets").find({}).toArray();
+  }
+  return rows;
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -2629,9 +2645,7 @@ module.exports = async function handler(req, res) {
       // Load zone mapping for zone-level drill
       const repZoneMap = {};
       if (entityType === 'zone') {
-        const mRows = await db.collection('mapping_sales_targets').find(
-          {}, { projection: {'Sales Rep Name':1,'Display Name':1,'Zone':1} }
-        ).toArray();
+        const mRows = await _getOceanMappingRows(db, {'Sales Rep Name':1,'Display Name':1,'Zone':1});
         for (const r of mRows) {
           const n = normalizeName(r['Sales Rep Name'] || '');
           if (n) repZoneMap[n] = String(r['Zone']||'').trim();
@@ -2716,9 +2730,7 @@ module.exports = async function handler(req, res) {
 
     if (action === "financeDebug") {
       // Returns unrecognized sales person names (not in mapping)
-      const mappingRows = await db.collection("mapping_sales_targets").find(
-        {}, { projection: { "Sales Rep Name": 1, "Display Name": 1, "Zone": 1 } }
-      ).toArray();
+      const mappingRows = await _getOceanMappingRows(db, { "Sales Rep Name": 1, "Display Name": 1, "Zone": 1 });
       const knownNorms = new Set();
       const knownDisplay = {};
       for (const row of mappingRows) {
