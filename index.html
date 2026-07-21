@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v6';
+var CACHE_VERSION = 'ocean-v7';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5422,9 +5422,16 @@ function tableRows(){
         var join = e.joinDate || null;
         var exit = e.exitDate || null;
 
+        // Ocean: use USD targets when currency is USD, convert at state.rate
+        var _isUSD = state.currency === 'USD';
+        var _tgtBase     = _isUSD && e.tgtUSD     ? e.tgtUSD     * state.rate : e.tgt;
+        var _weekTgtBase = _isUSD && e.weeklyTgtUSD ? e.weeklyTgtUSD * state.rate : (e.weeklyTgt || e.tgt);
+        var _yearTgtBase = _isUSD && e.yearlyTgtUSD ? e.yearlyTgtUSD * state.rate : (e.yearlyTgt || e.tgt * 12);
+        var _dayTgtBase  = _isUSD && e.dailyTgtUSD  ? e.dailyTgtUSD  * state.rate : (e.dailyTgt  || e.tgt / 30);
+
         if (v === 'Custom') {
           // Custom: dailyTarget × active days in selected range
-          var dailyT = e.dailyTgt || (e.tgt ? e.tgt/30 : 0);
+          var dailyT = _dayTgtBase || (_tgtBase ? _tgtBase/30 : 0);
           if (!dailyT) return 0;
           if (state.customDateFrom && state.customDateTo) {
             return dailyT * activeDaysInRange(state.customDateFrom, state.customDateTo, join, exit);
