@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v21';
+var CACHE_VERSION = 'ocean-v22';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -6993,6 +6993,8 @@ function computeDrillResult(entity, metric, month, extraFilters){
   for (var i=0; i<allDrillRows.length; i++){
     var row = allDrillRows[i];
 
+    // 0. Prov filter — for Billed/Provisional Revenue drill-through
+    if (_provFilter && _provFilter.indexOf(row.prov) === -1) continue;
     // 1. LOB filter — use row.lob (matches lobData keys exactly)
     if (_activeLobFilter && !isWeek) {
       if (_activeLobFilter.indexOf(row.lob) === -1) continue;
@@ -7287,7 +7289,7 @@ function openDrill(entity, metric, col, valueFmt, extraFilters){
   render();
   // Load drill rows then compute client-side (avoids slow server round-trip)
   loadDrillData(function(){
-    var result2 = computeDrillResult(entity, metric, col);
+    var result2 = computeDrillResult(entity, metric, col, extraFilters);
     if (result2) {
       _drillResultCache[cacheKey] = result2;
       state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:false,
