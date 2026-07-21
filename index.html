@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v12';
+var CACHE_VERSION = 'ocean-v13';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -1847,7 +1847,7 @@ function model(){
       ? sum(filteredRepsForModel.map(function(r){ return r.weeklyTgt||r.tgt||0; }))
       : sum(realZones.map(function(z){ return z.weeklyTarget||0; }));
     var achGrand  = tgtGrand > 0 ? Math.round(gpGrand / tgtGrand * 100) : 0;
-    return {gpGrand:gpGrand, shipGrand:shipGrand, tonsGrand:tonsGrand, tgtGrand:tgtGrand, achGrand:achGrand, teusGrand:teusGrand};
+    return {gpGrand:gpGrand, shipGrand:shipGrand, tonsGrand:tonsGrand, tgtGrand:tgtGrand, achGrand:achGrand, teusGrand:teusGrand, revGrand:sum(repsRaw.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].rev)||0;}));}))};
   }
   var idxs = filteredMonthIndices();
   var gpGrand   = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return r.gp[i]||0;}));}));
@@ -1858,7 +1858,8 @@ function model(){
     : sum(realZones.map(function(z){ return (z.monthlyTarget||0) * idxs.length; }));
   var achGrand  = tgtGrand > 0 ? Math.round(gpGrand / tgtGrand * 100) : 0;
   var teusGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return (r.teu&&r.teu[i])||0;}));}));
-  return {gpGrand:gpGrand, shipGrand:shipGrand, tonsGrand:tonsGrand, tgtGrand:tgtGrand, achGrand:achGrand, teusGrand:teusGrand};
+  var revGrand = sum(repsRaw.map(function(r){return sum(idxs.map(function(i){return (r.rev&&r.rev[i])||0;}));}));
+  return {gpGrand:gpGrand, shipGrand:shipGrand, tonsGrand:tonsGrand, tgtGrand:tgtGrand, achGrand:achGrand, teusGrand:teusGrand, revGrand:revGrand};
 }
 
 // True if the current repsRaw has weekData populated (post-Refresh)
@@ -2565,6 +2566,9 @@ function kpiRow(M){
   var teuData   = isWeeklyView
     ? wkeys.map(function(k){ return repsRaw.reduce(function(s,r){ return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0); },0); })
     : idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0); });
+  var revData   = isWeeklyView
+    ? wkeys.map(function(k){ return repsRaw.reduce(function(s,r){ return s+((r.weekData&&r.weekData[k]&&r.weekData[k].rev)||0); },0); })
+    : idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+((r.rev&&r.rev[i])||0);},0); });
   var tonsData  = isWeeklyView
     ? wkeys.map(function(k){ return repsRaw.reduce(function(s,r){ return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0); },0); })
     : idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+((r.tons&&r.tons[i])||0);},0); });
@@ -2601,12 +2605,13 @@ function kpiRow(M){
   var kpis = [
     { label:'TOTAL SHIPMENTS', value: noData ? '—' : String(M.shipGrand),                              delta: noData ? null : momDelta(shipData), deltaLabel:periodLabel, vcolor:'#0D2B5E', tint:'#5678C2' },
     { label:'TEUS (OCEAN)',    value: noData ? '—' : (M.teusGrand ? M.teusGrand.toFixed(2) : '\u2014'),delta: noData ? null : momDelta(teuData),  deltaLabel:periodLabel, vcolor:'#0D2B5E', tint:'#0D7C6B' },
+    { label:'TOTAL REVENUE',   value: noData ? '—' : fmtCur(M.revGrand),               delta: noData ? null : momDelta(revData), deltaLabel:periodLabel, vcolor:'#0D2B5E', tint:'#0D7C6B' },
     { label:'GROSS PROFIT',    value: noData ? '—' : fmtCur(M.gpGrand),                                delta: noData ? null : momDelta(gpData),   deltaLabel:periodLabel, vcolor:'#0D2B5E', tint:'#D4941E' },
     { label:'GP TARGET',       value: noData ? '—' : fmtCur(M.tgtGrand),                               delta:null, deltaLabel: noData ? 'No data' : 'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)), vcolor:'#0D2B5E', tint:'#D4574A' },
     { label:'ACHIEVEMENT',     value: noData ? '—' : M.achGrand+'%',                                   delta:null, deltaLabel: noData ? 'No data' : 'vs target', vcolor: noData ? '#9AAFC8' : achColor, tint: achColor },
   ];
 
-  return '<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-bottom:14px;">'
+  return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:14px;">'
     + kpis.map(function(k){
       return '<div class="kpi-card" style="position:relative;background:rgba(255,255,255,0.66);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.8);border-radius:16px;padding:16px 14px 14px;box-shadow:0 1px 2px rgba(13,43,94,0.04),0 8px 24px -6px rgba(93,138,206,0.18);transition:box-shadow 0.2s ease,transform 0.2s ease;min-width:0;overflow:hidden;">'
         // Slim colour accent bar at the top — clean, intentional, matches each metric's identity
