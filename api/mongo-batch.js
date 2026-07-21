@@ -25,6 +25,8 @@ const COLLECTIONS = {
 const MAPPING_COLLECTIONS = new Set([
   "mapping_sales_targets",
   "mapping_zone_targets",
+  "ocean_mapping_sales_targets",
+  "ocean_mapping_zone_targets",
 ]);
 
 let cachedClient = null;
@@ -479,7 +481,11 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
   if (!drillRowsCache || cacheStale) {
     // Build drill rows cache from scratch (same DB pass as aggregate)
     const t0 = Date.now();
-    const mappingRows = await db.collection("mapping_sales_targets").find({}).toArray();
+    // Ocean: use ocean_mapping_sales_targets, fallback to mapping_sales_targets
+    let mappingRows = await db.collection("ocean_mapping_sales_targets").find({}).toArray();
+    if (!mappingRows || mappingRows.length === 0) {
+      mappingRows = await db.collection("mapping_sales_targets").find({}).toArray();
+    }
     const repLookupByFY = { FY26: {}, FY27: {} };
     const repsByZoneByFY = { FY26: {}, FY27: {} };
     const normByDisplayByFY = { FY26: {}, FY27: {} };
@@ -777,7 +783,11 @@ async function computeSalesAggregate(db) {
   }
 
   // 2. Load zone targets — sort oldest→newest so newest wins
-  const zoneTargetRows = await db.collection("mapping_zone_targets").find({}).toArray();
+  // Ocean: use ocean_mapping_zone_targets, fallback to mapping_zone_targets
+  let zoneTargetRows = await db.collection("ocean_mapping_zone_targets").find({}).toArray();
+  if (!zoneTargetRows || zoneTargetRows.length === 0) {
+    zoneTargetRows = await db.collection("mapping_zone_targets").find({}).toArray();
+  }
   zoneTargetRows.sort((a,b) => new Date(a._insertedAt||0) - new Date(b._insertedAt||0));
   const zoneTargetsByFY = { FY26: {}, FY27: {} };
   for (const row of zoneTargetRows) {
