@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-21T-ocean-v11-rate90"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-21T-ocean-v12-clean-targets"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -752,19 +752,17 @@ async function computeSalesAggregate(db) {
     if (!key) continue;
     const fy = (row._fy === "FY27") ? "FY27" : "FY26";
     if (!repLookupByFY[fy]) repLookupByFY[fy] = {};
-    // Ocean mapping: sheet values are already in INR (pre-converted by rate in sheet)
-    const tgtINR = parseFloat(row["Monthly Target (INR)"] || 0) || 0;
-    const tgtUSD = parseFloat(row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0;
-    const monthlyTarget = tgtINR > 0 ? tgtINR : tgtUSD * USD_TO_INR;
-    const monthlyTargetUSD = tgtUSD;
-    // Weekly Target (USD) and Total Target (USD) are already INR-equivalent in sheet
-    const weeklyTargetUSD = parseFloat(row["Weekly Target (USD)"] || 0) || 0;
-    const weeklyTarget    = weeklyTargetUSD; // already INR in sheet
-    const totalTgtUSD     = parseFloat(row["Total Target (USD)"]  || 0) || 0;
-    const yearlyTargetUSD = totalTgtUSD;
-    const yearlyTarget    = totalTgtUSD;     // already INR in sheet
-    const dailyTarget     = yearlyTarget > 0 ? Math.round(yearlyTarget / 365) : 0;
-    const dailyTargetUSD  = weeklyTargetUSD > 0 ? Math.round(weeklyTargetUSD / 7 * 100) / 100 : 0;
+    // Ocean mapping: USD columns → multiply by USD_TO_INR (90) for INR storage
+    // Dashboard divides by state.rate (90) to display in USD — net result = original USD value
+    const tgtINR          = parseFloat(row["Monthly Target (INR)"] || 0) || 0;
+    const monthlyTargetUSD= parseFloat(row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0;
+    const monthlyTarget   = tgtINR > 0 ? tgtINR : monthlyTargetUSD * USD_TO_INR;
+    const weeklyTargetUSD = parseFloat(row["Weekly Target (USD)"]  || 0) || 0;
+    const weeklyTarget    = weeklyTargetUSD * USD_TO_INR;
+    const yearlyTargetUSD = parseFloat(row["Total Target (USD)"]   || 0) || 0;
+    const yearlyTarget    = yearlyTargetUSD * USD_TO_INR;
+    const dailyTargetUSD  = yearlyTargetUSD > 0 ? Math.round(yearlyTargetUSD / 365 * 100) / 100 : 0;
+    const dailyTarget     = dailyTargetUSD * USD_TO_INR;
     const existing = repLookupByFY[fy][key];
     // Overwrite unless existing has a target and new one doesn't
     if (existing && existing.monthlyTarget > 0 && monthlyTarget === 0) continue;
