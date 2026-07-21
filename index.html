@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v10';
+var CACHE_VERSION = 'ocean-v11';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -1986,6 +1986,7 @@ function zoneEntity(zoneName){
                    : idxs.map(function(i){return sum(zReps.map(function(r){return (r.teu&&r.teu[i])||0;}));}),
     lcl:  isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].lcl)||0);},0);})
                    : idxs.map(function(i){return sum(zReps.map(function(r){return (r.lcl&&r.lcl[i])||0;}));}),
+    rev:  idxs.map(function(i){return sum(zReps.map(function(r){return (r.rev&&r.rev[i])||0;}));}),
     gpProv:   idxs.map(function(i){ return sum(zReps.map(function(r){ return (r.gpProv&&r.gpProv[i])||0; })); }),
     gpActual: idxs.map(function(i){ return sum(zReps.map(function(r){ return (r.gpActual&&r.gpActual[i])||0; })); }),
     tank: (isWeekly ? wkeys : idxs).map(function(){ return 0; }),
@@ -2069,6 +2070,7 @@ function repEntity(r){
     lcl:  isWeekly ? wkeys.map(function(k){return (wd[k]&&wd[k].lcl) ||0;}) : idxs.map(function(i){return (r.lcl&&r.lcl[i])||0;}),
     gpProv:   idxs.map(function(i){ return (r.gpProv  &&r.gpProv[i]  )||0; }),
     gpActual: idxs.map(function(i){ return (r.gpActual&&r.gpActual[i])||0; }),
+    rev:  isWeekly ? wkeys.map(function(k){return (wd[k]&&wd[k].rev)||0;}) : idxs.map(function(i){return (r.rev&&r.rev[i])||0;}),
     tank: (isWeekly ? wkeys : idxs).map(function(){ return 0; }),
     tgt:  repTgtForView(r),
     dailyTgt: r.dailyTgt || 0,
