@@ -1,0 +1,8 @@
+{
+  "name": "sar-in-ocean-sales-performance",
+  "version": "1.0.0",
+  "description": "SAR India Ocean Sales Performance Dashboard",
+  "dependencies": {
+    "mongodb": "^6.7.0"
+  }
+}
