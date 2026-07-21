@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v23';
+var CACHE_VERSION = 'ocean-v24';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5280,7 +5280,7 @@ function buildSummaryCells(e, colLabels){
     };
   });
 }
-function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, colLabels, noTarget, rawColKeysrs){
+function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, colLabels, noTarget, rawColKeys){
   // rawColKeys: the actual month labels used as keys (may differ from colLabels display in Yearly view)
   // If not provided, colLabels are the raw keys too
   var keys = rawColKeys || colLabels;
