@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v9';
+var CACHE_VERSION = 'ocean-v10';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -323,6 +323,12 @@ function _showDashboardBody() {
     months26 = ALL_FY.filter(function(m){ return cachedMonths.indexOf(m) >= 0; });
     if (months26.length === 0) months26 = cachedMonths.length > 0 ? cachedMonths : ALL_FY;
     repsRawOriginal = cached.repsRaw;
+    // Invalidate cache if rev field missing (added in ocean-v9)
+    if (repsRawOriginal.length > 0 && !repsRawOriginal[0].rev) {
+      repsRawOriginal = [];
+      dataReady = false;
+      throw new Error('cache_stale_no_rev');
+    }
     zonesRaw = cached.zones || [];
     syncDateRangeToData();
     dataReady = true;
