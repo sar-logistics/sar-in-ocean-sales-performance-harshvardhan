@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v15';
+var CACHE_VERSION = 'ocean-v16';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5725,6 +5725,7 @@ function salesTable(M){
 
     var isShipRow = row.toggleType === 'ship';
     var isGpRow   = row.toggleType === 'gp';
+    var isRevRow  = row.toggleType === 'rev';
     var arrowSvg  = row.caret.trim() === '◄'
       ? '<svg width="8" height="8" viewBox="0 0 8 8" fill="#2563EB"><polygon points="8,0 8,8 0,4"/></svg>'
       : '<svg width="8" height="8" viewBox="0 0 8 8" fill="#2563EB"><polygon points="0,0 8,4 0,8"/></svg>';
@@ -5739,6 +5740,7 @@ function salesTable(M){
     }
     var actAttr = isShipRow ? ' data-act="shipToggle" data-name="'+esc(row.entityName)+'"'
                 : isGpRow   ? ' data-act="gpToggle"   data-name="'+esc(row.entityName)+'"'
+                : isRevRow  ? ' data-act="revToggle"  data-name="'+esc(row.entityName)+'"'
                 : '';
     var labelCell = '<div style="display:flex;align-items:center;"'+actAttr+'>'+labelContent+'</div>';
 
