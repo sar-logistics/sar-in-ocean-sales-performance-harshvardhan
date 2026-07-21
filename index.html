@@ -172,7 +172,27 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v1'; // bump on every deploy to wipe stale localStorage
+var CACHE_VERSION = 'ocean-v1';
+
+// ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
+// Used by Regional Manager RLS to filter reps by region
+window._zoneRegionMap = {
+  'INZ01 (Deen Dayal)':     'North',
+  'INZ02 (Kamal Kant)':     'North',
+  'INZ03 (Mukesh Palav)':   'North',
+  'INZ04 (Nikhil Joshi)':   'West',
+  'INZ05 (Tanmay Sharma)':  'North',
+  'INZ06 (Chittranjan)':    'West',
+  'INZ07 (Tapan Sengupta)': 'East',
+  'INZ08 (Bhupati N)':      'South',
+  'INZ09 (Saduddin S)':     'South',
+  'INZ10 (Mugilan S)':      'South',
+  'INZ11 (Surojen Lobo)':   'South',
+  'INZ13 (ISO Tank)':       'Tank',
+  'INZ14 (Shivangi Mehta)': 'Network',
+  'INZ15 (Anita Chowdhary)':'North',
+};
+ // bump on every deploy to wipe stale localStorage
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -609,16 +629,43 @@ function _getRLSReps() {
   if (role === 'zonal manager') {
     var userZone = (currentUser.zone || '').trim();
     if (!userZone) return [];
-    // Use zoneToRawSPs to get exact _sp values matching allDrillRows
-    // (display names like "Radha Singh" ≠ raw SP "radha arunkumar singh")
     var zoneSPs = zoneToRawSPs([userZone]);
     if (zoneSPs && zoneSPs.length > 0) return zoneSPs;
-    // Fallback to display names if zoneToRawSPs not available
     return repsRawOriginal
       .filter(function(r){ return !r.isBranch && r.zone === userZone; })
       .map(function(r){ return r.name; });
   }
-  return []; // RM / admin / hr — unrestricted
+  if (role === 'regional manager') {
+    var userRegion = (currentUser.region || '').trim().toLowerCase();
+    if (!userRegion) return []; // no region set — unrestricted
+    // Collect all zones whose region matches this user's region
+    var regionZones = [];
+    if (repsRawOriginal) {
+      // Build zone→region from zonesData if available
+      var _seenZones = {};
+      repsRawOriginal.forEach(function(r) {
+        if (!r.isBranch && r.zone && !_seenZones[r.zone]) {
+          _seenZones[r.zone] = true;
+        }
+      });
+    }
+    // Use zonesData region mapping (set during sales load from mapping_zone_targets)
+    var allowedZones = [];
+    if (window._zoneRegionMap) {
+      Object.keys(window._zoneRegionMap).forEach(function(z) {
+        if ((window._zoneRegionMap[z]||'').toLowerCase() === userRegion) {
+          allowedZones.push(z);
+        }
+      });
+    }
+    if (allowedZones.length === 0) return []; // no mapping yet — unrestricted
+    var regionSPs = zoneToRawSPs(allowedZones);
+    if (regionSPs && regionSPs.length > 0) return regionSPs;
+    return repsRawOriginal
+      .filter(function(r){ return !r.isBranch && allowedZones.indexOf(r.zone) > -1; })
+      .map(function(r){ return r.name; });
+  }
+  return []; // admin / hr — unrestricted
 }
 
 // Recompute the working `repsRaw` from `repsRawOriginal` based on active
@@ -649,6 +696,16 @@ function computeFilteredRepsRaw(){
       var userZone = (currentUser.zone || '').trim();
       if (userZone) {
         base = base.filter(function(r){ return r.zone === userZone; });
+      }
+    } else if (role === 'regional manager') {
+      var userRegion2 = (currentUser.region || '').trim().toLowerCase();
+      if (userRegion2 && window._zoneRegionMap) {
+        var allowedZones2 = Object.keys(window._zoneRegionMap).filter(function(z){
+          return (window._zoneRegionMap[z]||'').toLowerCase() === userRegion2;
+        });
+        if (allowedZones2.length > 0) {
+          base = base.filter(function(r){ return allowedZones2.indexOf(r.zone) > -1; });
+        }
       }
     }
   }
@@ -1764,6 +1821,12 @@ function model(){
   var realZones = zonesRaw.filter(function(z){
     if (z.zone === 'Cross Sales') return false;
     if (_mRole === 'zonal manager') return z.zone === (currentUser.zone || '');
+  if (_mRole === 'regional manager') {
+    var _rmRegion = (currentUser.region||'').trim().toLowerCase();
+    if (_rmRegion && window._zoneRegionMap) {
+      return (window._zoneRegionMap[z.zone]||'').toLowerCase() === _rmRegion;
+    }
+  }
     if (_mRole === 'sales rep') return false;
     if (_fz && _fz.indexOf(z.zone) === -1) return false; // zone filter
     return true;
@@ -4423,7 +4486,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var grandData = { colData: gtColData, totalPending: gtPending, totalDone: gtDone, total: gtTotal };
   var grandAvatar = '<div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#3B5BA5,#0D2B5E);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 6px rgba(13,43,94,0.25);">GT</div>';
   var grandLabel  = '<div style="font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Grand Total</div>';
-  var _showGrandTotal = !currentUser || !['zonal manager','sales rep'].includes((currentUser.role||'').toLowerCase().trim());
+  var _showGrandTotal = !currentUser || !['zonal manager','regional manager','sales rep'].includes((currentUser.role||'').toLowerCase().trim());
   var grandRows = !_showGrandTotal ? '' : metricRows(grandData, null, '#EEF3FC', false, null, null, true, 'Grand Total', grandAvatar, grandLabel, '', 'box-shadow:inset 3px 0 0 #0D2B5E, inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:2px solid '+PBORDER_STRONG+';', null, 'Grand Total', lockType);
 
   // Zone + rep rows
