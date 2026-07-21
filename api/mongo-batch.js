@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-21T-ocean-v5-air-lob-default"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-21T-ocean-v6-usd-targets"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -755,9 +755,12 @@ async function computeSalesAggregate(db) {
     const tgtINR = parseFloat(row["Monthly Target (INR)"] || 0) || 0;
     const tgtUSD = (parseFloat(row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0) * USD_TO_INR;
     const monthlyTarget = tgtINR > 0 ? tgtINR : tgtUSD;
-    const weeklyTarget  = parseFloat(row["Weekly Target (INR)"]  || 0) || 0;
-    const yearlyTarget  = parseFloat(row["Yearly Target (INR)"]  || 0) || 0;
-    const dailyTarget   = parseFloat(row["Daily Target (INR)"]   || 0) || 0;
+    // Ocean mapping uses USD columns for weekly/yearly — convert to INR for storage
+    const weeklyTgtUSD  = parseFloat(row["Weekly Target (USD)"]  || 0) || 0;
+    const weeklyTarget  = weeklyTgtUSD > 0 ? weeklyTgtUSD * USD_TO_INR : (parseFloat(row["Weekly Target (INR)"] || 0) || 0);
+    const totalTgtUSD   = parseFloat(row["Total Target (USD)"]   || 0) || 0;
+    const yearlyTarget  = totalTgtUSD  > 0 ? totalTgtUSD  * USD_TO_INR : (parseFloat(row["Yearly Target (INR)"] || 0) || 0);
+    const dailyTarget   = yearlyTarget > 0 ? Math.round(yearlyTarget / 365) : (parseFloat(row["Daily Target (INR)"] || 0) || 0);
     const existing = repLookupByFY[fy][key];
     // Overwrite unless existing has a target and new one doesn't
     if (existing && existing.monthlyTarget > 0 && monthlyTarget === 0) continue;
