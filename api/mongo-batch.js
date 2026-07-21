@@ -6,7 +6,7 @@
 const { MongoClient } = require("mongodb");
 
 const MONGO_URI = process.env.MONGO_URI;
-const DB_NAME   = "sar-in-ocean-sales";
+const DB_NAME   = "sar-in-air-sales";  // Option B: same DB as Air, Ocean dashboard filters differently
 const USD_TO_INR = 94; // Exchange rate used to convert USD targets → INR (same base as GP values)
 
 const COLLECTIONS = {
