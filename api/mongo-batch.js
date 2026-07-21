@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-21T-ocean-v16-rev-billed-prov"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-21T-ocean-v17-r-revenue-fix"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -606,7 +606,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           volumeUnit:   job["Volume Unit"]         || "",
           operationLock: job["Operation Lock"]     || "",
           financialLock: job["Financial Lock"]     || "",
-          g: rowGP, r: billedRevenue, x: postedCost,
+          g: rowGP, r: isProvisional ? provRevenue : billedRevenue, x: postedCost,
           t: parseFloat(job["Container TEU"] || 0) || 0,
           chargeableWeight,
           chargeableWeightUnit,
