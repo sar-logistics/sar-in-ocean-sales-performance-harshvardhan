@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v20';
+var CACHE_VERSION = 'ocean-v21';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5716,7 +5716,7 @@ function salesTable(M){
         ? 'box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;'
         : 'border-right:1px solid '+BORDER+';';
       var clickAttrs = c.clickable
-        ? ' class="dcell" data-act="drill" data-entity="'+esc(c.entity)+'" data-metric="'+esc(c.metric)+'" data-col="'+esc(c.col)+'" data-val="'+esc(c.drillVal)+'"'
+        ? ' class="dcell" data-act="drill" data-entity="'+esc(c.entity)+'" data-metric="'+esc(c.metric)+'" data-col="'+esc(c.col)+'" data-val="'+esc(c.drillVal)+'"'+(c.extraFilters?' data-extra-filters="'+esc(JSON.stringify(c.extraFilters))+'"':'')+'"'
         : '';
       var cursorStyle = c.clickable ? 'cursor:pointer;' : '';
       return '<td'+clickAttrs+' style="'+stickyStyle+borderStyle+cursorStyle+'text-align:right;padding:6px 10px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:'+c.weight+';color:'+c.color+';background:'+cellBg+';white-space:nowrap;">'+c.val+'</td>';
@@ -6895,7 +6895,7 @@ function zoneToRawSPs(zones) {
 }
 
 // Pure in-browser drill filtering — filters allDrillRows by entity+metric+month
-function computeDrillResult(entity, metric, month){
+function computeDrillResult(entity, metric, month, extraFilters){
   if (!allDrillRows) return null;
   var isGT   = entity === 'Grand Total';
   var isFY   = month === 'FY Total';
@@ -6938,6 +6938,7 @@ function computeDrillResult(entity, metric, month){
   // LOB filter — match by row.lob (same key as lobData: "AIR EXPORT", "SEA IMPORT" etc)
   // This matches exactly how the table counts via lobData[lob][month].ship
   var _activeLobFilter = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
+  var _provFilter = extraFilters && extraFilters.prov && extraFilters.prov.length > 0 ? extraFilters.prov : null;
 
   // Build set of normalized raw names for reps currently in repsRaw (respects RLS + filterReps)
   // repsRaw contains display names — we need to map to raw normalized names via normalizeName
@@ -8245,7 +8246,7 @@ document.addEventListener('click', function(ev){
     }
     render();
   }
-  else if(act==='drill'){ ev.stopPropagation(); openDrill(el.getAttribute('data-entity'),el.getAttribute('data-metric'),el.getAttribute('data-col'),el.getAttribute('data-val')); }
+  else if(act==='drill'){ ev.stopPropagation(); var _ef=el.getAttribute('data-extra-filters'); openDrill(el.getAttribute('data-entity'),el.getAttribute('data-metric'),el.getAttribute('data-col'),el.getAttribute('data-val'),_ef?JSON.parse(_ef):null); }
   else if(act==='insightDrill'){ ev.stopPropagation(); openInsightDrill(el.getAttribute('data-drill-type'), el.getAttribute('data-drill-name'), el.getAttribute('data-drill-month')); }
   else if(act==='pendencyDrill'){ ev.stopPropagation(); openPendencyDrill(el.getAttribute('data-rep'),el.getAttribute('data-col'),el.getAttribute('data-status'),el.getAttribute('data-lock'),el.getAttribute('data-type')||'rep'); }
   else if(act==='closePendencyDrill'){ if(el.getAttribute('data-stop')) return; state.pendencyDrill=null; render(); }
