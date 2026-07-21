@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v18';
+var CACHE_VERSION = 'ocean-v19';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5391,6 +5391,7 @@ function tableRows(){
     var isRep   = e.isRep;
     var shipOpen = state.shipOpen[e.name] === true;
     var gpOpen   = state.gpOpen[e.name]   === true;
+    var revOpen  = state.revOpen[e.name]  === true;
 
     var achFy = e.tgt > 0 ? Math.round(sum(e.gp) / (e.tgt * (e.gp.length||1)) * 100) : 0;
 
@@ -5557,7 +5558,6 @@ function tableRows(){
       rows.push(metric('Provisional Profit', 1, 'cur', '#10875A', dispGpProv,   sum(dispGpProv),   false));
     }
 
-    var revOpen = state.revOpen[e.name] === true;
     rows.push(metric('Revenue', 0, 'cur', '#0D7C6B', dispRev || dispGp.map(function(){return 0;}), sum(dispRev||[]), 'rev'));
     if (revOpen) {
       rows.push(metric('Billed Revenue',      1, 'cur', '#1D5FCC', dispRevBilled || dispGp.map(function(){return 0;}), sum(dispRevBilled||[]), false));
