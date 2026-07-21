@@ -2904,6 +2904,8 @@ module.exports = async function handler(req, res) {
         "jobs_isotank_export","jobs_isotank_import","jobs_general","jobs_road",
         "jobs_clearance_export","jobs_clearance_import",
         "srr_air_export","srr_air_import","srr_sea_export","srr_sea_import",
+        "srr_isotank_export","srr_isotank_import",
+        "ocean_mapping_sales_targets","ocean_mapping_zone_targets",
       ];
       if (!WIPEABLE_COLLS.includes(collName)) return res.status(400).json({ error: "unknown collection" });
       const result = await db.collection(collName).deleteMany({});
