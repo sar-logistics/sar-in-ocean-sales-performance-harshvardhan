@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v30';
+var CACHE_VERSION = 'ocean-v31';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -720,6 +720,13 @@ function computeFilteredRepsRaw(){
   var filterZones = state.filterZones || [];
   if (filterZones.length > 0) {
     base = base.filter(function(r){ return filterZones.indexOf(r.zone) > -1; });
+  }
+  var filterRegions = state.filterRegions || [];
+  if (filterRegions.length > 0 && window._zoneRegionMap) {
+    base = base.filter(function(r){
+      var reg = window._zoneRegionMap[r.zone] || '';
+      return filterRegions.indexOf(reg) > -1;
+    });
   }
 
   // Rep filter
@@ -5799,10 +5806,12 @@ function salesTable(M){
         var zoneParts = /^(\S+)\s*(.*)$/.exec(ri.name) || [null, ri.name, ''];
         var zoneCode = zoneParts[1];
         var zoneDesc = zoneParts[2];
+        var _zReg = window._zoneRegionMap && window._zoneRegionMap[ri.name] ? window._zoneRegionMap[ri.name] : '';
         nameLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px;">'
-          +'<div style="display:flex;align-items:baseline;gap:6px;">'
+          +'<div style="display:flex;align-items:center;gap:6px;">'
             +'<span style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5678C2;text-transform:uppercase;">ZONE</span>'
             +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">'+esc(zoneCode)+'</span>'
+            +(_zReg ? '<span style="font-size:8px;font-weight:700;color:#FFFFFF;background:#0D7C6B;border-radius:4px;padding:1px 6px;text-transform:uppercase;">'+esc(_zReg)+'</span>' : '')
           +'</div>'
           +(zoneDesc ? '<div style="font-size:10.5px;font-weight:500;color:#5B6678;line-height:1.3;white-space:normal;word-break:break-word;">'+esc(zoneDesc)+'</div>' : '')
         +'</div>';
