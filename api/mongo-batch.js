@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-22T-ocean-v25-branch-weekly-fix"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-22T-ocean-v26-force-rebuid"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
