@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v33';
+var CACHE_VERSION = 'ocean-v34';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5617,7 +5617,8 @@ function salesTable(M){
 
   // Weekly view — auto-fetch weekData if not loaded yet (no empty screen, just load)
   if (state.reportView === 'Weekly' && !weekDataLoaded()) {
-    if (!_weekDataLoading) fetchWeekDataIfNeeded(function(){ if(state.reportView==='Weekly') render(); });
+    if (!_weekDataLoading && !_weekDataFetched) fetchWeekDataIfNeeded(function(){ if(state.reportView==='Weekly') render(); });
+    else if (_weekDataFetched && !_weekDataLoading) { _weekDataFetched = false; fetchWeekDataIfNeeded(function(){ if(state.reportView==='Weekly') render(); }); }
     return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div><div style="font-size:13px;color:#9AAFC8;font-weight:500;">Loading weekly data…</div></div>';
   }
 
