@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-22T-ocean-v27-skip-general-branch";
+const DEPLOY_TS = "2026-07-22T-ocean-v28-skip-general-branch";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -916,6 +916,8 @@ async function computeSalesAggregate(db) {
       if (!mapped) {
         // Unmapped sales person → Cross Sales, grouped by branch (Location)
         unmapped[job["Sales Person"]] = (unmapped[job["Sales Person"]] || 0) + 1;
+        // Skip GENERAL/Road/Clearance — not Ocean Cross Sales
+        if (cls.kind === 'GENERAL' || cls.kind === 'ROAD' || cls.kind === 'CLEARANCE') continue;
 
         const branch = String(job["Location"] || "Unspecified").trim() || "Unspecified";
         if (!branchMonthData[branch]) branchMonthData[branch] = {};
