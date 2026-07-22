@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v28';
+var CACHE_VERSION = 'ocean-v29';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5728,7 +5728,7 @@ function salesTable(M){
     var isRevRow  = row.toggleType === 'rev';
     var arrowColor = isRevRow ? '#0D7C6B' : '#2563EB';
     var arrowSvg  = row.caret.trim() === '◄'
-      ? '<svg width="8" height="8" viewBox="0 0 8 8" fill="'+arrowColor+'"><polygon points="8,0 8,8 0,4"/></svg>'
+      ? '<svg width="8" height="8" viewBox="0 0 8 8" fill="'+arrowColor+'"><polygon points="0,0 8,0 4,8"/></svg>'
       : '<svg width="8" height="8" viewBox="0 0 8 8" fill="'+arrowColor+'"><polygon points="0,0 8,4 0,8"/></svg>';
 
     var labelContent;
