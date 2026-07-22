@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-21T-ocean-v20-revbilled-raw"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-21T-ocean-v21-rev-billed-plus-prov"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -606,7 +606,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           volumeUnit:   job["Volume Unit"]         || "",
           operationLock: job["Operation Lock"]     || "",
           financialLock: job["Financial Lock"]     || "",
-          g: rowGP, r: isProvisional ? provRevenue : billedRevenue, x: postedCost,
+          g: rowGP, r: billedRevenue + provRevenue, x: postedCost,
           t: parseFloat(job["Container TEU"] || 0) || 0,
           chargeableWeight,
           chargeableWeightUnit,
@@ -878,7 +878,7 @@ async function computeSalesAggregate(db) {
       // Revenue: use Billed Revenue if locked, else Provisional Revenue
       const billedRev = parseFloat(job["Billed Revenue (C)"]      || 0) || 0;
       const provRev   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
-      const rev = isProvisional ? provRev : billedRev;
+      const rev = billedRev + provRev;
 
       // Tons — only for AIR rows, Chargeable Weight (kg) ÷ 1000
       let tons = 0;
