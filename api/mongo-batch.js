@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-21T-ocean-v18-revbilled-always"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-21T-ocean-v19-revbilled-locked-only"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -928,8 +928,8 @@ async function computeSalesAggregate(db) {
         branchMonthData[branch][monthLabel].teu  += teu;
         branchMonthData[branch][monthLabel].lcl  += lcl;
         branchMonthData[branch][monthLabel].rev       += rev;
-        branchMonthData[branch][monthLabel].revBilled += billedRev;
-        branchMonthData[branch][monthLabel].revProv   += provRev;
+        branchMonthData[branch][monthLabel].revBilled += isProvisional ? 0 : billedRev;
+        branchMonthData[branch][monthLabel].revProv   += isProvisional ? provRev : 0;
         // Weekly accumulation — keyed by true ISO week (Mon-Sun), e.g. "2026-W14"
         if (rowDate) {
           const wk = isoWeekInfo(rowDate).key;
@@ -967,8 +967,8 @@ async function computeSalesAggregate(db) {
       repMonthData[repKey][monthLabel].teu  += teu;
       repMonthData[repKey][monthLabel].lcl  += lcl;
       repMonthData[repKey][monthLabel].rev       += rev;
-      repMonthData[repKey][monthLabel].revBilled += billedRev;
-      repMonthData[repKey][monthLabel].revProv   += provRev;
+      repMonthData[repKey][monthLabel].revBilled += isProvisional ? 0 : billedRev;
+      repMonthData[repKey][monthLabel].revProv   += isProvisional ? provRev : 0;
       // Weekly accumulation — keyed by true ISO week (Mon-Sun), e.g. "2026-W14"
       if (rowDate) {
         const wk = isoWeekInfo(rowDate).key;
