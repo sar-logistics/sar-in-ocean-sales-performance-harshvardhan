@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-22T-ocean-v24-weekly-rev-fixed"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-22T-ocean-v25-branch-weekly-fix"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -937,7 +937,7 @@ async function computeSalesAggregate(db) {
           if (!branchWeekData[branch][wk]) branchWeekData[branch][wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0, rev:0, revBilled:0, revProv:0 };
           branchWeekData[branch][wk].gp += gp; branchWeekData[branch][wk].gpProv += gpProv; branchWeekData[branch][wk].gpActual += gpActual; branchWeekData[branch][wk].ship += 1;
           branchWeekData[branch][wk].tons += tons; branchWeekData[branch][wk].teu += teu; branchWeekData[branch][wk].lcl += lcl;
-        branchWeekData[branch][wk].rev += rev; branchWeekData[branch][wk].revBilled += billedRev; branchWeekData[branch][wk].revProv += provRev;
+          branchWeekData[branch][wk].rev += rev; branchWeekData[branch][wk].revBilled += billedRev; branchWeekData[branch][wk].revProv += provRev;
         }
         // LOB accumulation (Sea Export/Import, ISOTANK Export/Import, Air Export/Import)
         {
