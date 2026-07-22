@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v25';
+var CACHE_VERSION = 'ocean-v26';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -7284,8 +7284,8 @@ function openDrill(entity, metric, col, valueFmt){
   state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:true, rows:null,
     lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
   render();
-  // Load drill rows then compute client-side (avoids slow server round-trip)
-  loadDrillData(function(){
+  // Load drill rows then compute client-side (only if already loaded to avoid race with server fetch)
+  if (allDrillRows && allDrillRows.length > 0) {
     var result2 = computeDrillResult(entity, metric, col);
     if (result2) {
       _drillResultCache[cacheKey] = result2;
@@ -7296,7 +7296,7 @@ function openDrill(entity, metric, col, valueFmt){
         lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
       render(); return;
     }
-  });
+  }
 
   var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col)
          +(state.filterLobs&&state.filterLobs.length>0?'&lobs='+encodeURIComponent(state.filterLobs.join(',')):'');
