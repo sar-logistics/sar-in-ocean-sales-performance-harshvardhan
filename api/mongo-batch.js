@@ -93,7 +93,7 @@ async function batchUpsertUsers(db, users) {
   if (!Array.isArray(users) || users.length === 0) {
     return { inserted: 0, updated: 0, errors: ["No users provided"] };
   }
-  const col     = db.collection("users");
+  const col     = db.collection("ocean_users");
   const results = { inserted: 0, updated: 0, errors: [] };
   for (const u of users) {
     const email = u.email?.toLowerCase().trim();
@@ -116,7 +116,7 @@ async function batchUpsertUsers(db, users) {
 
 // ── ACTION: org (read-only org chart) ─────────────────────────────
 async function getOrgChart(db) {
-  const users = await db.collection("users").find({}).toArray();
+  const users = await db.collection("ocean_users").find({}).toArray();
 
   var people = users.map(function(u){
     return {
@@ -179,7 +179,7 @@ async function updateUserFields(db, email, fields) {
   if (fields.name      !== undefined) allowed.name      = String(fields.name || "").trim();
   if (Object.keys(allowed).length === 0) return { error: "No valid fields to update" };
   allowed.updatedAt = new Date();
-  var result = await db.collection("users").updateOne(
+  var result = await db.collection("ocean_users").updateOne(
     { email: email.toLowerCase().trim() },
     { $set: allowed }
   );
@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-22T-ocean-v32-drill-pagination";
+const DEPLOY_TS = "2026-07-22T-ocean-v33-ocean-users-collection";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2109,7 +2109,7 @@ async function getUsageAnalytics(db, force) {
 }
 
 async function computeUsageAnalytics(db) {
-  const users = await db.collection("users").find({}).toArray();
+  const users = await db.collection("ocean_users").find({}).toArray();
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   // Count logins from login_events for accuracy (users.loginCount can be stale)
@@ -2805,7 +2805,7 @@ module.exports = async function handler(req, res) {
     if (action === "deleteUser") {
       const { email } = req.body || {};
       if (!email) return res.status(400).json({ error: "email required" });
-      await db.collection("users").deleteOne({ email: email.toLowerCase().trim() });
+      await db.collection("ocean_users").deleteOne({ email: email.toLowerCase().trim() });
       return res.status(200).json({ success: true });
     }
 
@@ -2823,9 +2823,9 @@ module.exports = async function handler(req, res) {
         loginCount: 0,
         createdAt: new Date(),
       };
-      const existing = await db.collection("users").findOne({ email: newUser.email });
+      const existing = await db.collection("ocean_users").findOne({ email: newUser.email });
       if (existing) return res.status(400).json({ error: "User with this email already exists" });
-      await db.collection("users").insertOne(newUser);
+      await db.collection("ocean_users").insertOne(newUser);
       const updatedOrg = await getOrgChart(db);
       return res.status(200).json({ success: true, org: updatedOrg });
     }
