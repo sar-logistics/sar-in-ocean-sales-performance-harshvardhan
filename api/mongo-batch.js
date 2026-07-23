@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-22T-ocean-v31-drill-pagination";
+const DEPLOY_TS = "2026-07-22T-ocean-v32-drill-pagination";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2648,8 +2648,13 @@ module.exports = async function handler(req, res) {
       const metric = req.query?.metric || req.body?.metric;
       const month  = req.query?.month  || req.body?.month;
       const lobs   = req.query?.lobs   || req.body?.lobs || "";
+      const limit  = parseInt(req.query?.limit  || req.body?.limit  || "0") || 0;
+      const offset = parseInt(req.query?.offset || req.body?.offset || "0") || 0;
       if (!entity || !metric || !month) return res.status(400).json({ error: "entity, metric, and month are required." });
       const result = await getDrillRows(db, entity, metric, month, lobs);
+      if (limit > 0) {
+        return res.status(200).json({ ...result, rows: result.rows.slice(offset, offset + limit), total: result.count, offset, limit });
+      }
       return res.status(200).json(result);
     }
 
