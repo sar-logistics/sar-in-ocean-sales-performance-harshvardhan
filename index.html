@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v54';
+var CACHE_VERSION = 'ocean-v55';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -2428,10 +2428,7 @@ function topbar(){
         if (isFOpen) {
           var _isPendencyPage = state.page === 'op' || state.page === 'finance';
           var _isSalesPage = state.page === 'sales' || state.page === 'home' || !state.page;
-          // OP/FP pendency is Ocean-only — hide Air LOBs from filter panel
-          var LOB_KEYS = _isPendencyPage
-            ? ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT']
-            : ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT'].concat(_isSalesPage ? ['GENERAL'] : []);
+          var LOB_KEYS = ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT'].concat((_isPendencyPage || _isSalesPage) ? ['GENERAL'] : []);
           var LOB_LABELS = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','ISOTANK EXPORT':'ISO Tank Export','ISOTANK IMPORT':'ISO Tank Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import','GENERAL':'General'};
           // Always list from the FULL unfiltered dataset — otherwise once you filter
           // down to a subset, you could never see/re-select the excluded reps again
@@ -4207,10 +4204,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   salesZones.forEach(function(z){ salesZoneSet[z] = true; });
 
   // LOB filter using lobMonthData from server (pre-computed per LOB, no drill rows needed)
-  // OP/FP pendency is Ocean-only — exclude Air LOBs from filter
-  var _oceanPendencyLobs = ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT'];
-  var _rawFlobs = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs.filter(function(l){ return _oceanPendencyLobs.indexOf(l) > -1; }) : null;
-  var _flobs = (_rawFlobs && _rawFlobs.length > 0) ? _rawFlobs : null;
+  var _flobs = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
   // _pendencyLobIndex: repName -> month -> {pending, done} filtered by active LOBs
   var _pendencyLobIndex = null;
   if (_flobs) {
