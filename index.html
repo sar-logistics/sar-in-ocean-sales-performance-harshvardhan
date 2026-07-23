@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v56';
+var CACHE_VERSION = 'ocean-v57';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -1990,13 +1990,13 @@ function zoneEntity(zoneName){
     ship: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0);})
                    : idxs.map(function(i){ var _ml=months26[i]; if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null; var _isCross=zoneName==='Cross Sales'; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl||_fl.indexOf(r.lob)>-1)&&(_isCross?!r._zone:r._zone===zoneName);}).length;} return sum(zReps.map(function(r){return r.ship[i]||0;})); }),
     gp:   isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
-                   : idxs.map(function(i){return sum(zReps.map(function(r){return r.gp[i]||0;}));}),
+                   : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gp)||0);},0);})) : sum(zReps.map(function(r){return (r.gp&&r.gp[i])||0;}));}),
     tons: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);})
-                   : idxs.map(function(i){return sum(zReps.map(function(r){return (r.tons&&r.tons[i])||0;}));}),
+                   : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].tons)||0);},0);})) : sum(zReps.map(function(r){return (r.tons&&r.tons[i])||0;}));}),
     teu:  isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0);},0);})
-                   : idxs.map(function(i){return sum(zReps.map(function(r){return (r.teu&&r.teu[i])||0;}));}),
+                   : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].teu)||0);},0);})) : sum(zReps.map(function(r){return (r.teu&&r.teu[i])||0;}));}),
     lcl:  isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].lcl)||0);},0);})
-                   : idxs.map(function(i){return sum(zReps.map(function(r){return (r.lcl&&r.lcl[i])||0;}));}),
+                   : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].lcl)||0);},0);})) : sum(zReps.map(function(r){return (r.lcl&&r.lcl[i])||0;}));}),
     rev:       isWeekly ? wkeys.map(function(k){return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].rev)||0;}));}) : idxs.map(function(i){return sum(zReps.map(function(r){return (r.rev&&r.rev[i])||0;}));}),
     revBilled: isWeekly ? wkeys.map(function(k){return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].revBilled)||0;}));}) : idxs.map(function(i){return sum(zReps.map(function(r){return (r.revBilled&&r.revBilled[i])||0;}));}),
     revProv:   isWeekly ? wkeys.map(function(k){return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].revProv)||0;}));}) : idxs.map(function(i){return sum(zReps.map(function(r){return (r.revProv&&r.revProv[i])||0;}));}),
