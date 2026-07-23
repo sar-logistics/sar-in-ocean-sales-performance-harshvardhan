@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-23T-ocean-v39-drill-rows-in-ping";
+const DEPLOY_TS = "2026-07-23T-ocean-v40-drill-in-ping";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2459,7 +2459,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       ok: true, ts: now2,
       lastUpdated,
-      sales:      salesStripped  || null,
+      sales:      salesStripped ? { ...salesStripped, allDrillRows: drillRowsCache || [] } : null,
       finance:    financeResult  || null,
       op:         opResult       || null,
       tradelane:  tradelaneResult || null,
