@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-22T-ocean-v33-ocean-users-collection";
+const DEPLOY_TS = "2026-07-22T-ocean-v34-seed-admin";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2809,7 +2809,27 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ success: true });
     }
 
-    if (action === "addUser") {
+    if (action === "seedAdmin") {
+    // One-time seed: insert Harshvardhan as Admin if ocean_users is empty
+    const count = await db.collection("ocean_users").countDocuments();
+    if (count === 0) {
+      await db.collection("ocean_users").insertOne({
+        email: "harshvardhan.rawat@sarlogistics.com",
+        name: "Harshvardhan Rawat",
+        role: "Admin",
+        zone: "",
+        region: "",
+        reportsTo: "",
+        isActive: true,
+        loginCount: 0,
+        createdAt: new Date()
+      });
+      return res.status(200).json({ success: true, message: "Admin seeded" });
+    }
+    return res.status(200).json({ success: true, message: "Already has users: "+count });
+  }
+
+  if (action === "addUser") {
       const { email, name, role, zone, reportsTo } = req.body || {};
       if (!email || !name) return res.status(400).json({ error: "email and name required" });
       const newUser = {
