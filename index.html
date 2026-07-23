@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v41';
+var CACHE_VERSION = 'ocean-v42';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -7328,17 +7328,20 @@ function openDrill(entity, metric, col, valueFmt){
 
   var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col)
          +(state.filterLobs&&state.filterLobs.length>0?'&lobs='+encodeURIComponent(state.filterLobs.join(',')):'');
-  fetch('/api/mongo-batch'+qs, { priority:'high' })
+  var _DRILL_LIMIT = 500;
+  fetch('/api/mongo-batch'+qs+'&limit='+_DRILL_LIMIT+'&offset=0', { priority:'high' })
     .then(function(r){ return r.json(); })
     .then(function(data){
       if (!data.success) { state.drill.loading=false; state.drill.error=data.error||'Failed.'; render(); return; }
       _drillResultCache[cacheKey] = data;
-      state.drill.loading=false; state.drill.rows=data.rows; state.drill.count=data.count;
+      state.drill.loading=false; state.drill.rows=data.rows; state.drill.count=data.total||data.count; state.drill.hasMore=(data.total&&data.rows.length<data.total)||false;
       state.drill.totalMetric=data.totalMetric; state.drill.totalGP=data.totalGP;
       state.drill.totalProvGP=data.totalProvGP||0; state.drill.totalActualGP=data.totalActualGP||0;
       state.drill.totalRevenue=data.totalRevenue||0; state.drill.totalCost=data.totalCost||0;
       if (state.drill.lobTab === 'ALL') state.drill.lobTab = _defaultDrillLobTab();
       render();
+      // Load remaining rows in background if paginated
+      if (state.drill.hasMore) { setTimeout(function(){ loadMoreDrillRows(entity, metric, col, qs); }, 200); }
       // Load allDrillRows in background so next drill click is instant
       if (!allDrillRows) loadDrillData(null);
     })
