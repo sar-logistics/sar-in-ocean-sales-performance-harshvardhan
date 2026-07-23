@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v48';
+var CACHE_VERSION = 'ocean-v49';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -7158,7 +7158,7 @@ function openInsightDrill(drillType, name, drillMonth) {
 
     // Cache key includes active months so changing May→July busts cache
     var _tlActiveMonsKey = Object.keys(_tlActiveMonsSet).sort(function(a,b){ return months26.indexOf(a)-months26.indexOf(b); }).join(',');
-    var _tlCacheKey = 'tl||'+name+'||'+_tlActiveMonsKey+'|'+(state.tradelaneLob||'Air')+'|'+_rlsUserKey;
+    var _tlCacheKey = 'tl||'+name+'||'+_tlActiveMonsKey+'|'+(state.tradelaneLob||'Ocean')+'|'+_rlsUserKey;
     if (_insightDrillCache[_tlCacheKey]) {
       state.drill = _insightDrillCache[_tlCacheKey];
       render();
