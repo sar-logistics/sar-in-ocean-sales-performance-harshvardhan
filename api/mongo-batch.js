@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-23T-ocean-v43-rev-recognition-date";
+const DEPLOY_TS = "2026-07-23T-ocean-v44-rev-recognition-date-v2";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -839,7 +839,7 @@ async function computeSalesAggregate(db) {
     db.collection(cn).find({}, { projection: {
       "Sales Person":1, "Job Date":1, "LOB":1, "Location":1, "Customer":1,
       "Actual Profit (J=C-G)":1, "Provisional Profit (I=A-E)":1,
-      "Billed Revenue (C)":1, "Provisional Revenue (A)":1,
+      "Billed Revenue (C)":1, "Provisional Revenue (A)":1, "Job Rev Recognition Date":1,
       "Financial Lock":1, "Operation Lock":1,
       "ETD Loading Port":1, "ETA Discharge":1,
       "Chargeable Weight":1, "Chargeable Weight Unit":1,
@@ -879,7 +879,11 @@ async function computeSalesAggregate(db) {
       // Revenue: use Billed Revenue if locked, else Provisional Revenue
       const billedRev = parseFloat(job["Billed Revenue (C)"]      || 0) || 0;
       const provRev   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
-      const rev = billedRev + provRev;
+      // Revenue: Job Rev Recognition Date filled → locked → Billed; else → Provisional
+      const _revLocked = job["Job Rev Recognition Date"] !== undefined && job["Job Rev Recognition Date"] !== null && String(job["Job Rev Recognition Date"]).trim() !== "";
+      const rev = _revLocked ? billedRev : provRev;
+      const revBilledAmt = _revLocked ? billedRev : 0;
+      const revProvAmt   = _revLocked ? 0 : provRev;
 
       // Tons — only for AIR rows, Chargeable Weight (kg) ÷ 1000
       let tons = 0;
@@ -940,7 +944,7 @@ async function computeSalesAggregate(db) {
           if (!branchWeekData[branch][wk]) branchWeekData[branch][wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0, rev:0, revBilled:0, revProv:0 };
           branchWeekData[branch][wk].gp += gp; branchWeekData[branch][wk].gpProv += gpProv; branchWeekData[branch][wk].gpActual += gpActual; branchWeekData[branch][wk].ship += 1;
           branchWeekData[branch][wk].tons += tons; branchWeekData[branch][wk].teu += teu; branchWeekData[branch][wk].lcl += lcl;
-          branchWeekData[branch][wk].rev += rev; branchWeekData[branch][wk].revBilled += billedRev; branchWeekData[branch][wk].revProv += provRev;
+          branchWeekData[branch][wk].rev += rev; branchWeekData[branch][wk].revBilled += revBilledAmt; branchWeekData[branch][wk].revProv += revProvAmt;
         }
         // LOB accumulation (Sea Export/Import, ISOTANK Export/Import, Air Export/Import)
         {
@@ -974,8 +978,8 @@ async function computeSalesAggregate(db) {
       repMonthData[repKey][monthLabel].teu  += teu;
       repMonthData[repKey][monthLabel].lcl  += lcl;
       repMonthData[repKey][monthLabel].rev       += rev;
-      repMonthData[repKey][monthLabel].revBilled += billedRev;
-      repMonthData[repKey][monthLabel].revProv   += provRev;
+      repMonthData[repKey][monthLabel].revBilled += revBilledAmt;
+      repMonthData[repKey][monthLabel].revProv   += revProvAmt;
       // Weekly accumulation — keyed by true ISO week (Mon-Sun), e.g. "2026-W14"
       if (rowDate) {
         const wk = isoWeekInfo(rowDate).key;
@@ -983,7 +987,7 @@ async function computeSalesAggregate(db) {
         if (!repWeekData[repKey][wk]) repWeekData[repKey][wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0, rev:0, revBilled:0, revProv:0 };
         repWeekData[repKey][wk].gp += gp; repWeekData[repKey][wk].gpProv += gpProv; repWeekData[repKey][wk].gpActual += gpActual; repWeekData[repKey][wk].ship += 1;
         repWeekData[repKey][wk].tons += tons; repWeekData[repKey][wk].teu += teu; repWeekData[repKey][wk].lcl += lcl;
-        repWeekData[repKey][wk].rev += rev; repWeekData[repKey][wk].revBilled += billedRev; repWeekData[repKey][wk].revProv += provRev;
+        repWeekData[repKey][wk].rev += rev; repWeekData[repKey][wk].revBilled += revBilledAmt; repWeekData[repKey][wk].revProv += revProvAmt;
       }
       // LOB accumulation (monthly + weekly)
       {
