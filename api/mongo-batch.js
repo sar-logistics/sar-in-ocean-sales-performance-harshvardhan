@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-23T-ocean-v37-cache-bust";
+const DEPLOY_TS = "2026-07-23T-ocean-v38-ocean-pendency";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2186,7 +2186,7 @@ async function _ensurePendencyCache(db, force) {
 
 // Single-pass: loads mapping + all job collections ONCE, builds OL and FL simultaneously
 async function computeBothPendency(db) {
-  const mappingRows = await db.collection("mapping_sales_targets").find(
+  const mappingRows = await db.collection("ocean_mapping_sales_targets").find(
     {}, { projection: { "Sales Rep Name": 1, "Display Name": 1, "Zone": 1, "_fy": 1 } }
   ).toArray();
 
@@ -2229,7 +2229,9 @@ async function computeBothPendency(db) {
   // Single DB pass — track OL and FL simultaneously in same loop
   // No DB-level date filter — DD/MM/YYYY format breaks string comparison.
   // FY_MONTHS check in parseSheetDate handles in-memory filtering.
-  const ALL_JOB_COLLS = Object.values(COLLECTIONS);
+  // Ocean dashboard: only Sea + ISO Tank collections for OP/FP pendency
+  const OCEAN_PENDENCY_COLLS = ["jobs_sea_export", "jobs_sea_import", "jobs_isotank_export", "jobs_isotank_import"];
+  const ALL_JOB_COLLS = OCEAN_PENDENCY_COLLS;
   const allDrillJobRows = []; // all job rows for client-side drill filtering
   // Two independent maps — one per lock type — built in the same loop
   const olMap = {}; // OL: norm → { zone, displayName, monthData: { month → { pending, done } }, jobOwners }
@@ -2707,7 +2709,9 @@ module.exports = async function handler(req, res) {
         }
       }
 
-      const ALL_JOB_COLLS = Object.values(COLLECTIONS);
+      // Ocean dashboard: only Sea + ISO Tank collections for OP/FP pendency
+  const OCEAN_PENDENCY_COLLS = ["jobs_sea_export", "jobs_sea_import", "jobs_isotank_export", "jobs_isotank_import"];
+  const ALL_JOB_COLLS = OCEAN_PENDENCY_COLLS;
       const rows = [];
 
       await Promise.all(ALL_JOB_COLLS.map(async (collName) => {
@@ -2775,7 +2779,9 @@ module.exports = async function handler(req, res) {
         if (n1) { knownNorms.add(n1); knownDisplay[n1] = { raw: row["Sales Rep Name"], display: row["Display Name"], zone: row["Zone"] }; }
         if (n2) { knownNorms.add(n2); knownDisplay[n2] = { raw: row["Sales Rep Name"], display: row["Display Name"], zone: row["Zone"] }; }
       }
-      const ALL_JOB_COLLS = Object.values(COLLECTIONS);
+      // Ocean dashboard: only Sea + ISO Tank collections for OP/FP pendency
+  const OCEAN_PENDENCY_COLLS = ["jobs_sea_export", "jobs_sea_import", "jobs_isotank_export", "jobs_isotank_import"];
+  const ALL_JOB_COLLS = OCEAN_PENDENCY_COLLS;
       const unrecognized = {}; // norm → { rawNames: Set, count }
       const recognized = {};
       await Promise.all(ALL_JOB_COLLS.map(async (collName) => {
