@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v50';
+var CACHE_VERSION = 'ocean-v51';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -1423,7 +1423,7 @@ function updateUserField(email, fields, callback){
     });
 }
 
-var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:false, dateFrom:'', dateTo:'', rate:90.00, revOpen:{}, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, pendencyDrill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{}, customerLob:'Air', customerView:'chart', custSortCol:'gp', custSortDir:1, agentLob:'Air', agentView:'chart', agentSortCol:'gp', agentSortDir:1, tradelaneLob:'Air', tradelaneView:'chart', tradelaneSortCol:'gp', tradelaneSortDir:-1, tradelaneShipOpen:{},
+var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:false, dateFrom:'', dateTo:'', rate:90.00, revOpen:{}, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, pendencyDrill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{}, customerLob:'Ocean', customerView:'chart', custSortCol:'gp', custSortDir:1, agentLob:'Ocean', agentView:'chart', agentSortCol:'gp', agentSortDir:1, tradelaneLob:'Ocean', tradelaneView:'chart', tradelaneSortCol:'gp', tradelaneSortDir:-1, tradelaneShipOpen:{},
   tradelaneDateFrom:'', tradelaneDateTo:'', tradelanePeriod:'Monthly', tradelaneWeeklyMonth:'',
   customDateFrom: '', customDateTo: '', customCalOpen: false, customCalMonth: new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'), customSelecting: 'from',
   addUserOpen: false, addUserError: '', addUserDefaultRole: '',
