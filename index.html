@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v49';
+var CACHE_VERSION = 'ocean-v50';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -7224,7 +7224,7 @@ function openInsightDrill(drillType, name, drillMonth) {
 
   // LOB filter — use active LOB tab for this insight page
   var _ILOB = {'Air':['AIR EXPORT','AIR IMPORT'],'Ocean':['SEA EXPORT','SEA IMPORT'],'ISO Tank':['ISOTANK EXPORT','ISOTANK IMPORT']};
-  var _insightActiveLob = drillType==='customer'?(state.customerLob||'Air'):drillType==='agent'?(state.agentLob||'Air'):(state.tradelaneLob||'Air');
+  var _insightActiveLob = drillType==='customer'?(state.customerLob||'Ocean'):drillType==='agent'?(state.agentLob||'Ocean'):(state.tradelaneLob||'Ocean');
   var activeLobFilter = _ILOB[_insightActiveLob] || null;
 
   // Date range — compute ONCE outside loop
