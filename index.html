@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v42';
+var CACHE_VERSION = 'ocean-v43';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5571,9 +5571,11 @@ function tableRows(){
     rows.push(metric('Shipments', 0, 'int', '#15233B', dispShip, sum(dispShip), 'ship', repInfo));
 
     if (shipOpen) {
-      rows.push(metric('Tons (Air)',         1, 'tons', '#5B8DEF', dispTons, sum(dispTons), false));
-      rows.push(metric('TEUs (Ocean)',       1, 'teu',  '#5B8DEF', teus, sum(teus), false));
-      rows.push(metric('LCL (Ocean in CBM)', 1, 'cbm',  '#9AA4B2', lcl, sum(lcl), false));
+      var _hasAirLob = !state.filterLobs||state.filterLobs.length===0||state.filterLobs.some(function(l){return l.indexOf('AIR')>-1;});
+      var _hasOceanLob = !state.filterLobs||state.filterLobs.length===0||state.filterLobs.some(function(l){return l.indexOf('SEA')>-1||l.indexOf('ISOTANK')>-1;});
+      if (_hasAirLob)   rows.push(metric('Tons (Air)',         1, 'tons', '#5B8DEF', dispTons, sum(dispTons), false));
+      if (_hasOceanLob) rows.push(metric('TEUs (Ocean)',       1, 'teu',  '#5B8DEF', teus, sum(teus), false));
+      if (_hasOceanLob) rows.push(metric('LCL (Ocean in CBM)', 1, 'cbm',  '#9AA4B2', lcl, sum(lcl), false));
     }
 
     rows.push(metric('GP', 0, 'cur', '#374151', dispGp, sum(dispGp), 'gp'));
