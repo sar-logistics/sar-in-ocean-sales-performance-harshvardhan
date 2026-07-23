@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-23T-ocean-v44-rev-recognition-date-v2";
+const DEPLOY_TS = "2026-07-23T-ocean-v45-rev-recognition-date-v3";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -935,8 +935,8 @@ async function computeSalesAggregate(db) {
         branchMonthData[branch][monthLabel].teu  += teu;
         branchMonthData[branch][monthLabel].lcl  += lcl;
         branchMonthData[branch][monthLabel].rev       += rev;
-        branchMonthData[branch][monthLabel].revBilled += billedRev;
-        branchMonthData[branch][monthLabel].revProv   += provRev;
+        branchMonthData[branch][monthLabel].revBilled += revBilledAmt;
+        branchMonthData[branch][monthLabel].revProv   += revProvAmt;
         // Weekly accumulation — keyed by true ISO week (Mon-Sun), e.g. "2026-W14"
         if (rowDate) {
           const wk = isoWeekInfo(rowDate).key;
