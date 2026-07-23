@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-22T-ocean-v29-skip-general-mapped";
+const DEPLOY_TS = "2026-07-22T-ocean-v30-skip-general-mapped";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -957,6 +957,9 @@ async function computeSalesAggregate(db) {
         }
         continue;
       }
+
+      // Skip GENERAL/Road/Clearance for mapped reps — not Ocean LOBs, excluded from drill
+      if (cls.kind === 'GENERAL' || cls.kind === 'ROAD' || cls.kind === 'CLEARANCE') continue;
 
       const repKey = mapped.displayName + "||" + mapped.zone;
 
