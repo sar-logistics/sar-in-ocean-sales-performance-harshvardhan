@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-23T-ocean-v38-ocean-pendency";
+const DEPLOY_TS = "2026-07-23T-ocean-v39-drill-rows-in-ping";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
