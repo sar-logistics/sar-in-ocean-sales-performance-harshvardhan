@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v39';
+var CACHE_VERSION = 'ocean-v40';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -1770,13 +1770,11 @@ function quarterGroups(){
   }
 
   // DEBUG: log quarterly group details to console
-  console.log('[Quarterly Debug] quarter='+state.selectedQuarter, 'qMos='+JSON.stringify(qMos));
-  console.log('[Quarterly Debug] months26='+JSON.stringify(months26));
+
   console.log('[Quarterly Debug] groups='+JSON.stringify(groups.map(function(g){ return {key:g.key,idxs:g.idxs,label:g.label}; })));
   groups.forEach(function(g){
     if (g.idxs.length > 0) {
       var sample = g.idxs.map(function(i){ return months26[i]+':ship='+((repsRawOriginal[0]&&repsRawOriginal[0].ship&&repsRawOriginal[0].ship[i])||0); });
-      console.log('[Quarterly Debug] year=20'+g.key+' idxs='+JSON.stringify(g.idxs)+' sample='+JSON.stringify(sample));
     } else {
       console.warn('[Quarterly Debug] year=20'+g.key+' has NO indices — 2026 months missing from months26?');
     }
