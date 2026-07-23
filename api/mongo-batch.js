@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-23T-ocean-v42-all-lobs-pendency";
+const DEPLOY_TS = "2026-07-23T-ocean-v43-rev-recognition-date";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -606,7 +606,8 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           volumeUnit:   job["Volume Unit"]         || "",
           operationLock: job["Operation Lock"]     || "",
           financialLock: job["Financial Lock"]     || "",
-          g: rowGP, r: billedRevenue + provRevenue, x: postedCost,
+          const _drillRevLocked = job["Job Rev Recognition Date"] !== undefined && job["Job Rev Recognition Date"] !== null && String(job["Job Rev Recognition Date"]).trim() !== "";
+          g: rowGP, r: _drillRevLocked ? billedRevenue : provRevenue, x: postedCost,
           t: parseFloat(job["Container TEU"] || 0) || 0,
           chargeableWeight,
           chargeableWeightUnit,
