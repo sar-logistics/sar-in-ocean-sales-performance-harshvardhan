@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-22T-ocean-v35-fix-email";
+const DEPLOY_TS = "2026-07-22T-ocean-v36-ocean-logins";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2113,7 +2113,7 @@ async function computeUsageAnalytics(db) {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   // Count logins from login_events for accuracy (users.loginCount can be stale)
-  const loginEvents = await db.collection("login_events").find({}).toArray();
+  const loginEvents = await db.collection("login_events").find({ dashboard: "ocean" }).toArray();
   const loginCountByEmail = {};
   loginEvents.forEach(function(e){
     var em = (e.email||'').toLowerCase().trim();
