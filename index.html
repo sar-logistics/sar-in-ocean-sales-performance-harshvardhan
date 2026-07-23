@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v38';
+var CACHE_VERSION = 'ocean-v39';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5535,7 +5535,8 @@ function tableRows(){
       // Monthly/Custom/Quarterly: colLabels already are real month labels
       var rawColKeys;
       if (activeGroups) {
-        rawColKeys = ['FY Total'].concat(activeGroups.map(function(g){
+        var _srcGrps = (isQuarterly && qGroups) ? qGroups : (isYearly && yGroups) ? yGroups : activeGroups;
+        rawColKeys = ['FY Total'].concat(_srcGrps.map(function(g){
           var ms = g.idxs.map(function(i){ return months26[i]; });
           return 'RANGE:'+ms[0]+':'+ms[ms.length-1];
         }));
