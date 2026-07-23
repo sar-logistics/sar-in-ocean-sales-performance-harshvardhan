@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v58';
+var CACHE_VERSION = 'ocean-v59';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -1903,6 +1903,8 @@ function grandEntity(){
       });
       return idxs.map(function(i){ var _ml=months26[i];
         if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return drillMatch(r,_ml,false);}).length;
+        // LOB filter active but drill not loaded yet — use lobData for accurate count
+        if(_fl && _lobDataFetched) return sum(repsRaw.map(function(r){return _fl.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].ship)||0);},0);}));
         return sum(repsRaw.map(function(r){return r.ship[i]||0;}));
       });
     })(),
