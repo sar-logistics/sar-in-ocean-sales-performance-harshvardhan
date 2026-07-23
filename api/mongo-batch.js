@@ -425,7 +425,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-23T-ocean-v48-lobdata-rev";
+const DEPLOY_TS = "2026-07-23T-ocean-v49-force-rebuild";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
