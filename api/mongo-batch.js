@@ -250,8 +250,15 @@ function calculateAirTons(job, cls) {
 // All others:          if "Operation Lock" is empty → Provisional; else Actual
 function pickGP(job, cls) {
   const isAir = cls.kind === "AIR";
-  const lockField = isAir ? "Financial Lock" : "Operation Lock";
-  const isLocked  = job[lockField] !== undefined && job[lockField] !== null && String(job[lockField]).trim() !== "";
+  // Air: Financial Lock; Sea/ISO Tank: Job Rev Recognition Date (Ocean OL)
+  let isLocked;
+  if (isAir) {
+    const fl = job["Financial Lock"];
+    isLocked = fl !== undefined && fl !== null && String(fl).trim() !== "";
+  } else {
+    const rl = job["Job Rev Recognition Date"];
+    isLocked = rl !== undefined && rl !== null && String(rl).trim() !== "";
+  }
   const actual      = parseFloat(job["Actual Profit (J=C-G)"]     || 0) || 0;
   const provisional = parseFloat(job["Provisional Profit (I=A-E)"] || 0) || 0;
   return { gp: isLocked ? actual : provisional, isProvisional: !isLocked };
@@ -418,7 +425,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-23T-ocean-v45-rev-recognition-date-v3";
+const DEPLOY_TS = "2026-07-23T-ocean-v46-gp-rev-recognition-date";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -838,7 +845,7 @@ async function computeSalesAggregate(db) {
   const allJobResults = await Promise.all(JOB_COLLECTIONS.map(cn =>
     db.collection(cn).find({}, { projection: {
       "Sales Person":1, "Job Date":1, "LOB":1, "Location":1, "Customer":1,
-      "Actual Profit (J=C-G)":1, "Provisional Profit (I=A-E)":1,
+      "Actual Profit (J=C-G)":1, "Provisional Profit (I=A-E)":1, "Job Rev Recognition Date":1,
       "Billed Revenue (C)":1, "Provisional Revenue (A)":1, "Job Rev Recognition Date":1,
       "Financial Lock":1, "Operation Lock":1,
       "ETD Loading Port":1, "ETA Discharge":1,
