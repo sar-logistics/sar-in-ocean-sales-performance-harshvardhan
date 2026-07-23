@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v40';
+var CACHE_VERSION = 'ocean-v41';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -7345,6 +7345,23 @@ function openDrill(entity, metric, col, valueFmt){
     .catch(function(){ state.drill.loading=false; state.drill.error='Could not reach the server.'; render(); });
 }
 
+
+// Load remaining drill rows in background after initial 500 rows render
+function loadMoreDrillRows(entity, metric, col, baseQs) {
+  var offset = state.drill.shownCount || 500;
+  var remaining = (state.drill.count||0) - offset;
+  if (remaining <= 0) return;
+  fetch('/api/mongo-batch'+baseQs+'&offset='+offset+'&limit='+remaining, { priority:'low' })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (data.rows && state.drill.rows) {
+        state.drill.rows = state.drill.rows.concat(data.rows);
+        state.drill.shownCount = state.drill.rows.length;
+        state.drill.hasMore = false;
+        render();
+      }
+    }).catch(function(){});
+}
 
 // ── Pendency Drill-through ────────────────────────────────────────────────────
 var _pendencyDrillCache = {};
