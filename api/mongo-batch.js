@@ -425,7 +425,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-23T-ocean-v46-gp-rev-recognition-date";
+const DEPLOY_TS = "2026-07-23T-ocean-v47-fix-syntax";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -613,8 +613,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           volumeUnit:   job["Volume Unit"]         || "",
           operationLock: job["Operation Lock"]     || "",
           financialLock: job["Financial Lock"]     || "",
-          const _drillRevLocked = job["Job Rev Recognition Date"] !== undefined && job["Job Rev Recognition Date"] !== null && String(job["Job Rev Recognition Date"]).trim() !== "";
-          g: rowGP, r: _drillRevLocked ? billedRevenue : provRevenue, x: postedCost,
+          g: rowGP, r: (job["Job Rev Recognition Date"] !== undefined && job["Job Rev Recognition Date"] !== null && String(job["Job Rev Recognition Date"]).trim() !== "") ? billedRevenue : provRevenue, x: postedCost,
           t: parseFloat(job["Container TEU"] || 0) || 0,
           chargeableWeight,
           chargeableWeightUnit,
