@@ -418,7 +418,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-22T-ocean-v34-seed-admin";
+const DEPLOY_TS = "2026-07-22T-ocean-v35-fix-email";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2814,7 +2814,7 @@ module.exports = async function handler(req, res) {
     const count = await db.collection("ocean_users").countDocuments();
     if (count === 0) {
       await db.collection("ocean_users").insertOne({
-        email: "harshvardhan.rawat@sarlogistics.com",
+        email: "str16mum.cor@sarlogisolutions.com",
         name: "Harshvardhan Rawat",
         role: "Admin",
         zone: "",
