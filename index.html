@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v70';
+var CACHE_VERSION = 'ocean-v71';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -1923,7 +1923,10 @@ function grandEntity(){
       });
     })(),
     gp:   isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
-                   : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gp)||0);},0);})) : sum(repsRaw.map(function(r){return (r.gp&&r.gp[i])||0;}));}),
+                   : idxs.map(function(i){var _ml=months26[i];
+                   if(allDrillRows&&allDrillRows.length>0){var _fl2=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;var _fz2=state.filterZones&&state.filterZones.length>0?state.filterZones:null;var _fr2=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl2||_fl2.indexOf(r.lob)>-1)&&(!_fz2||((_fz2.indexOf('Cross Sales')>-1&&!r._zone)||(_fz2.indexOf(r._zone)>-1)))&&(!_fr2||(_fr2.indexOf(r._sp)>-1));}).reduce(function(s,r){return s+(r.g||0);},0);}
+                   return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].gp)||0);},0);})) : sum(repsRaw.map(function(r){return (r.gp&&r.gp[i])||0;}));
+                 }),
     tons: isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);})
                    : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].tons)||0);},0);})) : sum(repsRaw.map(function(r){return (r.tons&&r.tons[i])||0;}));}),
     teu:  isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0);},0);})
