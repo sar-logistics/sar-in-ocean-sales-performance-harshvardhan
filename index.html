@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v71';
+var CACHE_VERSION = 'ocean-v72';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -1945,8 +1945,14 @@ function grandEntity(){
                    if(allDrillRows&&allDrillRows.length>0){var _fl2=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;var _fz2=state.filterZones&&state.filterZones.length>0?state.filterZones:null;var _fr2=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl2||_fl2.indexOf(r.lob)>-1)&&(!_fz2||((_fz2.indexOf('Cross Sales')>-1&&!r._zone)||(_fz2.indexOf(r._zone)>-1)))&&(!_fr2||(_fr2.indexOf(r._sp)>-1))&&!r.jobRevRecogDate;}).reduce(function(s,r){return s+(r.provRevenue||0);},0);}
                    return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].revProv)||0);},0);})) : sum(repsRaw.map(function(r){return (r.revProv&&r.revProv[i])||0;}));
                  }),
-    gpProv:   isWeekly ? wkeys.map(function(k){return sum(repsRaw.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].gpProv)||0;}));}) : idxs.map(function(i){return sum(repsRaw.map(function(r){return (r.gpProv&&r.gpProv[i])||0;}));}),
-    gpActual: isWeekly ? wkeys.map(function(k){return sum(repsRaw.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].gpActual)||0;}));}) : idxs.map(function(i){return sum(repsRaw.map(function(r){return (r.gpActual&&r.gpActual[i])||0;}));}),
+    gpProv:   isWeekly ? wkeys.map(function(k){return sum(repsRaw.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].gpProv)||0;}));}) : idxs.map(function(i){var _ml=months26[i];
+                   if(allDrillRows&&allDrillRows.length>0){var _fl2=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;var _fz2=state.filterZones&&state.filterZones.length>0?state.filterZones:null;var _fr2=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl2||_fl2.indexOf(r.lob)>-1)&&(!_fz2||((_fz2.indexOf('Cross Sales')>-1&&!r._zone)||(_fz2.indexOf(r._zone)>-1)))&&(!_fr2||(_fr2.indexOf(r._sp)>-1))&&r.prov===1;}).reduce(function(s,r){return s+(r.g||0);},0);}
+                   return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].gpProv)||0);},0);})) : sum(repsRaw.map(function(r){return (r.gpProv&&r.gpProv[i])||0;}));
+                 })
+    gpActual: isWeekly ? wkeys.map(function(k){return sum(repsRaw.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].gpActual)||0;}));}) : idxs.map(function(i){var _ml=months26[i];
+                   if(allDrillRows&&allDrillRows.length>0){var _fl2=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;var _fz2=state.filterZones&&state.filterZones.length>0?state.filterZones:null;var _fr2=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl2||_fl2.indexOf(r.lob)>-1)&&(!_fz2||((_fz2.indexOf('Cross Sales')>-1&&!r._zone)||(_fz2.indexOf(r._zone)>-1)))&&(!_fr2||(_fr2.indexOf(r._sp)>-1))&&!r.prov;}).reduce(function(s,r){return s+(r.g||0);},0);}
+                   return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].gpActual)||0);},0);})) : sum(repsRaw.map(function(r){return (r.gpActual&&r.gpActual[i])||0;}));
+                 })
     tank: (isWeekly ? wkeys : idxs).map(function(){return 0;}),
     tgt:  (function(){
       var v = state.reportView;
