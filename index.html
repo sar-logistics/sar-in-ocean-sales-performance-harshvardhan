@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v74';
+var CACHE_VERSION = 'ocean-v75';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -8320,7 +8320,8 @@ document.addEventListener('click', function(ev){
     var anyExpanded = zones.some(function(z){ return state.zoneOpen[z] !== false; });
     // Also check if any shipment detail rows are open
     var anyShipOpen = Object.keys(state.shipOpen||{}).some(function(k){ return state.shipOpen[k]; });
-    var anyOpen = anyExpanded || anyShipOpen;
+    var anyRevOpen  = Object.keys(state.revOpen||{}).some(function(k){ return state.revOpen[k]; });
+    var anyOpen = anyExpanded || anyShipOpen || anyRevOpen;
     var newVal = anyOpen ? false : true;
     // Toggle zones
     zones.forEach(function(z){ state.zoneOpen[z] = newVal; });
@@ -8330,13 +8331,14 @@ document.addEventListener('click', function(ev){
       // Collapse — set all to false
       state.shipOpen = {};
       state.gpOpen   = {};
+      state.revOpen  = {};
     } else {
       // Expand — set all to true
-      var newShipOpen = {}, newGpOpen = {};
-      allNames.forEach(function(n){ newShipOpen[n] = true; newGpOpen[n] = true; });
+      var newShipOpen = {}, newGpOpen = {}, newRevOpen = {};
+      allNames.forEach(function(n){ newShipOpen[n] = true; newGpOpen[n] = true; newRevOpen[n] = true; });
       state.shipOpen = newShipOpen;
       state.gpOpen   = newGpOpen;
-        state.revOpen  = newRevOpen;
+      state.revOpen  = newRevOpen;
     }
     render();
   }
