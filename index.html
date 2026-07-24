@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v68';
+var CACHE_VERSION = 'ocean-v69';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -1857,7 +1857,16 @@ function model(){
     return {gpGrand:gpGrand, shipGrand:shipGrand, tonsGrand:tonsGrand, tgtGrand:tgtGrand, achGrand:achGrand, teusGrand:teusGrand, revGrand:sum(repsRaw.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].rev)||0;}));}))};
   }
   var idxs = filteredMonthIndices();
-  var gpGrand   = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return r.gp[i]||0;}));}));
+  var _fl_rg = state.filterLobs&&state.filterLobs.length>0 ? state.filterLobs : null;
+  var _fz_rg = state.filterZones&&state.filterZones.length>0 ? state.filterZones : null;
+  var _fr_rg = state.filterReps&&state.filterReps.length>0 ? state.filterReps.map(function(x){return normalizeName(x);}) : null;
+  function _kpiDrillFilter(r){ return idxs.some(function(i){return months26[i]===r._ml;})&&(!_fl_rg||_fl_rg.indexOf(r.lob)>-1)&&(!_fz_rg||((_fz_rg.indexOf('Cross Sales')>-1&&!r._zone)||(_fz_rg.indexOf(r._zone)>-1)))&&(!_fr_rg||(_fr_rg.indexOf(r._sp)>-1)); }
+  var gpGrand;
+  if (allDrillRows&&allDrillRows.length>0) {
+    gpGrand = allDrillRows.filter(_kpiDrillFilter).reduce(function(s,r){return s+(r.g||0);},0);
+  } else {
+    gpGrand = (_lobDataFetched&&_fl_rg) ? sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){var m=months26[i]; return _fl_rg.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gp)||0);},0);}));})) : sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return r.gp[i]||0;}));}));
+  }
   var shipGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return r.ship[i]||0;}));}));
   var tonsGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return (r.tons&&r.tons[i])||0;}));}));
   var tgtGrand  = (_mRole === 'sales rep' || _frNorm)
@@ -1865,18 +1874,9 @@ function model(){
     : sum(realZones.map(function(z){ return (z.monthlyTarget||0) * idxs.length; }));
   var achGrand  = tgtGrand > 0 ? Math.round(gpGrand / tgtGrand * 100) : 0;
   var teusGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return (r.teu&&r.teu[i])||0;}));}));
-  // revGrand: use allDrillRows when loaded for accuracy (matches drill through)
-  var _fl_rg = state.filterLobs&&state.filterLobs.length>0 ? state.filterLobs : null;
-  var _fz_rg = state.filterZones&&state.filterZones.length>0 ? state.filterZones : null;
-  var _fr_rg = state.filterReps&&state.filterReps.length>0 ? state.filterReps.map(function(x){return normalizeName(x);}) : null;
   var revGrand;
   if (allDrillRows&&allDrillRows.length>0) {
-    revGrand = allDrillRows.filter(function(r){
-      return idxs.some(function(i){return months26[i]===r._ml;})
-        && (!_fl_rg||_fl_rg.indexOf(r.lob)>-1)
-        && (!_fz_rg||((_fz_rg.indexOf('Cross Sales')>-1&&!r._zone)||(_fz_rg.indexOf(r._zone)>-1)))
-        && (!_fr_rg||(_fr_rg.indexOf(r._sp)>-1));
-    }).reduce(function(s,r){return s+(r.r||0);},0);
+    revGrand = allDrillRows.filter(_kpiDrillFilter).reduce(function(s,r){return s+(r.r||0);},0);
   } else {
     revGrand = (_lobDataFetched&&_fl_rg) ? sum(repsRaw.map(function(r){return sum(idxs.map(function(i){var m=months26[i]; return _fl_rg.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].rev)||0);},0);}));})) : sum(repsRaw.map(function(r){return sum(idxs.map(function(i){return (r.rev&&r.rev[i])||0;}));}));
   }
