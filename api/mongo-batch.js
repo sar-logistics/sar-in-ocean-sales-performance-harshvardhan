@@ -425,7 +425,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-23T-ocean-v49-force-rebuild";
+const DEPLOY_TS = "2026-07-24T-ocean-v50-exclude-general-drill";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -519,6 +519,8 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
     for (const { collName, rows } of allResults) {
       for (const job of rows) {
         const cls = classifyRow(job, collName);
+        // Exclude GENERAL/Road/Clearance from drill rows — not shown in sales dashboard
+        if (cls.kind === 'GENERAL' || cls.kind === 'ROAD' || cls.kind === 'CLEARANCE') continue;
         const dateCol = getDateColumnFor(cls);
         // Use ETD/ETA only — no Job Date fallback. Jobs with blank ETD/ETA are excluded.
         const primaryDateStr = job[dateCol];
