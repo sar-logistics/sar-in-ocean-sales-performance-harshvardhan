@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v63';
+var CACHE_VERSION = 'ocean-v64';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5975,7 +5975,7 @@ function drawer(){
           return !locked ? s.provisionalProfit : null;
         } },
       { k:'firstOlStatus', l:'Lock Status', t:'olbadge', derived:function(s){
-          return (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.operationLock;
+          return (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.jobRevRecogDate;
         } },
       { k:'provRevenue', l:'Provisional Revenue (A)', t:'cur' },
       { k:'billedRevenue', l:'Billed Revenue (C)', t:'cur', color:'#2563EB' },
