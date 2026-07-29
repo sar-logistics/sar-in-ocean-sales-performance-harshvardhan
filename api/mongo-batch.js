@@ -425,7 +425,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-24T-ocean-v54-fy-yearly-tgt";
+const DEPLOY_TS = "2026-07-24T-ocean-v55-fy-key-fix";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1030,7 +1030,8 @@ async function computeSalesAggregate(db) {
       if (!repMeta[repKey]) repMeta[repKey] = mapped;
       // Store per-FY yearly target for Yearly view
       if (!repMeta[repKey]._fyYearlyTgt) repMeta[repKey]._fyYearlyTgt = {};
-      const _jobFY = ['Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26','Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'].includes(monthLabel) ? 'FY27' : 'FY26';
+      // Use FY key matching yearGroups format: FY25=FY2025-26, FY26=FY2026-27
+      const _jobFY = ['Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26','Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'].includes(monthLabel) ? 'FY26' : 'FY25';
       if (!repMeta[repKey]._fyYearlyTgt[_jobFY]) repMeta[repKey]._fyYearlyTgt[_jobFY] = mapped.yearlyTarget || 0;
     }
   }
