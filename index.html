@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v82';
+var CACHE_VERSION = 'ocean-v83';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -2085,7 +2085,7 @@ function repTgtForView(r){
 function zoneTgtForView(zData, zReps){
   var v = state.reportView;
   if (v === 'Weekly')  return zData.weeklyTarget  || 0;
-  if (v === 'Yearly')  return zData.yearlyTarget  || 0;
+  if (v === 'Yearly')  return zData.yearlyTarget ? (zData.yearlyTarget / 12) : (zData.monthlyTarget || 0);
   if (v === 'Custom')  {
     // Prorate monthly target by number of active months
     var idxs = filteredMonthIndices();
