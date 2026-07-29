@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v77';
+var CACHE_VERSION = 'ocean-v78';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -4280,13 +4280,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       if (!_joLobIndex[key]) _joLobIndex[key] = {};
       var mk = r._month;
       if (!_joLobIndex[key][mk]) _joLobIndex[key][mk] = { pending:0, done:0 };
-      // Ocean OP: use Job Rev Recognition Date as OL
-      var _isDone;
-      if (lockType === 'Operation Lock') {
-        _isDone = !!(r.jobRevRecogDate && String(r.jobRevRecogDate).trim() !== '');
-      } else {
-        _isDone = r.flDone;
-      }
+      var _isDone = (lockType === 'Operation Lock') ? r.olDone : r.flDone;
       if (_isDone) _joLobIndex[key][mk].done++;
       else _joLobIndex[key][mk].pending++;
     });
