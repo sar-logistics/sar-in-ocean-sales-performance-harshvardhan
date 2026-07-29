@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v86';
+var CACHE_VERSION = 'ocean-v87';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5491,9 +5491,10 @@ function tableRows(){
       dispTgt  = activeGroups.map(function(g){
         // Yearly view: show correct FY yearly target per group
         if (isYearly) {
-          var _fyKey = g.key; // e.g. 'FY26' or 'FY27'
-          if (_fyKey === 'FY26' && e.fy26YearlyTgt) return e.fy26YearlyTgt;
-          if (_fyKey === 'FY27' && e.fy27YearlyTgt) return e.fy27YearlyTgt;
+          // Keys are 'FY25' (=FY2025-26) and 'FY26' (=FY2026-27)
+          var _fyKey = g.key;
+          if (_fyKey === 'FY25' && e.fy26YearlyTgt) return e.fy26YearlyTgt;
+          if (_fyKey === 'FY26' && e.fy27YearlyTgt) return e.fy27YearlyTgt;
           if (e.yearlyTgt) return e.yearlyTgt;
         }
         // Sum per-month targets prorated by join/exit date
