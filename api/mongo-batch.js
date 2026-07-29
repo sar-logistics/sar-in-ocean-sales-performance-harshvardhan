@@ -425,7 +425,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-24T-ocean-v51-op-rev-recog-date";
+const DEPLOY_TS = "2026-07-24T-ocean-v52-op-rev-recog-date-v2";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2290,7 +2290,10 @@ async function computeBothPendency(db) {
       if (!zone) zone = "Unassigned";
 
       const jobOwner = String(job["Job Owner"] || "").trim().split("|")[0].trim() || "";
-      const olDone = job["Operation Lock"] && String(job["Operation Lock"]).trim() !== "";
+      const _pendCls = classifyRow(job, collName);
+      const olDone = (_pendCls.kind === "AIR")
+        ? (job["Operation Lock"] && String(job["Operation Lock"]).trim() !== "")
+        : (job["Job Rev Recognition Date"] && String(job["Job Rev Recognition Date"]).trim() !== "");
       const flDone = job["Financial Lock"]  && String(job["Financial Lock"]).trim()  !== "";
       const cls = classifyRow(job, collName);
 
