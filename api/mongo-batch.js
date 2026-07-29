@@ -425,7 +425,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-24T-ocean-v53-revert-op";
+const DEPLOY_TS = "2026-07-24T-ocean-v54-fy-yearly-tgt";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1028,6 +1028,10 @@ async function computeSalesAggregate(db) {
       }
 
       if (!repMeta[repKey]) repMeta[repKey] = mapped;
+      // Store per-FY yearly target for Yearly view
+      if (!repMeta[repKey]._fyYearlyTgt) repMeta[repKey]._fyYearlyTgt = {};
+      const _jobFY = ['Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26','Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'].includes(monthLabel) ? 'FY27' : 'FY26';
+      if (!repMeta[repKey]._fyYearlyTgt[_jobFY]) repMeta[repKey]._fyYearlyTgt[_jobFY] = mapped.yearlyTarget || 0;
     }
   }
 
@@ -1067,6 +1071,8 @@ async function computeSalesAggregate(db) {
       tgt:          repTgt,
       weeklyTgt:    meta.weeklyTarget  || 0,
       yearlyTgt:    meta.yearlyTarget  || 0,
+      fy26YearlyTgt: (meta._fyYearlyTgt && meta._fyYearlyTgt['FY26']) || meta.yearlyTarget || 0,
+      fy27YearlyTgt: (meta._fyYearlyTgt && meta._fyYearlyTgt['FY27']) || meta.yearlyTarget || 0,
       dailyTgt:     meta.dailyTarget   || 0,
       tgtUSD:       meta.monthlyTargetUSD || 0,
       weeklyTgtUSD: meta.weeklyTargetUSD  || 0,
