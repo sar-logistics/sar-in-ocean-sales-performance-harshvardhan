@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v84';
+var CACHE_VERSION = 'ocean-v85';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -1730,7 +1730,13 @@ function yearGroups(){
     var ms = g.idxs.map(function(i){ return months26[i]; });
     var first = ms[0], last = ms[ms.length-1];
     var fy = first.split('-'), ly = last.split('-');
-    g.range = fy[0]+' 20'+fy[1]+' – '+ly[0]+' 20'+ly[1];
+    // For Financial Year: always show full FY range (Apr–Mar) not filtered range
+    if (isFinancial && g.key && g.key.startsWith('FY')) {
+      var fyStartYr = parseInt(g.year, 10);
+      g.range = 'Apr 20'+String(fyStartYr)+' – Mar 20'+String(fyStartYr+1);
+    } else {
+      g.range = fy[0]+' 20'+fy[1]+' – '+ly[0]+' 20'+ly[1];
+    }
   });
 
   return order.map(function(k){ return groups[k]; });
