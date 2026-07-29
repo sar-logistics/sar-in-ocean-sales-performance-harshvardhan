@@ -287,6 +287,25 @@ function getDateColumnFor(cls) {
   return "Job Date";
 }
 
+// Get date value with fallback chain:
+// Export: ETD Loading Port → ETD First Leg of Origin → Job Date
+// Import: ETA Discharge → ETA Last Leg of Destination → Job Date
+function getDateValueFor(job, cls) {
+  if (cls.direction === "EXPORT") {
+    return job["ETD Loading Port"]
+        || job["ETD First Leg of Origin"]
+        || job["Job Date"]
+        || null;
+  }
+  if (cls.direction === "IMPORT") {
+    return job["ETA Discharge"]
+        || job["ETA Last Leg of Destination"]
+        || job["Job Date"]
+        || null;
+  }
+  return job["Job Date"] || null;
+}
+
 // Google Sheets exports dates such as 04/05/2026 in day/month/year format.
 // `new Date("04/05/2026")` treats that as April 5 in JavaScript, incorrectly
 // putting 4 May shipments into April. Parse date-only values explicitly and
@@ -425,7 +444,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-24T-ocean-v55-fy-key-fix";
+const DEPLOY_TS = "2026-07-24T-ocean-v56-etd-fallback";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -521,9 +540,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         const cls = classifyRow(job, collName);
         // Exclude GENERAL/Road/Clearance from drill rows — not shown in sales dashboard
         if (cls.kind === 'GENERAL' || cls.kind === 'ROAD' || cls.kind === 'CLEARANCE') continue;
-        const dateCol = getDateColumnFor(cls);
-        // Use ETD/ETA only — no Job Date fallback. Jobs with blank ETD/ETA are excluded.
-        const primaryDateStr = job[dateCol];
+        const primaryDateStr = getDateValueFor(job, cls);
         if (!primaryDateStr) continue;
         const d = parseSheetDate(primaryDateStr);
         if (!d) continue;
