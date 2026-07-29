@@ -444,7 +444,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-24T-ocean-v56-etd-fallback";
+const DEPLOY_TS = "2026-07-24T-ocean-v57-etd-fallback-v2";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -881,10 +881,8 @@ async function computeSalesAggregate(db) {
       // NOT by which collection it happens to be stored in — protects
       // against rows that were misfiled into the wrong sheet tab.
       const cls = classifyRow(job, collName);
-      const dateCol = getDateColumnFor(cls);
-
-      // Use ETD/ETA only — no Job Date fallback. Jobs with blank ETD/ETA are excluded.
-      const primaryDate = job[dateCol];
+      // ETD/ETA with fallback chain: primary → first/last leg → Job Date
+      const primaryDate = getDateValueFor(job, cls);
       if (!primaryDate) continue;
       const d = parseSheetDate(primaryDate);
       if (!d) continue;
