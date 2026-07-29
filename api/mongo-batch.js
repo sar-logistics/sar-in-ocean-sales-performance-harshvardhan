@@ -425,7 +425,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-24T-ocean-v50-exclude-general-drill";
+const DEPLOY_TS = "2026-07-24T-ocean-v51-op-rev-recog-date";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2300,6 +2300,7 @@ async function computeBothPendency(db) {
         _norm: norm, _displayNorm: displayNorm, _repName: displayName, _zone: zone, _month: monthLabel,
         _wk: isoWeekInfo(d).key,
         olDone, flDone,
+        jobRevRecogDate: job["Job Rev Recognition Date"] || "",
         shipmentNo:  job["Shipment No"]     || "—",
         jobDate:     job["Job Date"]        || "",
         lob:         cls.kind + (cls.direction ? " " + cls.direction : ""),
