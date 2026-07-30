@@ -446,7 +446,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-24T-ocean-v59-extend-fy-months";
+const DEPLOY_TS = "2026-07-24T-ocean-v60-debug-missing";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2530,7 +2530,7 @@ module.exports = async function handler(req, res) {
           fy27:  await db.collection(cn).countDocuments({ _fy: "FY27" }),
         };
       }
-      return res.status(200).json({ counts, apr26AirSample: apr26Jobs, apr26SeaSample: apr26Sea });
+      return res.status(200).json({ counts, apr26AirSample: apr26Jobs, apr26SeaSample: apr26Sea, missingDateJobs });
     }
 
     if (action === "srrProbe") {
