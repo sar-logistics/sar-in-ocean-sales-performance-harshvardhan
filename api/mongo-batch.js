@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-24T-ocean-v63-classify-fallback";
+const DEPLOY_TS = "2026-07-24T-ocean-v64-debug-compare";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2543,7 +2543,17 @@ module.exports = async function handler(req, res) {
           fy27:  await db.collection(cn).countDocuments({ _fy: "FY27" }),
         };
       }
-      return res.status(200).json({ counts, apr26AirSample: apr26Jobs, apr26SeaSample: apr26Sea, missingDateJobs });
+      // Get all FY27 sea export shipment numbers from DB
+    const allSeaFY27 = await db.collection("jobs_sea_export").find(
+      { _fy: "FY27" },
+      { projection: { "Shipment No":1, "LOB":1, "ETD Loading Port":1, "Job Date":1 } }
+    ).toArray();
+    // Compare with cached drill rows
+    const cachedShipNos = new Set((drillRowsCache?.allRows||[]).filter(r=>r.lob==='SEA EXPORT').map(r=>r.shipmentNo));
+    const missingFromCache = allSeaFY27.filter(j => !cachedShipNos.has(j["Shipment No"])).map(j=>({
+      shipNo: j["Shipment No"], lob: j["LOB"], etd: j["ETD Loading Port"], jobDate: j["Job Date"]
+    }));
+    return res.status(200).json({ counts, apr26AirSample: apr26Jobs, apr26SeaSample: apr26Sea, missingDateJobs, missingFromCache, totalInDB: allSeaFY27.length, totalInCache: cachedShipNos.size });
     }
 
     if (action === "srrProbe") {
