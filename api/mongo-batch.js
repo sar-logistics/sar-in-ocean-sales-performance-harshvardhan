@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-30T-ocean-v68-agent-date-fallback";
+const DEPLOY_TS = "2026-07-30T-ocean-v69-all-insight-fallback";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1806,7 +1806,8 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
     for (const job of jobs) {
       // Date filter
       if (activeMonthSet) {
-        const rawDate = job[cfg.dateCol] || job["Job Date"];
+        const _tCls = { direction: cfg.dir === "Export" ? "EXPORT" : "IMPORT" };
+        const rawDate = getDateValueFor(job, _tCls);
         if (!rawDate) continue;
         const dObj = parseSheetDate(rawDate);
         if (!dObj) continue;
