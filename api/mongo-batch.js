@@ -347,12 +347,10 @@ function parseSheetDate(value) {
 // MongoDB collections (appended, not replaced) and need to be recognized
 // together for month-bucketing across the combined dataset.
 const FY_MONTHS = [
-  "Jan-25","Feb-25","Mar-25",
   "Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
   "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
   "Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26",
-  "Oct-26","Nov-26","Dec-26","Jan-27","Feb-27","Mar-27",
-  "Apr-27","May-27","Jun-27"
+  "Oct-26","Nov-26","Dec-26","Jan-27","Feb-27","Mar-27"
 ];
 const MONTH_NAMES  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -446,7 +444,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-24T-ocean-v61-debug-missing-v2";
+const DEPLOY_TS = "2026-07-24T-ocean-v62-no-fymonths-check";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -547,7 +545,8 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         const d = parseSheetDate(primaryDateStr);
         if (!d) continue;
         const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
-        if (!FY_MONTHS.includes(monthLabel)) continue;
+        // Skip only truly invalid month labels (not in our 2-year window is okay — still process them)
+      if (!monthLabel || !monthLabel.match(/^[A-Za-z]+-\d{2}$/)) continue;
         const salesPerson = normalizeName(job["Sales Person"]) || "no rep assigned";
 
         // Resolve zone from mapping — used client-side for zone drill matching
@@ -889,7 +888,8 @@ async function computeSalesAggregate(db) {
       const d = parseSheetDate(primaryDate);
       if (!d) continue;
       const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
-      if (!FY_MONTHS.includes(monthLabel)) continue;
+      // Skip only truly invalid month labels (not in our 2-year window is okay — still process them)
+      if (!monthLabel || !monthLabel.match(/^[A-Za-z]+-\d{2}$/)) continue;
       const rowDate = d;
 
       // Pick the mapping for this row's FY — fall back to the other FY if not found
@@ -2297,7 +2297,8 @@ async function computeBothPendency(db) {
       const d = parseSheetDate(rawDate);
       if (!d) continue;
       const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
-      if (!FY_MONTHS.includes(monthLabel)) continue;
+      // Skip only truly invalid month labels (not in our 2-year window is okay — still process them)
+      if (!monthLabel || !monthLabel.match(/^[A-Za-z]+-\d{2}$/)) continue;
 
       const nameParts = rawName.split("|").map(s => s.trim());
       const cleanName = nameParts[0] || rawName;
