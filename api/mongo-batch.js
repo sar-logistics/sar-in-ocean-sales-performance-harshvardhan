@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-30T-ocean-v69-all-insight-fallback";
+const DEPLOY_TS = "2026-07-30T-ocean-v70-customer-proj-fix";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1249,6 +1249,7 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
     "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1, "Volume": 1, "Volume Unit": 1,
     "ETD Loading Port": 1, "ETD First Leg of Origin": 1, "ETA Discharge": 1, "ETA Last Leg of Destination": 1, "Job Date": 1,
+    "Job Rev Recognition Date": 1, "Provisional Revenue (A)": 1,
   };
 
   await Promise.all(ALL_COLLS.map(async (collName) => {
@@ -2028,6 +2029,7 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
     "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1,
     "ETD Loading Port": 1, "ETD First Leg of Origin": 1, "ETA Discharge": 1, "ETA Last Leg of Destination": 1, "Job Date": 1,
+    "Job Rev Recognition Date": 1, "Provisional Revenue (A)": 1,
   };
 
   await Promise.all(ALL_COLLS.map(async (collName) => {
