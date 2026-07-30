@@ -446,7 +446,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-24T-ocean-v60-debug-missing";
+const DEPLOY_TS = "2026-07-24T-ocean-v61-debug-missing-v2";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2520,8 +2520,13 @@ module.exports = async function handler(req, res) {
       ).limit(5).toArray();
       const apr26Sea = await db.collection("jobs_sea_export").find(
         { _fy: "FY27" },
-        { projection: { "Sales Person":1, "ETD Loading Port":1, "Job Date":1, "LOB":1, "Provisional Profit (I=A-E)":1 } }
+        { projection: { "Sales Person":1, "ETD Loading Port":1, "ETD First Leg of Origin":1, "Job Date":1, "LOB":1, "Shipment No":1 } }
       ).limit(5).toArray();
+      // Find FY27 sea export jobs with no valid ETD or First Leg
+      const missingDateJobs = await db.collection("jobs_sea_export").find(
+        { _fy: "FY27", "ETD Loading Port": { $in: [null, ""] }, "ETD First Leg of Origin": { $in: [null, ""] } },
+        { projection: { "Shipment No":1, "ETD Loading Port":1, "ETD First Leg of Origin":1, "Job Date":1 } }
+      ).toArray();
       const counts = {};
       for (const cn of JOB_COLLECTIONS) {
         counts[cn] = {
