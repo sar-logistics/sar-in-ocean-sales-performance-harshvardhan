@@ -210,7 +210,14 @@ function classifyRow(job, collName) {
     return { kind: "ISOTANK", direction: isExport ? "EXPORT" : "IMPORT" };
   }
 
-  const lob = String(job["LOB"] || "").toUpperCase().trim();
+  // If LOB field is blank, derive from collection name
+  const COLL_LOB_MAP = {
+    "jobs_sea_export": "SEA EXPORT", "jobs_sea_import": "SEA IMPORT",
+    "jobs_air_export": "AIR EXPORT", "jobs_air_import": "AIR IMPORT",
+    "jobs_general": "GENERAL", "jobs_road": "ROAD",
+    "jobs_clearance_export": "CLEARANCE", "jobs_clearance_import": "CLEARANCE"
+  };
+  const lob = String(job["LOB"] || COLL_LOB_MAP[collName] || "").toUpperCase().trim();
 
   if (lob === "SEA EXPORT")      return { kind: "SEA",       direction: "EXPORT" };
   if (lob === "SEA IMPORT")      return { kind: "SEA",       direction: "IMPORT" };
@@ -444,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-24T-ocean-v62-no-fymonths-check";
+const DEPLOY_TS = "2026-07-24T-ocean-v63-classify-fallback";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
