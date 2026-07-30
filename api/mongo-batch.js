@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-24T-ocean-v64-debug-compare";
+const DEPLOY_TS = "2026-07-24T-ocean-v65-debug-compare-v2";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2549,11 +2549,13 @@ module.exports = async function handler(req, res) {
       { projection: { "Shipment No":1, "LOB":1, "ETD Loading Port":1, "Job Date":1 } }
     ).toArray();
     // Compare with cached drill rows
-    const cachedShipNos = new Set((drillRowsCache?.allRows||[]).filter(r=>r.lob==='SEA EXPORT').map(r=>r.shipmentNo));
+    const FY27_MONTHS = ["Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26","Oct-26","Nov-26","Dec-26","Jan-27","Feb-27","Mar-27"];
+    const cachedSeaFY27 = (drillRowsCache?.allRows||[]).filter(r=>r.lob==='SEA EXPORT' && FY27_MONTHS.includes(r._ml));
+    const cachedShipNos = new Set(cachedSeaFY27.map(r=>r.shipmentNo));
     const missingFromCache = allSeaFY27.filter(j => !cachedShipNos.has(j["Shipment No"])).map(j=>({
       shipNo: j["Shipment No"], lob: j["LOB"], etd: j["ETD Loading Port"], jobDate: j["Job Date"]
     }));
-    return res.status(200).json({ counts, apr26AirSample: apr26Jobs, apr26SeaSample: apr26Sea, missingDateJobs, missingFromCache, totalInDB: allSeaFY27.length, totalInCache: cachedShipNos.size });
+    return res.status(200).json({ counts, apr26AirSample: apr26Jobs, apr26SeaSample: apr26Sea, missingDateJobs, missingFromCache, totalInDB: allSeaFY27.length, totalInCache: cachedSeaFY27.length });
     }
 
     if (action === "srrProbe") {
