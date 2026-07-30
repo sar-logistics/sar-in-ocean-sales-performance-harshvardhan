@@ -444,7 +444,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-24T-ocean-v57-etd-fallback-v2";
+const DEPLOY_TS = "2026-07-24T-ocean-v58-etd-fallback-projection";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -866,7 +866,7 @@ async function computeSalesAggregate(db) {
       "Actual Profit (J=C-G)":1, "Provisional Profit (I=A-E)":1, "Job Rev Recognition Date":1,
       "Billed Revenue (C)":1, "Provisional Revenue (A)":1, "Job Rev Recognition Date":1,
       "Financial Lock":1, "Operation Lock":1,
-      "ETD Loading Port":1, "ETA Discharge":1,
+      "ETD Loading Port":1, "ETD First Leg of Origin":1, "ETA Discharge":1, "ETA Last Leg of Destination":1,
       "Chargeable Weight":1, "Chargeable Weight Unit":1,
       "Container TEU":1, "Volume":1, "Volume Unit":1, "Cargo Type":1,
     }}).toArray().then(rows => ({ collName: cn, jobs: rows }))
@@ -1239,7 +1239,7 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
     "Financial Lock": 1, "Operation Lock": 1,
     "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1, "Volume": 1, "Volume Unit": 1,
-    "ETD Loading Port": 1, "ETA Discharge": 1, "Job Date": 1,
+    "ETD Loading Port": 1, "ETD First Leg of Origin": 1, "ETA Discharge": 1, "ETA Last Leg of Destination": 1, "Job Date": 1,
   };
 
   await Promise.all(ALL_COLLS.map(async (collName) => {
@@ -1777,7 +1777,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
     "Financial Lock": 1, "Operation Lock": 1,
     "Sales Person": 1, "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1, "Volume": 1, "Volume Unit": 1, "Cargo Type": 1,
-    "ETD Loading Port": 1, "ETA Discharge": 1, "Job Date": 1,
+    "ETD Loading Port": 1, "ETD First Leg of Origin": 1, "ETA Discharge": 1, "ETA Last Leg of Destination": 1, "Job Date": 1,
     "Consignee Country": 1, "Shipper Country": 1, "Trade Lane": 1,
     "Destination Country": 1, "Origin Port Country": 1,
     "Discharge Port": 1, "Loading Port": 1,
@@ -2019,7 +2019,7 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
     "Sales Person": 1,
     "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1,
-    "ETD Loading Port": 1, "ETA Discharge": 1, "Job Date": 1,
+    "ETD Loading Port": 1, "ETD First Leg of Origin": 1, "ETA Discharge": 1, "ETA Last Leg of Destination": 1, "Job Date": 1,
   };
 
   await Promise.all(ALL_COLLS.map(async (collName) => {
