@@ -347,10 +347,12 @@ function parseSheetDate(value) {
 // MongoDB collections (appended, not replaced) and need to be recognized
 // together for month-bucketing across the combined dataset.
 const FY_MONTHS = [
+  "Jan-25","Feb-25","Mar-25",
   "Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
   "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
   "Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26",
-  "Oct-26","Nov-26","Dec-26","Jan-27","Feb-27","Mar-27"
+  "Oct-26","Nov-26","Dec-26","Jan-27","Feb-27","Mar-27",
+  "Apr-27","May-27","Jun-27"
 ];
 const MONTH_NAMES  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -444,7 +446,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-24T-ocean-v58-etd-fallback-projection";
+const DEPLOY_TS = "2026-07-24T-ocean-v59-extend-fy-months";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
