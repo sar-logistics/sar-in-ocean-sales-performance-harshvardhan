@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-30T-ocean-v71-customer-revert";
+const DEPLOY_TS = "2026-07-30T-ocean-v72-insight-manual-fallback";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2052,10 +2052,11 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
 
     const jobs = await db.collection(collName).find({}, { projection }).toArray();
 
+    const dateColA = isExport ? "ETD Loading Port" : isImport ? "ETA Discharge" : "Job Date";
     for (const job of jobs) {
-      // Date filter — use ETD fallback chain to match drill rows
+      // Date filter — full fallback chain
       if (activeMonthSet) {
-        const rawDate = getDateValueFor(job, cls);
+        const rawDate = job[dateColA] || job["ETD First Leg of Origin"] || job["ETA Last Leg of Destination"] || job["Job Date"];
         if (!rawDate) continue;
         const dObj = parseSheetDate(rawDate);
         if (!dObj) continue;
