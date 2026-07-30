@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-30T-ocean-v67-insight-date-fallback";
+const DEPLOY_TS = "2026-07-30T-ocean-v68-agent-date-fallback";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2040,7 +2040,6 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
       kind: isAir ? "AIR" : collName.includes("isotank") ? "ISOTANK" : "SEA",
       direction: isImport ? "IMPORT" : "EXPORT"
     };
-    const dateCol = isExport ? "ETD Loading Port" : isImport ? "ETA Discharge" : "Job Date";
     const lobLabel = lob === "Air"
       ? (isImport ? "Air Imp" : "Air Exp")
       : lob === "ISO Tank"
@@ -2050,9 +2049,9 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
     const jobs = await db.collection(collName).find({}, { projection }).toArray();
 
     for (const job of jobs) {
-      // Date filter
+      // Date filter — use ETD fallback chain to match drill rows
       if (activeMonthSet) {
-        const rawDate = job[dateCol]; // ETD/ETA only — no Job Date fallback (matches getDrillRows)
+        const rawDate = getDateValueFor(job, cls);
         if (!rawDate) continue;
         const dObj = parseSheetDate(rawDate);
         if (!dObj) continue;
