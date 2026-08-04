@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v92';
+var CACHE_VERSION = 'ocean-v93';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -1873,7 +1873,22 @@ function model(){
   } else {
     gpGrand = (_lobDataFetched&&_fl_rg) ? sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){var m=months26[i]; return _fl_rg.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gp)||0);},0);}));})) : sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return r.gp[i]||0;}));}));
   }
-  var shipGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return r.ship[i]||0;}));}));
+  var _fl_sg = state.filterLobs&&state.filterLobs.length>0 ? state.filterLobs : null;
+  var _fz_sg = state.filterZones&&state.filterZones.length>0 ? state.filterZones : null;
+  var _fr_sg = state.filterReps&&state.filterReps.length>0 ? state.filterReps.map(function(x){return normalizeName(x);}) : null;
+  var shipGrand;
+  if (allDrillRows&&allDrillRows.length>0) {
+    shipGrand = allDrillRows.filter(function(r){
+      return idxs.some(function(i){return months26[i]===r._ml;})
+        && (!_fl_sg||_fl_sg.indexOf(r.lob)>-1)
+        && (!_fz_sg||((_fz_sg.indexOf('Cross Sales')>-1&&!r._zone)||(_fz_sg.indexOf(r._zone)>-1)))
+        && (!_fr_sg||(_fr_sg.indexOf(r._sp)>-1));
+    }).length;
+  } else if (_fl_sg) {
+    shipGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){var m=months26[i]; return _fl_sg.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].ship)||0);},0);}));}));
+  } else {
+    shipGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return r.ship[i]||0;}));}));
+  }
   var tonsGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return (r.tons&&r.tons[i])||0;}));}));
   var tgtGrand  = (_mRole === 'sales rep' || _frNorm)
     ? sum(filteredRepsForModel.map(function(r){ return (r.tgt||0) * idxs.length; }))
