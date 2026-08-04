@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-30T-ocean-v73-customer-rev-fix";
+const DEPLOY_TS = "2026-07-30T-ocean-v74-customer-rev-fix-v2";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1280,7 +1280,10 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
 
       const customer = String(job["Customer"] || "").trim();
       if (!customer) continue;
-      const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
+      const isLocked = !!(job["Job Rev Recognition Date"]);
+      const revenue = isLocked
+        ? (parseFloat(job["Billed Revenue (C)"] || 0) || 0)
+        : (parseFloat(job["Provisional Revenue (A)"] || 0) || 0);
       const { gp } = pickGP(job, cls);
 
       // Tons for Air only
