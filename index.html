@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v99';
+var CACHE_VERSION = 'ocean-v100';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -305,6 +305,14 @@ function showDashboard(instant) {
 function _showDashboardBody() {
   var _t0 = performance.now();
   console.log('[PERF] _showDashboardBody start at', _t0.toFixed(1)+'ms');
+  // Clean up stale date-specific cache keys (customers/agents/tradelane for old date ranges)
+  try {
+    var _prefix = 'sar_';
+    var _datePatterns = ['customers_','agents_','tradelane_'];
+    Object.keys(localStorage).filter(function(k){
+      return k.startsWith(_prefix) && _datePatterns.some(function(p){ return k.includes(p); }) && !k.includes(CACHE_VERSION);
+    }).forEach(function(k){ localStorage.removeItem(k); });
+  } catch(e) {}
   // ── Instant boot: identical to Op/Finance ────────────────────────────────
   var _tSales = performance.now();
   var cached = lsGet('sales');
