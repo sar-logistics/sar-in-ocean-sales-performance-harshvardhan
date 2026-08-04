@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v100';
+var CACHE_VERSION = 'ocean-v101';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -492,7 +492,7 @@ function _showDashboardBody() {
                     });
                   }
                 });
-                lsSet('tradelane_'+key, _tlSave);
+                // Tradelane not stored in localStorage (too large, date-specific) — memory cache only
               }catch(e){} } }).catch(function(){});
         }
       }, 1100);
@@ -1010,7 +1010,12 @@ function lsGet(key) {
 function lsSet(key, data) {
   try {
     data._cachedAt = Date.now();
-    var serialized = JSON.stringify(data);
+    // Strip heavy fields before saving to localStorage
+    var _saveData = Object.assign({}, data);
+    if (_saveData.allCustomers && _saveData.allCustomers.length > 50) {
+      _saveData = Object.assign({}, _saveData, { allCustomers: _saveData.allCustomers.slice(0, 50) });
+    }
+    var serialized = JSON.stringify(_saveData);
     localStorage.setItem('sar_' + key + '_' + CACHE_VERSION, serialized);
   } catch(e) {
     // Quota exceeded — try clearing old keys first then retry
