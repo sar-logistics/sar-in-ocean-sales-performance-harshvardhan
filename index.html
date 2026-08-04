@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v105';
+var CACHE_VERSION = 'ocean-v106';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -465,7 +465,7 @@ function _showDashboardBody() {
               try{var _cSave=JSON.parse(JSON.stringify(d));
                 if(_cSave.lobs) Object.keys(_cSave.lobs).forEach(function(l){(_cSave.lobs[l].allCustomers||[]).forEach(function(c){delete c.repMetrics;delete c.shipmentNos;});});
                 (_cSave.allCustomers||[]).forEach(function(c){delete c.repMetrics;delete c.shipmentNos;});
-                lsSet('customers_'+key,_cSave);}catch(e){}
+                /* customers: memory only */}catch(e){}
             } }).catch(function(){});
         }
       }, 300);
@@ -1280,7 +1280,7 @@ function fetchAgentData(callback, force) {
       if (callback) callback();
       if (lsCached._isStale) {
         fetch(qs + '&force=1').then(function(r){ return r.json(); }).then(function(d){
-          if (d.success) { _agentCache[key]=d; agentData=d; lsSet(lsKey,d); render(); }
+          if (d.success) { _agentCache[key]=d; agentData=d; render(); }
         }).catch(function(){});
       }
       return;
@@ -1288,7 +1288,7 @@ function fetchAgentData(callback, force) {
   }
   fetch(qs).then(function(r){ return r.json(); })
     .then(function(data){
-      if (data.success) { _agentCache[key]=data; agentData=data; agentDataReady=true; lsSet(lsKey,data); }
+      if (data.success) { _agentCache[key]=data; agentData=data; agentDataReady=true; }
       if (callback) callback();
     })
     .catch(function(e){ console.warn('Agent data failed:', e.message); if (callback) callback(); });
