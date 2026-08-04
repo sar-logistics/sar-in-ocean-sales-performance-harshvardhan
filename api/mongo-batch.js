@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-30T-ocean-v72-insight-manual-fallback";
+const DEPLOY_TS = "2026-07-30T-ocean-v73-customer-rev-fix";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
