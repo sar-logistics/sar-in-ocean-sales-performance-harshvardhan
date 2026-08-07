@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v121';
+var CACHE_VERSION = 'ocean-v122';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -2859,8 +2859,6 @@ function adminPage(){
 
 
 function customerPage(){
-  // Preload allDrillRows so drill-through is instant
-  if (!allDrillRows || !allDrillRows.length) loadDrillData(null);
   if (!customerDataReady) {
     if (!customerDataLoading) {
       customerDataLoading = true;
@@ -3172,7 +3170,6 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
 
 /* ====================== AGENT INSIGHTS ====================== */
 function agentPage(){
-  if (!allDrillRows || !allDrillRows.length) loadDrillData(null);
   if (!agentDataReady) {
     if (!agentDataLoading) {
       agentDataLoading = true;
@@ -3472,7 +3469,6 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
 
 /* ====================== TRADELANE INSIGHTS ====================== */
 function tradelanePage(){
-  if (!allDrillRows || !allDrillRows.length) loadDrillData(null);
   var _tlCurrentKey = getTradelaneCacheKey();
   if (tradelaneDataReady && tradelaneData && tradelaneData._cacheKey && tradelaneData._cacheKey !== _tlCurrentKey) {
     if (_tradelaneCache[_tlCurrentKey]) { tradelaneData=_tradelaneCache[_tlCurrentKey]; _tradelanePivotCache={}; }
