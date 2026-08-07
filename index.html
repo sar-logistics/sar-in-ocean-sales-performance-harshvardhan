@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v130';
+var CACHE_VERSION = 'ocean-v131';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5977,7 +5977,7 @@ function salesTable(M){
           : '<button data-act="page" data-val="leaderboard" class="btnq" style="display:flex;align-items:center;gap:6px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Leaderboard</button>')
       +'</div>'
     +'</div>'
-    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - '+(isWeekly2 ? '110' : (state.reportView==='Quarterly'||state.reportView==='Yearly') ? '130' : '200')+'px);">'
+    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - '+(isWeekly2 ? '110' : (state.reportView==='Quarterly'||state.reportView==='Yearly') ? '260' : '260')+'px);">'
       +'<table style="width:100%;border-collapse:collapse;min-width:850px;font-variant-numeric:tabular-nums;">'
         +'<thead style="position:sticky;top:0;z-index:4;">'+head+'</thead>'
         +'<tbody>'+body+'</tbody>'
