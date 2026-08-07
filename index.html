@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v126';
+var CACHE_VERSION = 'ocean-v127';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -362,6 +362,12 @@ function _showDashboardBody() {
   var _tBoot = performance.now();
   (function bootstrapSecondaryCache() {
     var cc = lsGet('customers'); if (cc && cc.success) { customerData = cc; customerDataReady = true; }
+  // Also try date-specific customer/agent cache keys
+  var _defCustKey = (state.dateFrom||'Apr-26')+'_'+(state.dateTo||'Aug-26');
+  var _cc2 = lsGet('customers_'+_defCustKey);
+  if (_cc2 && _cc2.success) { customerData=_cc2; customerDataReady=true; _customerCache[_defCustKey]=_cc2; }
+  var _ac2 = lsGet('agents_'+_defCustKey);
+  if (_ac2 && _ac2.success) { agentData=_ac2; agentDataReady=true; _agentCache[_defCustKey]=_ac2; }
     var fc = lsGet('finance');   if (fc && fc.success) { fc._isStale = true; financeData  = fc; financeDataReady  = true; }
     var oc = lsGet('op');        if (oc && oc.success) { oc._isStale = true; opData = oc; opDataReady = true; if (oc.allDrillJobRows && oc.allDrillJobRows.length > 0) allPendencyDrillRows = oc.allDrillJobRows; }
     var gc = lsGet('org');       if (gc && gc.success) { orgData      = gc; orgDataReady      = true; }
@@ -1196,7 +1202,10 @@ function fetchCustomerData(callback, force) {
       // Background refresh if stale
       if (lsCached._isStale) {
         fetch(qs + '&force=1').then(function(r){ return r.json(); }).then(function(d){
-          if (d.success) { _customerCache[key]=d; customerData=d; render(); } // customers: memory cache only (date-specific, too large for localStorage)
+          if (d.success) { _customerCache[key]=d; customerData=d;
+        // Save stripped version to localStorage for instant load on date range change
+        try { var _cs={};Object.assign(_cs,d);if(_cs.allCustomers)_cs.allCustomers=_cs.allCustomers.slice(0,30);if(_cs.lobs){var _cl={};Object.keys(_cs.lobs).forEach(function(l){var _ll=Object.assign({},_cs.lobs[l]);if(_ll.allCustomers)_ll.allCustomers=_ll.allCustomers.slice(0,30);_cl[l]=_ll;});_cs.lobs=_cl;} lsSet(lsKey,_cs); } catch(e){}
+        render(); }
         }).catch(function(){});
       }
       return;
