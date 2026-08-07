@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v128';
+var CACHE_VERSION = 'ocean-v129';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -6627,7 +6627,7 @@ function render(){
     : state.page==='usage' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?usagePage():(function(){state.page='sales';return salesPage();}()))
     : state.page==='teams' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?teamsPage():(function(){state.page='sales';return salesPage();}()))
     : state.page==='admin' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1) ? adminPage() : (function(){ state.page='sales'; return salesPage(); })())
-    : state.page==='finance' ? financePage()
+    : (state.page==='finance'||state.page==='fp') ? financePage()
     : state.page==='op' ? opPage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
   if(state.page==='teams'){ mainEl.style.overflow='hidden'; mainEl.style.padding='0'; mainEl.style.display='flex'; mainEl.style.flexDirection='column'; } else { mainEl.style.overflow=''; mainEl.style.padding=''; mainEl.style.display=''; mainEl.style.flexDirection=''; }
@@ -6652,7 +6652,7 @@ function renderKeepTopbar(){
     : state.page==='tradelane' ? tradelanePage()
     : state.page==='usage' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?usagePage():(function(){state.page='sales';return salesPage();}()))
     : state.page==='teams' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?teamsPage():(function(){state.page='sales';return salesPage();}()))
-    : state.page==='finance' ? financePage()
+    : (state.page==='finance'||state.page==='fp') ? financePage()
     : state.page==='op' ? opPage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
   var drawerEl=document.getElementById('drawer-slot');
