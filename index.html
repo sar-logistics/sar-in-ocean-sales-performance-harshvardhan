@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v129';
+var CACHE_VERSION = 'ocean-v130';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -6455,7 +6455,7 @@ function leaderboard(){
       +'</div>'
     +'</div>'
     // table
-    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 255px);">'
+    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 260px);">'
       +'<table style="width:100%;border-collapse:collapse;">'
         +'<thead style="position:sticky;top:0;z-index:4;background:#F4F7FB;">'
           +'<tr>'
