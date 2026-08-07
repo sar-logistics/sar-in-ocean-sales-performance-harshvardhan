@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-30T-ocean-v75-no-drill-in-ping";
+const DEPLOY_TS = "2026-07-30T-ocean-v76-drill-on-demand";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2509,8 +2509,8 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       ok: true, ts: now2,
       lastUpdated,
-      // Ocean: allDrillRows NOT bundled in ping — too large (48MB), fetched separately via loadDrillData
-    sales:      salesStripped ? { ...salesStripped, allDrillRows: [] } : null,
+      // Ocean: allDrillRows bundled in ping only when ?drill=1 requested
+    sales:      salesStripped ? { ...salesStripped, allDrillRows: req.query?.drill === '1' ? (drillRowsCache && drillRowsCache.allRows) || [] : [] } : null,
       finance:    financeResult  || null,
       op:         opResult       || null,
       tradelane:  tradelaneResult || null,
