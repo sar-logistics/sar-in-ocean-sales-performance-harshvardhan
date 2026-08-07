@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v124';
+var CACHE_VERSION = 'ocean-v125';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -6848,16 +6848,18 @@ function dedupDrillRows(rows) {
 }
 
 function loadDrillData(callback){
-  if (allDrillRows) { if(callback) callback(); return; }
+  if (allDrillRows && allDrillRows.length > 0) { if(callback) callback(); return; }
   if (_drillDataLoading) { if(callback) _drillDataCallbacks.push(callback); return; }
   _drillDataLoading = true;
   if(callback) _drillDataCallbacks.push(callback);
-  // Fetch drill rows via ping which always bundles allDrillRows
-  fetch('/api/mongo-batch?action=ping', { priority: 'high' })
+  // Fetch drill rows via dedicated sales action (ping no longer bundles allDrillRows)
+  fetch('/api/mongo-batch?action=sales', { priority: 'high' })
     .then(function(r){ return r.json(); })
     .then(function(data){
-      if (data.sales && data.sales.allDrillRows && data.sales.allDrillRows.length > 0) {
-        allDrillRows = dedupDrillRows(data.sales.allDrillRows); _patchTgOnDrillRows(allDrillRows);
+      var _drRows = (data.allDrillRows && data.allDrillRows.length > 0) ? data.allDrillRows
+                : (data.sales && data.sales.allDrillRows && data.sales.allDrillRows.length > 0) ? data.sales.allDrillRows : null;
+  if (_drRows && _drRows.length > 0) {
+        allDrillRows = dedupDrillRows(_drRows); _patchTgOnDrillRows(allDrillRows);
         _custLobRepMapCache = {}; _agentLobRepMapCache = {}; // clear cached maps — data changed
         _patchTradelaneCacheWithDrillCounts();
         // Re-render tradelane page if it was showing stale cached data
