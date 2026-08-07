@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v123';
+var CACHE_VERSION = 'ocean-v124';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -7855,8 +7855,9 @@ document.addEventListener('click', function(ev){
       var _tk=getTradelaneCacheKey();
       if(_tradelaneCache[_tk]){ tradelaneData=_tradelaneCache[_tk]; tradelaneDataReady=true; }
       else { tradelaneDataReady=false; fetchTradelaneData(function(){ render(); }); }
-      // Zone filter needs allDrillRows for zoneToRawSPs — load if not ready
-      if(_hasZoneFilter && !allDrillRows) loadDrillData(function(){ _tradelanePivotCache={}; render(); });
+      // Preload allDrillRows for drill-through
+      if(!allDrillRows || !allDrillRows.length) loadDrillData(function(){ _tradelanePivotCache={}; render(); });
+      else if(_hasZoneFilter && !allDrillRows) loadDrillData(function(){ _tradelanePivotCache={}; render(); });
       render();
     }
     if(state.page==='usage'){
