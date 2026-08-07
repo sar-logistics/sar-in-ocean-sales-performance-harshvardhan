@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v119';
+var CACHE_VERSION = 'ocean-v120';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -7200,8 +7200,12 @@ function openInsightDrill(drillType, name, drillMonth) {
 
   // Filter allDrillRows by customer / agent / tradelane name
   if (!allDrillRows || !allDrillRows.length) {
-    // Load drill rows first then retry
-    loadDrillData(function(){ openInsightDrill(drillType, name); });
+    // Load drill rows first then retry — show loading state
+    state.drill = { entity: name, metric: 'Shipments', col: 'FY Total', valueFmt: null,
+      loading: true, rows: null, lobTab: 'ALL', insightDrill: true,
+      loadingMsg: 'Loading shipment data...', columnFilters: {}, openFilterCol: null, filterDraft: {} };
+    render();
+    loadDrillData(function(){ openInsightDrill(drillType, name, drillMonth); });
     return;
   }
 
