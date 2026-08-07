@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v128';
+var CACHE_VERSION = 'ocean-v129';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -4996,7 +4996,7 @@ function usagePage(){
     + usageKpiCard(d.loggedIn7Day, 'Logged in (7 days)', '#7C3AED')
   +'</div>'
   +'<div style="background:#FFFFFF;border:1px solid #E7ECF3;border-radius:10px;overflow:hidden;">'
-    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 130px);">'
+    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 255px);">'
     +'<table style="width:100%;border-collapse:collapse;">'
       +'<thead style="position:sticky;top:0;z-index:4;"><tr style="background:#F8FAFC;border-bottom:2px solid #E2E8F0;">'
         +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">#</th>'
@@ -6455,7 +6455,7 @@ function leaderboard(){
       +'</div>'
     +'</div>'
     // table
-    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 130px);">'
+    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 255px);">'
       +'<table style="width:100%;border-collapse:collapse;">'
         +'<thead style="position:sticky;top:0;z-index:4;background:#F4F7FB;">'
           +'<tr>'
