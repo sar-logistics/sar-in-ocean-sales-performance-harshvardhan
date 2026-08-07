@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v127';
+var CACHE_VERSION = 'ocean-v128';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -480,7 +480,9 @@ function _showDashboardBody() {
           var lsa = lsGet('agents_'+key);
           if (lsa && lsa.success) { _agentCache[key]=lsa; agentData=lsa; agentDataReady=true; return; }
           fetch('/api/mongo-batch?action=agents&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
-            .then(function(r){return r.json();}).then(function(d){ if(d.success){_agentCache[key]=d;agentData=d;agentDataReady=true;render();} }).catch(function(){});
+            .then(function(r){return r.json();}).then(function(d){ if(d.success){_agentCache[key]=d;agentData=d;agentDataReady=true;
+              try{var _as=Object.assign({},d);if(_as.allAgents)_as.allAgents=_as.allAgents.slice(0,30);if(_as.lobs){var _al={};Object.keys(_as.lobs).forEach(function(l){var _ll=Object.assign({},_as.lobs[l]);if(_ll.allAgents)delete _ll.allAgents;_al[l]=_ll;});_as.lobs=_al;}lsSet(lsKey,_as);}catch(e){}
+              render();} }).catch(function(){});
         }
       }, 700);
       setTimeout(function(){
@@ -1297,7 +1299,8 @@ function fetchAgentData(callback, force) {
   }
   fetch(qs).then(function(r){ return r.json(); })
     .then(function(data){
-      if (data.success) { _agentCache[key]=data; agentData=data; agentDataReady=true; }
+      if (data.success) { _agentCache[key]=data; agentData=data; agentDataReady=true;
+        try{var _as2=Object.assign({},data);if(_as2.allAgents)_as2.allAgents=_as2.allAgents.slice(0,30);if(_as2.lobs){var _al2={};Object.keys(_as2.lobs).forEach(function(l){var _ll=Object.assign({},_as2.lobs[l]);if(_ll.allAgents)delete _ll.allAgents;_al2[l]=_ll;});_as2.lobs=_al2;}lsSet(lsKey,_as2);}catch(e){} }
       if (callback) callback();
     })
     .catch(function(e){ console.warn('Agent data failed:', e.message); if (callback) callback(); });
