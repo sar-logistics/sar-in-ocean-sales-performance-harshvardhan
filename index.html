@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v146';
+var CACHE_VERSION = 'ocean-v128';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -444,13 +444,6 @@ function _showDashboardBody() {
   }
 
   if (currentUser) {
-    // Auto-open zone for Sales Rep and Zonal Manager so their data is visible
-    var _role0 = (currentUser.role||'').toLowerCase().trim();
-    if (_role0 === 'sales rep' && currentUser.zone) {
-      state.zoneOpen[currentUser.zone] = true;
-    } else if (_role0 === 'zonal manager' && currentUser.zone) {
-      state.zoneOpen[currentUser.zone] = true;
-    }
     var ini = currentUser.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
     var roleLabel = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
     window._pendingUserPatch = { ini: ini, name: currentUser.name, role: roleLabel, photoUrl: currentUser.photoUrl };
@@ -1894,10 +1887,7 @@ function model(){
   var _fl_rg = state.filterLobs&&state.filterLobs.length>0 ? state.filterLobs : null;
   var _fz_rg = state.filterZones&&state.filterZones.length>0 ? state.filterZones : null;
   var _fr_rg = state.filterReps&&state.filterReps.length>0 ? state.filterReps.map(function(x){return normalizeName(x);}) : null;
-  // RLS: restrict KPI to allowed reps for Sales Rep / Zonal Manager
-  var _rlsReps_kpi = _getRLSReps().map(function(n){ return normalizeName(n); });
-  var _rls_kpi = _rlsReps_kpi.length > 0 ? _rlsReps_kpi : null;
-  function _kpiDrillFilter(r){ return idxs.some(function(i){return months26[i]===r._ml;})&&(!_rls_kpi||_rls_kpi.indexOf(r._sp)>-1||_rls_kpi.indexOf(normalizeName(r._sp))>-1)&&(!_fl_rg||_fl_rg.indexOf(r.lob)>-1)&&(!_fz_rg||((_fz_rg.indexOf('Cross Sales')>-1&&!r._zone)||(_fz_rg.indexOf(r._zone)>-1)))&&(!_fr_rg||(_fr_rg.indexOf(r._sp)>-1)); }
+  function _kpiDrillFilter(r){ return idxs.some(function(i){return months26[i]===r._ml;})&&(!_fl_rg||_fl_rg.indexOf(r.lob)>-1)&&(!_fz_rg||((_fz_rg.indexOf('Cross Sales')>-1&&!r._zone)||(_fz_rg.indexOf(r._zone)>-1)))&&(!_fr_rg||(_fr_rg.indexOf(r._sp)>-1)); }
   var gpGrand;
   if (allDrillRows&&allDrillRows.length>0) {
     gpGrand = allDrillRows.filter(_kpiDrillFilter).reduce(function(s,r){return s+(r.g||0);},0);
@@ -1911,7 +1901,6 @@ function model(){
   if (allDrillRows&&allDrillRows.length>0) {
     shipGrand = allDrillRows.filter(function(r){
       return idxs.some(function(i){return months26[i]===r._ml;})
-        && (!_rls_kpi||_rls_kpi.indexOf(r._sp)>-1||_rls_kpi.indexOf(normalizeName(r._sp))>-1)
         && (!_fl_sg||_fl_sg.indexOf(r.lob)>-1)
         && (!_fz_sg||((_fz_sg.indexOf('Cross Sales')>-1&&!r._zone)||(_fz_sg.indexOf(r._zone)>-1)))
         && (!_fr_sg||(_fr_sg.indexOf(r._sp)>-1));
@@ -2196,7 +2185,7 @@ function entities(){
   var list = _showGrand ? [grandEntity()] : [];
   getZones().forEach(function(z){
     if (_role !== 'sales rep') list.push(zoneEntity(z));
-    var isCollapsed = currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep' ? false : state.zoneOpen[z] === false; // default open unless explicitly collapsed
+    var isCollapsed = state.zoneOpen[z] === false; // default open unless explicitly collapsed
     if (!isCollapsed) {
       repsRaw.filter(function(r){ return r.zone === z; }).forEach(function(r){
         list.push(repEntity(r));
@@ -4635,12 +4624,11 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   // Zone + rep rows
   var bodyRows = '';
   var pageKey = title.replace(/\s+/g,'');
-  var _isSalesRep = currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep';
   zoneOrder.forEach(function(zone){
     var zt = zoneTotals[zone];
     if (!zt || zt.total === 0) return;
     var isCrossSales = zone === 'Cross Sales';
-    var isCollapsed = (_isSalesRep || (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep')) ? false : state.pendencyZoneOpen[zone] === false; // default open
+    var isCollapsed = state.pendencyZoneOpen[zone] === false; // default open
     var zHue = zoneHueVal(zone);
     var zAvBg = isCrossSales ? 'linear-gradient(135deg,#7C3AED,#4C1D95)' : 'oklch(0.55 0.14 '+zHue+')';
     var zIni = isCrossSales ? 'CS' : zone.slice(0,2).toUpperCase();
@@ -4676,7 +4664,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     var zAccent = 'box-shadow:inset 3px 0 0 '+zAccentColor+', inset -1.5px 0 0 '+PBORDER_STRONG+';';
     var zoneBg   = isCrossSales ? '#F5F3FF' : '#F0F4FB';
     var zoneData = { colData: zt.colData, totalPending: zt.totalPending, totalDone: zt.totalDone, total: zt.total };
-    if (!_isSalesRep) bodyRows += metricRows(zoneData, null, zoneBg, true, null, null, false, zone, zAvatar, zLabel, zToggle, zAccent, 'border-top:2px solid '+PBORDER_STRONG+';', null, zone, lockType);
+    bodyRows += metricRows(zoneData, null, zoneBg, true, null, null, false, zone, zAvatar, zLabel, zToggle, zAccent, 'border-top:2px solid '+PBORDER_STRONG+';', null, zone, lockType);
 
     if (isCollapsed) return; // skip reps if zone collapsed
 
@@ -5704,12 +5692,9 @@ function tableRows(){
 function allZonesToggleButton(){
   var zones = getZones();
   if (zones.length === 0) return '';
-  var _isSalesRepBtn = currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep';
-  var anyExpanded = _isSalesRepBtn ? false : zones.some(function(z){ return state.zoneOpen[z] !== false; });
+  var anyExpanded = zones.some(function(z){ return state.zoneOpen[z] !== false; });
   var anyShipOpen = Object.keys(state.shipOpen||{}).some(function(k){ return state.shipOpen[k]; });
-  var anyGpOpen   = Object.keys(state.gpOpen||{}).some(function(k){ return state.gpOpen[k]; });
-  var anyRevOpen2 = Object.keys(state.revOpen||{}).some(function(k){ return state.revOpen[k]; });
-  var anyOpen = anyExpanded || anyShipOpen || anyGpOpen || anyRevOpen2;
+  var anyOpen = anyExpanded || anyShipOpen;
   var label = anyOpen ? 'Collapse All' : 'Expand All';
   var icon = anyOpen
     ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>'
@@ -6608,11 +6593,6 @@ function scheduleRender() {
 }
 
 function render(){
-  // Sales Rep: always force their zone open so rows are never hidden
-  if (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep' && currentUser.zone) {
-    state.zoneOpen[currentUser.zone] = true;
-    state.pendencyZoneOpen[currentUser.zone] = true;
-  }
   var _tRender = performance.now();
   computeFilteredRepsRaw();
   // Skip model() on insight pages — they don't use it, saves CPU
@@ -6647,7 +6627,7 @@ function render(){
     : state.page==='usage' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?usagePage():(function(){state.page='sales';return salesPage();}()))
     : state.page==='teams' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?teamsPage():(function(){state.page='sales';return salesPage();}()))
     : state.page==='admin' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1) ? adminPage() : (function(){ state.page='sales'; return salesPage(); })())
-    : (state.page==='finance'||state.page==='fp') ? financePage()
+    : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
   if(state.page==='teams'){ mainEl.style.overflow='hidden'; mainEl.style.padding='0'; mainEl.style.display='flex'; mainEl.style.flexDirection='column'; } else { mainEl.style.overflow=''; mainEl.style.padding=''; mainEl.style.display=''; mainEl.style.flexDirection=''; }
@@ -6672,7 +6652,7 @@ function renderKeepTopbar(){
     : state.page==='tradelane' ? tradelanePage()
     : state.page==='usage' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?usagePage():(function(){state.page='sales';return salesPage();}()))
     : state.page==='teams' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?teamsPage():(function(){state.page='sales';return salesPage();}()))
-    : (state.page==='finance'||state.page==='fp') ? financePage()
+    : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
   var drawerEl=document.getElementById('drawer-slot');
@@ -8371,10 +8351,9 @@ document.addEventListener('click', function(ev){
   else if(act==='shipToggle'){ ev.stopPropagation(); var n=el.getAttribute('data-name'); state.shipOpen[n]=!state.shipOpen[n]; render(); }
   else if(act==='revToggle'){ ev.stopPropagation(); var n=el.getAttribute('data-name'); state.revOpen[n] =!state.revOpen[n];  render(); }
         else if(act==='gpToggle'){  ev.stopPropagation(); var n=el.getAttribute('data-name'); state.gpOpen[n]  =!state.gpOpen[n];   render(); }
-  else if(act==='zoneToggle'){ ev.stopPropagation(); if(currentUser&&(currentUser.role||'').toLowerCase().trim()==='sales rep')return; var zn=el.getAttribute('data-zone'); state.zoneOpen[zn] = (state.zoneOpen[zn]===false) ? true : false; render(); }
+  else if(act==='zoneToggle'){ ev.stopPropagation(); var zn=el.getAttribute('data-zone'); state.zoneOpen[zn] = (state.zoneOpen[zn]===false) ? true : false; render(); }
   else if(act==='pendencyZoneToggle'){
     ev.stopPropagation();
-    if(currentUser&&(currentUser.role||'').toLowerCase().trim()==='sales rep')return;
     var zn = el.getAttribute('data-zone');
     state.pendencyZoneOpen[zn] = (state.pendencyZoneOpen[zn] === false) ? true : false;
     render();
@@ -8382,28 +8361,19 @@ document.addEventListener('click', function(ev){
   else if(act==='pendencyExpandAll'){
     ev.stopPropagation();
     var pzones = JSON.parse(el.getAttribute('data-zones')||'[]');
-    var _isSalesRepPend = currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep';
-    // Check both zones and rep keys for collapsed state
-    var _allPendKeys = Object.keys(state.pendencyZoneOpen||{});
-    var anyCollapsed = _isSalesRepPend
-      ? _allPendKeys.some(function(k){ return state.pendencyZoneOpen[k] === false; })
-      : pzones.some(function(z){ return state.pendencyZoneOpen[z] === false; }) || _allPendKeys.some(function(k){ return state.pendencyZoneOpen[k] === false; });
+    var anyCollapsed = pzones.some(function(z){ return state.pendencyZoneOpen[z] === false; });
     var newVal = anyCollapsed ? true : false;
-    if (!_isSalesRepPend) pzones.forEach(function(z){ state.pendencyZoneOpen[z] = newVal; });
-    // Also toggle all rep keys
-    repsRaw.forEach(function(r){ state.pendencyZoneOpen[r.name] = newVal; });
+    pzones.forEach(function(z){ state.pendencyZoneOpen[z] = newVal; });
     render();
   }
   else if(act==='toggleAllZones'){
     ev.stopPropagation();
     var zones = getZones();
-    var _isSalesRepToggle = currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep';
-    var anyExpanded = _isSalesRepToggle ? false : zones.some(function(z){ return state.zoneOpen[z] !== false; });
+    var anyExpanded = zones.some(function(z){ return state.zoneOpen[z] !== false; });
     // Also check if any shipment detail rows are open
     var anyShipOpen = Object.keys(state.shipOpen||{}).some(function(k){ return state.shipOpen[k]; });
-    var anyGpOpen2  = Object.keys(state.gpOpen||{}).some(function(k){ return state.gpOpen[k]; });
     var anyRevOpen  = Object.keys(state.revOpen||{}).some(function(k){ return state.revOpen[k]; });
-    var anyOpen = anyExpanded || anyShipOpen || anyGpOpen2 || anyRevOpen;
+    var anyOpen = anyExpanded || anyShipOpen || anyRevOpen;
     var newVal = anyOpen ? false : true;
     // Toggle zones
     zones.forEach(function(z){ state.zoneOpen[z] = newVal; });
@@ -8414,10 +8384,6 @@ document.addEventListener('click', function(ev){
       state.shipOpen = {};
       state.gpOpen   = {};
       state.revOpen  = {};
-      // Sales Rep: keep their zone open
-      if (currentUser && (currentUser.role||'').toLowerCase().trim()==='sales rep' && currentUser.zone) {
-        state.zoneOpen[currentUser.zone] = true;
-      }
     } else {
       // Expand — set all to true
       var newShipOpen = {}, newGpOpen = {}, newRevOpen = {};
