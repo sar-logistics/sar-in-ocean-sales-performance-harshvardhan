@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v141';
+var CACHE_VERSION = 'ocean-v142';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -5704,7 +5704,7 @@ function tableRows(){
 function allZonesToggleButton(){
   var zones = getZones();
   if (zones.length === 0) return '';
-  var anyExpanded = currentUser && (currentUser.role||'').toLowerCase().trim()==='sales rep' ? true : zones.some(function(z){ return state.zoneOpen[z] !== false; });
+  var anyExpanded = zones.some(function(z){ return state.zoneOpen[z] !== false; });
   var anyShipOpen = Object.keys(state.shipOpen||{}).some(function(k){ return state.shipOpen[k]; });
   var anyOpen = anyExpanded || anyShipOpen;
   var label = anyOpen ? 'Collapse All' : 'Expand All';
@@ -8387,7 +8387,7 @@ document.addEventListener('click', function(ev){
   else if(act==='toggleAllZones'){
     ev.stopPropagation();
     var zones = getZones();
-    var anyExpanded = currentUser && (currentUser.role||'').toLowerCase().trim()==='sales rep' ? true : zones.some(function(z){ return state.zoneOpen[z] !== false; });
+    var anyExpanded = zones.some(function(z){ return state.zoneOpen[z] !== false; });
     // Also check if any shipment detail rows are open
     var anyShipOpen = Object.keys(state.shipOpen||{}).some(function(k){ return state.shipOpen[k]; });
     var anyRevOpen  = Object.keys(state.revOpen||{}).some(function(k){ return state.revOpen[k]; });
@@ -8402,6 +8402,10 @@ document.addEventListener('click', function(ev){
       state.shipOpen = {};
       state.gpOpen   = {};
       state.revOpen  = {};
+      // Sales Rep: keep their zone open
+      if (currentUser && (currentUser.role||'').toLowerCase().trim()==='sales rep' && currentUser.zone) {
+        state.zoneOpen[currentUser.zone] = true;
+      }
     } else {
       // Expand — set all to true
       var newShipOpen = {}, newGpOpen = {}, newRevOpen = {};
