@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v139';
+var CACHE_VERSION = 'ocean-v140';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -6605,6 +6605,11 @@ function scheduleRender() {
 }
 
 function render(){
+  // Sales Rep: always force their zone open so rows are never hidden
+  if (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep' && currentUser.zone) {
+    state.zoneOpen[currentUser.zone] = true;
+    state.pendencyZoneOpen[currentUser.zone] = true;
+  }
   var _tRender = performance.now();
   computeFilteredRepsRaw();
   // Skip model() on insight pages — they don't use it, saves CPU
