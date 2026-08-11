@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-11T-ocean-v78-bulk-upsert-reportsto";
+const DEPLOY_TS = "2026-08-11T-ocean-v79-unknown-tradelane";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1844,15 +1844,14 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         if (!rawCountry || rawCountry.toLowerCase() === "india") {
           // Try Trade Lane field as last resort
           const tl = String(job["Trade Lane"] || "").trim();
-          if (!tl) continue;
-          tradelane = tl;
-          country   = tl;
+          if (!tl) { tradelane = "Unknown"; country = "Unknown"; }
+          else { tradelane = tl; country = tl; }
         } else {
           country   = rawCountry;
           tradelane = countryNameToTradelane(rawCountry) || rawCountry;
         }
       }
-      if (!tradelane) continue;
+      if (!tradelane) { tradelane = "Unknown"; country = "Unknown"; }
 
       const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
       const { gp } = pickGP(job, cls);
