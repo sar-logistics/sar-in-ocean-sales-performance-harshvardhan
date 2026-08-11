@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v150';
+var CACHE_VERSION = 'ocean-v151';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -7348,6 +7348,9 @@ function openInsightDrill(drillType, name, drillMonth) {
 
   // RLS rep filter — compute ONCE outside loop
   var _rlsRepsNorm = _getRLSReps().map(function(n){ return normalizeName(n); });
+  // Zone/rep filters from state
+  var _iFlZones = state.filterZones && state.filterZones.length > 0 ? state.filterZones : null;
+  var _iFlReps  = state.filterReps  && state.filterReps.length  > 0 ? state.filterReps.map(function(x){return normalizeName(x);}) : null;
 
   var matched = [];
   for (var i = 0; i < allDrillRows.length; i++) {
@@ -7357,6 +7360,10 @@ function openInsightDrill(drillType, name, drillMonth) {
     // Date range filter
     var _iRowIdx = FY_ALL.indexOf(row._ml);
     if (_iRowIdx < 0 || _iRowIdx < _iFromIdx || _iRowIdx > _iToIdx) continue;
+    // Zone filter
+    if (_iFlZones && _iFlZones.indexOf(row._zone) === -1) continue;
+    // Rep filter
+    if (_iFlReps && _iFlReps.indexOf(row._sp) === -1) continue;
     // RLS rep filter
     if (_rlsRepsNorm.length > 0 && _rlsRepsNorm.indexOf(row._sp) === -1) continue;
     // Entity match
