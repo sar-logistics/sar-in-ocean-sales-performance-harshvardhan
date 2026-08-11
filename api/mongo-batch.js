@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-11T-ocean-v79-unknown-tradelane";
+const DEPLOY_TS = "2026-08-11T-ocean-v80-city-tradelane-map";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1649,6 +1649,17 @@ const CITY_TRADELANE_MAP = {
   "mogadishu": "Africa",
   "hargeisa": "Africa",
   "gaborone": "Africa",
+  // US ports
+  "jacksonville": "US", "savannah": "US", "charleston": "US", "houston": "US",
+  "new york": "US", "los angeles": "US", "long beach": "US", "norfolk": "US",
+  "baltimore": "US", "miami": "US", "seattle": "US", "tacoma": "US",
+  "new orleans": "US", "port everglades": "US", "boston": "US",
+  "philadelphia": "US", "wilmington": "US", "memphis": "US",
+  // UK ports
+  "southampton": "Europe", "felixstowe": "Europe", "london gateway": "Europe",
+  "london": "Europe", "tilbury": "Europe", "liverpool": "Europe",
+  "manchester": "Europe", "birmingham": "Europe", "glasgow": "Europe",
+  "leeds": "Europe", "bristol": "Europe",
   // Middle East
   "basra": "Middle East",
   "erbil international apt": "Middle East", "erbil": "Middle East",
