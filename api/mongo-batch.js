@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-11T-ocean-v82-sea-export-tg-fallback";
+const DEPLOY_TS = "2026-07-30T-ocean-v76-drill-on-demand";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -585,13 +585,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
         } else if (cls.kind === "SEA") {
           if (cls.direction === "EXPORT") {
-            const _dc = String(job["Discharge Country"] || "").trim();
-            _tg = countryNameToTradelane(_dc) || _dc;
-            // Fallback: try Discharge Port city if country blank
-            if (!_tg) {
-              const _dp = String(job["Discharge Port"] || "").trim();
-              _tg = portToInfo(_dp).tradelane || cityToTradelane(_dp);
-            }
+            _tg = countryNameToTradelane(job["Discharge Country"] || "") || (job["Discharge Country"] || "");
           } else {
             const _portVal = String(job["Loading Port"] || "").trim();
             _tg = portToInfo(_portVal).tradelane;
@@ -1655,17 +1649,6 @@ const CITY_TRADELANE_MAP = {
   "mogadishu": "Africa",
   "hargeisa": "Africa",
   "gaborone": "Africa",
-  // US ports
-  "jacksonville": "US", "savannah": "US", "charleston": "US", "houston": "US",
-  "new york": "US", "los angeles": "US", "long beach": "US", "norfolk": "US",
-  "baltimore": "US", "miami": "US", "seattle": "US", "tacoma": "US",
-  "new orleans": "US", "port everglades": "US", "boston": "US",
-  "philadelphia": "US", "wilmington": "US", "memphis": "US",
-  // UK ports
-  "southampton": "Europe", "felixstowe": "Europe", "london gateway": "Europe",
-  "london": "Europe", "tilbury": "Europe", "liverpool": "Europe",
-  "manchester": "Europe", "birmingham": "Europe", "glasgow": "Europe",
-  "leeds": "Europe", "bristol": "Europe",
   // Middle East
   "basra": "Middle East",
   "erbil international apt": "Middle East", "erbil": "Middle East",
@@ -1861,14 +1844,15 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         if (!rawCountry || rawCountry.toLowerCase() === "india") {
           // Try Trade Lane field as last resort
           const tl = String(job["Trade Lane"] || "").trim();
-          if (!tl) { tradelane = "Unknown"; country = "Unknown"; }
-          else { tradelane = tl; country = tl; }
+          if (!tl) continue;
+          tradelane = tl;
+          country   = tl;
         } else {
           country   = rawCountry;
           tradelane = countryNameToTradelane(rawCountry) || rawCountry;
         }
       }
-      if (!tradelane) { tradelane = "Unknown"; country = "Unknown"; }
+      if (!tradelane) continue;
 
       const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
       const { gp } = pickGP(job, cls);
@@ -3037,23 +3021,7 @@ module.exports = async function handler(req, res) {
       return res.json({ success: true, deleted: result.deletedCount, collection: collName, fy });
     }
 
-    if (action === "bulkUpsertUsers") {
-  const users = req.body.users || [];
-  const col = db.collection("ocean_users");
-  let upserted = 0;
-  for (const u of users) {
-    if (!u.email) continue;
-    await col.updateOne(
-      { email: u.email.toLowerCase().trim() },
-      { $set: { name: u.name, email: u.email.toLowerCase().trim(), role: u.role, zone: u.zone||"", region: u.region||"", reportsTo: (u.reportsTo||"").toLowerCase().trim(), isActive: true } },
-      { upsert: true }
-    );
-    upserted++;
-  }
-  return res.status(200).json({ success: true, upserted });
-}
-
-if (action === "wipeCollection") {
+    if (action === "wipeCollection") {
       // Wipe an entire job or SRR collection so Apps Script can re-push clean data
       const collName = (req.body && req.body.collection) || req.query.collection;
       if (!collName) return res.status(400).json({ error: "collection required" });
