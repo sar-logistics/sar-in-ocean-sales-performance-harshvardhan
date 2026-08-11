@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-11T-ocean-v80-city-tradelane-map";
+const DEPLOY_TS = "2026-08-11T-ocean-v81-sea-export-tg-fallback";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
