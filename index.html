@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v149';
+var CACHE_VERSION = 'ocean-v150';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -7364,8 +7364,11 @@ function openInsightDrill(drillType, name, drillMonth) {
     if (drillType === 'customer') {
       match = (row.customer || '').toLowerCase() === nameLower;
     } else if (drillType === 'agent') {
-      match = (row.destAgent || '').toLowerCase() === nameLower ||
-              (row.originAgent || '').toLowerCase() === nameLower;
+      // Match same as aggregate: Export→destAgent, Import→originAgent
+      var _isExp = row.lob && row.lob.toUpperCase().includes('EXPORT');
+      match = _isExp
+        ? (row.destAgent || '').toLowerCase() === nameLower
+        : (row.originAgent || '').toLowerCase() === nameLower;
     } else if (drillType === 'tradelane') {
       // Tradelane groups (US, Europe etc) can't be matched client-side
       // without SRR data — server handles this via getDrillRows
