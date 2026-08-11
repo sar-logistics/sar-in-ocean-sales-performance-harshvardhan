@@ -1686,6 +1686,24 @@ const CITY_TRADELANE_MAP = {
   "shuwaikh": "Middle East", "hamad": "Middle East", "sokhna port": "Middle East",
   // Indian Ocean
   "port louis": "Indian Subcontinent", "male": "Indian Subcontinent",
+  // US ports (additional)
+  "cleveland": "US", "fort lauderdale": "US", "columbus": "US",
+  "saint paul": "US", "louisville": "US",
+  // Europe ports (additional)
+  "leixoes": "Europe", "fos-sur-mer": "Europe", "kampen": "Europe",
+  "algeciras": "Europe", "venezia": "Europe", "hoek van holland": "Europe",
+  "cork": "Europe", "poti": "Europe",
+  // UK (additional)
+  "halifax": "Europe",
+  // Indian Subcontinent
+  "kolkata (ex calcutta)": "Indian Subcontinent", "kolkata": "Indian Subcontinent",
+  // Middle East (additional)
+  "umm qasr port": "Middle East", "bandar abbas": "Middle East",
+  "sohar": "Middle East",
+  // Asia (additional)
+  "hakata/fukuoka": "Asia",
+  // Africa (additional)
+  "onne": "Africa",
   // Middle East
   "basra": "Middle East",
   "erbil international apt": "Middle East", "erbil": "Middle East",
