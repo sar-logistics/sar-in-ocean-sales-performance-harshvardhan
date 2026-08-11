@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v144';
+var CACHE_VERSION = 'ocean-v145';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -8382,9 +8382,12 @@ document.addEventListener('click', function(ev){
   else if(act==='pendencyExpandAll'){
     ev.stopPropagation();
     var pzones = JSON.parse(el.getAttribute('data-zones')||'[]');
-    var anyCollapsed = pzones.some(function(z){ return state.pendencyZoneOpen[z] === false; });
-    var newVal = anyCollapsed ? true : false;
-    pzones.forEach(function(z){ state.pendencyZoneOpen[z] = newVal; });
+    var _isSalesRepPend = currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep';
+    if (!_isSalesRepPend) {
+      var anyCollapsed = pzones.some(function(z){ return state.pendencyZoneOpen[z] === false; });
+      var newVal = anyCollapsed ? true : false;
+      pzones.forEach(function(z){ state.pendencyZoneOpen[z] = newVal; });
+    }
     render();
   }
   else if(act==='toggleAllZones'){
