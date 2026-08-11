@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v143';
+var CACHE_VERSION = 'ocean-v144';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -8390,11 +8390,13 @@ document.addEventListener('click', function(ev){
   else if(act==='toggleAllZones'){
     ev.stopPropagation();
     var zones = getZones();
-    var anyExpanded = zones.some(function(z){ return state.zoneOpen[z] !== false; });
+    var _isSalesRepToggle = currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep';
+    var anyExpanded = _isSalesRepToggle ? false : zones.some(function(z){ return state.zoneOpen[z] !== false; });
     // Also check if any shipment detail rows are open
     var anyShipOpen = Object.keys(state.shipOpen||{}).some(function(k){ return state.shipOpen[k]; });
+    var anyGpOpen2  = Object.keys(state.gpOpen||{}).some(function(k){ return state.gpOpen[k]; });
     var anyRevOpen  = Object.keys(state.revOpen||{}).some(function(k){ return state.revOpen[k]; });
-    var anyOpen = anyExpanded || anyShipOpen || anyRevOpen;
+    var anyOpen = anyExpanded || anyShipOpen || anyGpOpen2 || anyRevOpen;
     var newVal = anyOpen ? false : true;
     // Toggle zones
     zones.forEach(function(z){ state.zoneOpen[z] = newVal; });
