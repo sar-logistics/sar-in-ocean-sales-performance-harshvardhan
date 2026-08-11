@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v148';
+var CACHE_VERSION = 'ocean-v149';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -4723,7 +4723,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         // Sales Reps under this branch
         branchReps.forEach(function(rep){
           var repKey = 'rep__Cross Sales__' + branch + '__' + rep.name;
-          var repCollapsed = (currentUser&&(currentUser.role||'').toLowerCase().trim()==='sales rep') ? false : state.pendencyZoneOpen[repKey] === false;
+          var repCollapsed = state.pendencyZoneOpen[repKey] === false;
           var hasOwners = showJobOwners && rep.jobOwners && rep.jobOwners.length > 0;
           var repAvBg = 'oklch(0.6 0.12 '+hue(rep.name)+')';
           var repAvatar = '<div style="width:22px;height:22px;border-radius:50%;background:'+repAvBg+';color:#fff;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ini(rep.name)+'</div>';
@@ -4783,7 +4783,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     // Regular zones: Zone > Sales Rep > Job Owners
     repsFiltered.filter(function(r){ return r.zone===zone; }).forEach(function(rep){
       var repKey = 'rep__' + zone + '__' + rep.name;
-      var repCollapsed = (currentUser&&(currentUser.role||'').toLowerCase().trim()==='sales rep') ? false : state.pendencyZoneOpen[repKey] === false;
+      var repCollapsed = state.pendencyZoneOpen[repKey] === false;
       var hasOwners = showJobOwners && rep.jobOwners && rep.jobOwners.length > 0;
       var avatarBg = 'oklch(0.6 0.12 '+hue(rep.name)+')';
       var repAvatar = '<div style="width:24px;height:24px;border-radius:50%;background:'+avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.1);">'+ini(rep.name)+'</div>';
