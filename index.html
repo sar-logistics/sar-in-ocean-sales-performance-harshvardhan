@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v135';
+var CACHE_VERSION = 'ocean-v136';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -2196,7 +2196,7 @@ function entities(){
   var list = _showGrand ? [grandEntity()] : [];
   getZones().forEach(function(z){
     if (_role !== 'sales rep') list.push(zoneEntity(z));
-    var isCollapsed = state.zoneOpen[z] === false; // default open unless explicitly collapsed
+    var isCollapsed = currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep' ? false : state.zoneOpen[z] === false; // default open unless explicitly collapsed
     if (!isCollapsed) {
       repsRaw.filter(function(r){ return r.zone === z; }).forEach(function(r){
         list.push(repEntity(r));
@@ -8382,6 +8382,8 @@ document.addEventListener('click', function(ev){
   }
   else if(act==='toggleAllZones'){
     ev.stopPropagation();
+    // Sales Rep: zones always open — don't collapse
+    if (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') { render(); return; }
     var zones = getZones();
     var anyExpanded = zones.some(function(z){ return state.zoneOpen[z] !== false; });
     // Also check if any shipment detail rows are open
