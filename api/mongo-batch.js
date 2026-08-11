@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-30T-ocean-v76-drill-on-demand";
+const DEPLOY_TS = "2026-07-30T-ocean-v77-bulk-upsert-users";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -3021,7 +3021,23 @@ module.exports = async function handler(req, res) {
       return res.json({ success: true, deleted: result.deletedCount, collection: collName, fy });
     }
 
-    if (action === "wipeCollection") {
+    if (action === "bulkUpsertUsers") {
+  const users = req.body.users || [];
+  const col = db.collection("ocean_users");
+  let upserted = 0;
+  for (const u of users) {
+    if (!u.email) continue;
+    await col.updateOne(
+      { email: u.email.toLowerCase().trim() },
+      { $set: { name: u.name, email: u.email.toLowerCase().trim(), role: u.role, zone: u.zone||"", region: u.region||"", isActive: true } },
+      { upsert: true }
+    );
+    upserted++;
+  }
+  return res.status(200).json({ success: true, upserted });
+}
+
+if (action === "wipeCollection") {
       // Wipe an entire job or SRR collection so Apps Script can re-push clean data
       const collName = (req.body && req.body.collection) || req.query.collection;
       if (!collName) return res.status(400).json({ error: "collection required" });
