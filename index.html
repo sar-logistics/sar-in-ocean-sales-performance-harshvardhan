@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v145';
+var CACHE_VERSION = 'ocean-v146';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -8383,11 +8383,15 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation();
     var pzones = JSON.parse(el.getAttribute('data-zones')||'[]');
     var _isSalesRepPend = currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep';
-    if (!_isSalesRepPend) {
-      var anyCollapsed = pzones.some(function(z){ return state.pendencyZoneOpen[z] === false; });
-      var newVal = anyCollapsed ? true : false;
-      pzones.forEach(function(z){ state.pendencyZoneOpen[z] = newVal; });
-    }
+    // Check both zones and rep keys for collapsed state
+    var _allPendKeys = Object.keys(state.pendencyZoneOpen||{});
+    var anyCollapsed = _isSalesRepPend
+      ? _allPendKeys.some(function(k){ return state.pendencyZoneOpen[k] === false; })
+      : pzones.some(function(z){ return state.pendencyZoneOpen[z] === false; }) || _allPendKeys.some(function(k){ return state.pendencyZoneOpen[k] === false; });
+    var newVal = anyCollapsed ? true : false;
+    if (!_isSalesRepPend) pzones.forEach(function(z){ state.pendencyZoneOpen[z] = newVal; });
+    // Also toggle all rep keys
+    repsRaw.forEach(function(r){ state.pendencyZoneOpen[r.name] = newVal; });
     render();
   }
   else if(act==='toggleAllZones'){
