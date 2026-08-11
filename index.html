@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v130';
+var CACHE_VERSION = 'ocean-v131';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -1894,7 +1894,10 @@ function model(){
   var _fl_rg = state.filterLobs&&state.filterLobs.length>0 ? state.filterLobs : null;
   var _fz_rg = state.filterZones&&state.filterZones.length>0 ? state.filterZones : null;
   var _fr_rg = state.filterReps&&state.filterReps.length>0 ? state.filterReps.map(function(x){return normalizeName(x);}) : null;
-  function _kpiDrillFilter(r){ return idxs.some(function(i){return months26[i]===r._ml;})&&(!_fl_rg||_fl_rg.indexOf(r.lob)>-1)&&(!_fz_rg||((_fz_rg.indexOf('Cross Sales')>-1&&!r._zone)||(_fz_rg.indexOf(r._zone)>-1)))&&(!_fr_rg||(_fr_rg.indexOf(r._sp)>-1)); }
+  // RLS: restrict KPI to allowed reps for Sales Rep / Zonal Manager
+  var _rlsReps_kpi = _getRLSReps();
+  var _rls_kpi = _rlsReps_kpi.length > 0 ? _rlsReps_kpi : null;
+  function _kpiDrillFilter(r){ return idxs.some(function(i){return months26[i]===r._ml;})&&(!_rls_kpi||_rls_kpi.indexOf(r._sp)>-1)&&(!_fl_rg||_fl_rg.indexOf(r.lob)>-1)&&(!_fz_rg||((_fz_rg.indexOf('Cross Sales')>-1&&!r._zone)||(_fz_rg.indexOf(r._zone)>-1)))&&(!_fr_rg||(_fr_rg.indexOf(r._sp)>-1)); }
   var gpGrand;
   if (allDrillRows&&allDrillRows.length>0) {
     gpGrand = allDrillRows.filter(_kpiDrillFilter).reduce(function(s,r){return s+(r.g||0);},0);
@@ -1908,6 +1911,7 @@ function model(){
   if (allDrillRows&&allDrillRows.length>0) {
     shipGrand = allDrillRows.filter(function(r){
       return idxs.some(function(i){return months26[i]===r._ml;})
+        && (!_rls_kpi||_rls_kpi.indexOf(r._sp)>-1)
         && (!_fl_sg||_fl_sg.indexOf(r.lob)>-1)
         && (!_fz_sg||((_fz_sg.indexOf('Cross Sales')>-1&&!r._zone)||(_fz_sg.indexOf(r._zone)>-1)))
         && (!_fr_sg||(_fr_sg.indexOf(r._sp)>-1));
