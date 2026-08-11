@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v128';
+var CACHE_VERSION = 'ocean-v147';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -444,6 +444,11 @@ function _showDashboardBody() {
   }
 
   if (currentUser) {
+    var _role0 = (currentUser.role||'').toLowerCase().trim();
+    if ((_role0==='sales rep'||_role0==='zonal manager') && currentUser.zone) {
+      state.zoneOpen[currentUser.zone] = true;
+      state.pendencyZoneOpen[currentUser.zone] = true;
+    }
     var ini = currentUser.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
     var roleLabel = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
     window._pendingUserPatch = { ini: ini, name: currentUser.name, role: roleLabel, photoUrl: currentUser.photoUrl };
@@ -1887,7 +1892,9 @@ function model(){
   var _fl_rg = state.filterLobs&&state.filterLobs.length>0 ? state.filterLobs : null;
   var _fz_rg = state.filterZones&&state.filterZones.length>0 ? state.filterZones : null;
   var _fr_rg = state.filterReps&&state.filterReps.length>0 ? state.filterReps.map(function(x){return normalizeName(x);}) : null;
-  function _kpiDrillFilter(r){ return idxs.some(function(i){return months26[i]===r._ml;})&&(!_fl_rg||_fl_rg.indexOf(r.lob)>-1)&&(!_fz_rg||((_fz_rg.indexOf('Cross Sales')>-1&&!r._zone)||(_fz_rg.indexOf(r._zone)>-1)))&&(!_fr_rg||(_fr_rg.indexOf(r._sp)>-1)); }
+  var _rlsReps_kpi = _getRLSReps().map(function(n){ return normalizeName(n); });
+  var _rls_kpi = _rlsReps_kpi.length > 0 ? _rlsReps_kpi : null;
+  function _kpiDrillFilter(r){ return idxs.some(function(i){return months26[i]===r._ml;})&&(!_rls_kpi||_rls_kpi.indexOf(r._sp)>-1||_rls_kpi.indexOf(normalizeName(r._sp))>-1)&&(!_fl_rg||_fl_rg.indexOf(r.lob)>-1)&&(!_fz_rg||((_fz_rg.indexOf('Cross Sales')>-1&&!r._zone)||(_fz_rg.indexOf(r._zone)>-1)))&&(!_fr_rg||(_fr_rg.indexOf(r._sp)>-1)); }
   var gpGrand;
   if (allDrillRows&&allDrillRows.length>0) {
     gpGrand = allDrillRows.filter(_kpiDrillFilter).reduce(function(s,r){return s+(r.g||0);},0);
@@ -1901,6 +1908,7 @@ function model(){
   if (allDrillRows&&allDrillRows.length>0) {
     shipGrand = allDrillRows.filter(function(r){
       return idxs.some(function(i){return months26[i]===r._ml;})
+        && (!_rls_kpi||_rls_kpi.indexOf(r._sp)>-1||_rls_kpi.indexOf(normalizeName(r._sp))>-1)
         && (!_fl_sg||_fl_sg.indexOf(r.lob)>-1)
         && (!_fz_sg||((_fz_sg.indexOf('Cross Sales')>-1&&!r._zone)||(_fz_sg.indexOf(r._zone)>-1)))
         && (!_fr_sg||(_fr_sg.indexOf(r._sp)>-1));
@@ -2185,7 +2193,7 @@ function entities(){
   var list = _showGrand ? [grandEntity()] : [];
   getZones().forEach(function(z){
     if (_role !== 'sales rep') list.push(zoneEntity(z));
-    var isCollapsed = state.zoneOpen[z] === false; // default open unless explicitly collapsed
+    var isCollapsed = (currentUser&&(currentUser.role||'').toLowerCase().trim()==='sales rep') ? false : state.zoneOpen[z] === false; // default open unless explicitly collapsed
     if (!isCollapsed) {
       repsRaw.filter(function(r){ return r.zone === z; }).forEach(function(r){
         list.push(repEntity(r));
@@ -4628,7 +4636,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     var zt = zoneTotals[zone];
     if (!zt || zt.total === 0) return;
     var isCrossSales = zone === 'Cross Sales';
-    var isCollapsed = state.pendencyZoneOpen[zone] === false; // default open
+    var isCollapsed = (currentUser&&(currentUser.role||'').toLowerCase().trim()==='sales rep') ? false : state.pendencyZoneOpen[zone] === false; // default open
     var zHue = zoneHueVal(zone);
     var zAvBg = isCrossSales ? 'linear-gradient(135deg,#7C3AED,#4C1D95)' : 'oklch(0.55 0.14 '+zHue+')';
     var zIni = isCrossSales ? 'CS' : zone.slice(0,2).toUpperCase();
@@ -4664,7 +4672,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     var zAccent = 'box-shadow:inset 3px 0 0 '+zAccentColor+', inset -1.5px 0 0 '+PBORDER_STRONG+';';
     var zoneBg   = isCrossSales ? '#F5F3FF' : '#F0F4FB';
     var zoneData = { colData: zt.colData, totalPending: zt.totalPending, totalDone: zt.totalDone, total: zt.total };
-    bodyRows += metricRows(zoneData, null, zoneBg, true, null, null, false, zone, zAvatar, zLabel, zToggle, zAccent, 'border-top:2px solid '+PBORDER_STRONG+';', null, zone, lockType);
+    if (!(currentUser&&(currentUser.role||'').toLowerCase().trim()==='sales rep')) bodyRows += metricRows(zoneData, null, zoneBg, true, null, null, false, zone, zAvatar, zLabel, zToggle, zAccent, 'border-top:2px solid '+PBORDER_STRONG+';', null, zone, lockType);
 
     if (isCollapsed) return; // skip reps if zone collapsed
 
@@ -4841,7 +4849,9 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         +'<span style="font-size:14px;font-weight:700;color:#0D2B5E;">'+title+'</span>'
         +'<span style="font-size:11px;color:#94A3B8;padding:2px 8px;background:#F1F5F9;border-radius:999px;font-weight:600;">'+state.reportView.replace('View','').trim()+'</span>'
         +(function(){
-          var anyCollapsed = zoneOrder.some(function(z){ return state.pendencyZoneOpen[z] === false; });
+          var _repKeysBtnPend = repsRaw.map(function(r){ return 'rep__'+(r.zone||'')+'__'+r.name; });
+    var anyCollapsed = _repKeysBtnPend.every(function(k){ return state.pendencyZoneOpen[k] === false; })
+      || (!currentUser||(currentUser.role||'').toLowerCase().trim()!=='sales rep') && zoneOrder.some(function(z){ return state.pendencyZoneOpen[z] === false; });
           var btnLabel = anyCollapsed ? 'Expand All' : 'Collapse All';
           var btnIcon = anyCollapsed
             ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
@@ -5692,9 +5702,12 @@ function tableRows(){
 function allZonesToggleButton(){
   var zones = getZones();
   if (zones.length === 0) return '';
-  var anyExpanded = zones.some(function(z){ return state.zoneOpen[z] !== false; });
+  var _isSalesRepBtn = currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep';
+  var anyExpanded = _isSalesRepBtn ? false : zones.some(function(z){ return state.zoneOpen[z] !== false; });
   var anyShipOpen = Object.keys(state.shipOpen||{}).some(function(k){ return state.shipOpen[k]; });
-  var anyOpen = anyExpanded || anyShipOpen;
+  var anyGpOpen   = Object.keys(state.gpOpen||{}).some(function(k){ return state.gpOpen[k]; });
+  var anyRevOpen3 = Object.keys(state.revOpen||{}).some(function(k){ return state.revOpen[k]; });
+  var anyOpen = anyExpanded || anyShipOpen || anyGpOpen || anyRevOpen3;
   var label = anyOpen ? 'Collapse All' : 'Expand All';
   var icon = anyOpen
     ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>'
@@ -6593,6 +6606,10 @@ function scheduleRender() {
 }
 
 function render(){
+  if (currentUser && (currentUser.role||'').toLowerCase().trim()==='sales rep' && currentUser.zone) {
+    state.zoneOpen[currentUser.zone] = true;
+    state.pendencyZoneOpen[currentUser.zone] = true;
+  }
   var _tRender = performance.now();
   computeFilteredRepsRaw();
   // Skip model() on insight pages — they don't use it, saves CPU
@@ -8351,29 +8368,36 @@ document.addEventListener('click', function(ev){
   else if(act==='shipToggle'){ ev.stopPropagation(); var n=el.getAttribute('data-name'); state.shipOpen[n]=!state.shipOpen[n]; render(); }
   else if(act==='revToggle'){ ev.stopPropagation(); var n=el.getAttribute('data-name'); state.revOpen[n] =!state.revOpen[n];  render(); }
         else if(act==='gpToggle'){  ev.stopPropagation(); var n=el.getAttribute('data-name'); state.gpOpen[n]  =!state.gpOpen[n];   render(); }
-  else if(act==='zoneToggle'){ ev.stopPropagation(); var zn=el.getAttribute('data-zone'); state.zoneOpen[zn] = (state.zoneOpen[zn]===false) ? true : false; render(); }
+  else if(act==='zoneToggle'){ ev.stopPropagation(); if(currentUser&&(currentUser.role||'').toLowerCase().trim()==='sales rep')return; var zn=el.getAttribute('data-zone'); state.zoneOpen[zn] = (state.zoneOpen[zn]===false) ? true : false; render(); }
   else if(act==='pendencyZoneToggle'){
     ev.stopPropagation();
+    if(currentUser&&(currentUser.role||'').toLowerCase().trim()==='sales rep')return;
     var zn = el.getAttribute('data-zone');
     state.pendencyZoneOpen[zn] = (state.pendencyZoneOpen[zn] === false) ? true : false;
     render();
   }
   else if(act==='pendencyExpandAll'){
     ev.stopPropagation();
+    var _isSalesRepPend = currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep';
+    var _repKeys = repsRaw.map(function(r){ return 'rep__'+(r.zone||'')+'__'+r.name; });
     var pzones = JSON.parse(el.getAttribute('data-zones')||'[]');
-    var anyCollapsed = pzones.some(function(z){ return state.pendencyZoneOpen[z] === false; });
+    var anyCollapsed = _repKeys.some(function(k){ return state.pendencyZoneOpen[k] === false; })
+      || (!_isSalesRepPend && pzones.some(function(z){ return state.pendencyZoneOpen[z] === false; }));
     var newVal = anyCollapsed ? true : false;
-    pzones.forEach(function(z){ state.pendencyZoneOpen[z] = newVal; });
+    if (!_isSalesRepPend) pzones.forEach(function(z){ state.pendencyZoneOpen[z] = newVal; });
+    _repKeys.forEach(function(k){ state.pendencyZoneOpen[k] = newVal; });
+    if (_isSalesRepPend && currentUser.zone) state.pendencyZoneOpen[currentUser.zone] = true;
     render();
   }
   else if(act==='toggleAllZones'){
     ev.stopPropagation();
     var zones = getZones();
-    var anyExpanded = zones.some(function(z){ return state.zoneOpen[z] !== false; });
-    // Also check if any shipment detail rows are open
+    var _isSalesRepToggle = currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep';
+    var anyExpanded = _isSalesRepToggle ? false : zones.some(function(z){ return state.zoneOpen[z] !== false; });
     var anyShipOpen = Object.keys(state.shipOpen||{}).some(function(k){ return state.shipOpen[k]; });
+    var anyGpOpen2  = Object.keys(state.gpOpen||{}).some(function(k){ return state.gpOpen[k]; });
     var anyRevOpen  = Object.keys(state.revOpen||{}).some(function(k){ return state.revOpen[k]; });
-    var anyOpen = anyExpanded || anyShipOpen || anyRevOpen;
+    var anyOpen = anyExpanded || anyShipOpen || anyGpOpen2 || anyRevOpen;
     var newVal = anyOpen ? false : true;
     // Toggle zones
     zones.forEach(function(z){ state.zoneOpen[z] = newVal; });
@@ -8384,6 +8408,7 @@ document.addEventListener('click', function(ev){
       state.shipOpen = {};
       state.gpOpen   = {};
       state.revOpen  = {};
+      if (_isSalesRepToggle && currentUser.zone) state.zoneOpen[currentUser.zone] = true;
     } else {
       // Expand — set all to true
       var newShipOpen = {}, newGpOpen = {}, newRevOpen = {};
