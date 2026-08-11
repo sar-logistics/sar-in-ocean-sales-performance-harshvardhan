@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v133';
+var CACHE_VERSION = 'ocean-v134';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -4639,9 +4639,8 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   zoneOrder.forEach(function(zone){
     var zt = zoneTotals[zone];
     if (!zt || zt.total === 0) return;
-    if (_isSalesRep) return; // Sales Rep: hide zone rows, show only rep rows
     var isCrossSales = zone === 'Cross Sales';
-    var isCollapsed = state.pendencyZoneOpen[zone] === false; // default open
+    var isCollapsed = _isSalesRep ? false : state.pendencyZoneOpen[zone] === false; // default open
     var zHue = zoneHueVal(zone);
     var zAvBg = isCrossSales ? 'linear-gradient(135deg,#7C3AED,#4C1D95)' : 'oklch(0.55 0.14 '+zHue+')';
     var zIni = isCrossSales ? 'CS' : zone.slice(0,2).toUpperCase();
@@ -4677,7 +4676,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     var zAccent = 'box-shadow:inset 3px 0 0 '+zAccentColor+', inset -1.5px 0 0 '+PBORDER_STRONG+';';
     var zoneBg   = isCrossSales ? '#F5F3FF' : '#F0F4FB';
     var zoneData = { colData: zt.colData, totalPending: zt.totalPending, totalDone: zt.totalDone, total: zt.total };
-    bodyRows += metricRows(zoneData, null, zoneBg, true, null, null, false, zone, zAvatar, zLabel, zToggle, zAccent, 'border-top:2px solid '+PBORDER_STRONG+';', null, zone, lockType);
+    if (!_isSalesRep) bodyRows += metricRows(zoneData, null, zoneBg, true, null, null, false, zone, zAvatar, zLabel, zToggle, zAccent, 'border-top:2px solid '+PBORDER_STRONG+';', null, zone, lockType);
 
     if (isCollapsed) return; // skip reps if zone collapsed
 
