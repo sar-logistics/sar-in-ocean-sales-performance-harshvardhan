@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v138';
+var CACHE_VERSION = 'ocean-v139';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -4640,7 +4640,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     var zt = zoneTotals[zone];
     if (!zt || zt.total === 0) return;
     var isCrossSales = zone === 'Cross Sales';
-    var isCollapsed = _isSalesRep ? false : state.pendencyZoneOpen[zone] === false; // default open
+    var isCollapsed = (_isSalesRep || (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep')) ? false : state.pendencyZoneOpen[zone] === false; // default open
     var zHue = zoneHueVal(zone);
     var zAvBg = isCrossSales ? 'linear-gradient(135deg,#7C3AED,#4C1D95)' : 'oklch(0.55 0.14 '+zHue+')';
     var zIni = isCrossSales ? 'CS' : zone.slice(0,2).toUpperCase();
