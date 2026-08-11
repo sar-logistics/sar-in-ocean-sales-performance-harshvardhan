@@ -585,7 +585,12 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
         } else if (cls.kind === "SEA") {
           if (cls.direction === "EXPORT") {
-            _tg = countryNameToTradelane(job["Discharge Country"] || "") || (job["Discharge Country"] || "");
+            const _dc2 = String(job["Discharge Country"] || "").trim();
+            _tg = countryNameToTradelane(_dc2) || _dc2;
+            if (!_tg) {
+              const _dp2 = String(job["Discharge Port"] || "").trim();
+              _tg = portToInfo(_dp2).tradelane || cityToTradelane(_dp2);
+            }
           } else {
             const _portVal = String(job["Loading Port"] || "").trim();
             _tg = portToInfo(_portVal).tradelane;
@@ -1649,6 +1654,38 @@ const CITY_TRADELANE_MAP = {
   "mogadishu": "Africa",
   "hargeisa": "Africa",
   "gaborone": "Africa",
+  // US ports
+  "jacksonville": "US", "savannah": "US", "charleston": "US", "houston": "US",
+  "new york": "US", "los angeles": "US", "long beach": "US", "norfolk": "US",
+  "baltimore": "US", "miami": "US", "seattle": "US", "tacoma": "US",
+  "new orleans": "US", "port everglades": "US", "boston": "US",
+  "philadelphia": "US", "wilmington": "US", "memphis": "US",
+  "san juan": "US", "freeport, grand bahama": "US", "columbia": "US",
+  // Mexico / LATAM ports
+  "manzanillo": "LATAM", "veracruz": "LATAM", "lazaro cardenas": "LATAM",
+  "puerto quetzal": "LATAM", "puerto cortes": "LATAM", "puerto cabello": "LATAM",
+  "la guaira": "LATAM", "barranquilla": "LATAM", "cartagena": "LATAM",
+  "san antonio": "LATAM", "lirquen": "LATAM", "callao": "LATAM",
+  "coronel": "LATAM",
+  // UK ports
+  "southampton": "Europe", "felixstowe": "Europe", "london gateway": "Europe",
+  "london": "Europe", "tilbury": "Europe", "liverpool": "Europe",
+  "manchester": "Europe", "birmingham": "Europe", "glasgow": "Europe",
+  "teesport": "Europe",
+  // Europe ports
+  "gdynia": "Europe", "wilhelmshaven": "Europe", "genova": "Europe",
+  "constanta": "Europe", "novorossiysk": "Europe", "lisboa": "Europe",
+  "bejaia (ex bougie)": "Europe", "mersin": "Med",
+  // Asia ports
+  "incheon": "Asia", "kobe": "Asia", "yokohama": "Asia", "nagoya, aichi": "Asia",
+  "gwangyang": "Asia", "songkhla": "Asia",
+  // Africa ports
+  "mombasa": "Africa", "apapa": "Africa", "durban": "Africa",
+  // Middle East ports
+  "haifa": "Middle East", "aqaba": "Middle East", "khor al fakkan": "Middle East",
+  "shuwaikh": "Middle East", "hamad": "Middle East", "sokhna port": "Middle East",
+  // Indian Ocean
+  "port louis": "Indian Subcontinent", "male": "Indian Subcontinent",
   // Middle East
   "basra": "Middle East",
   "erbil international apt": "Middle East", "erbil": "Middle East",
