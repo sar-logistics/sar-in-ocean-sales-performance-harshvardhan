@@ -1704,6 +1704,30 @@ const CITY_TRADELANE_MAP = {
   "hakata/fukuoka": "Asia",
   // Africa (additional)
   "onne": "Africa",
+  // Indian Subcontinent (additional)
+  "kolkata (ex calcutta)": "Indian Subcontinent", "kolkata": "Indian Subcontinent",
+  "cochin": "Indian Subcontinent", "mundra": "Indian Subcontinent",
+  // Europe (additional)
+  "varna": "Europe", "bilbao": "Europe", "livorno": "Europe",
+  "helsingborg": "Europe", "la spezia": "Europe", "rijeka": "Europe",
+  "garston": "Europe", "vila do conde": "Europe", "leeds": "Europe",
+  "skikda (ex philippeville)": "Europe",
+  // Asia (additional)
+  "nansha": "Asia", "tomakomai": "Asia", "fukuyama, hiroshima": "Asia",
+  "xiamen": "Asia",
+  // Africa (additional)
+  "matadi": "Africa", "cotonou": "Africa", "cape town": "Africa",
+  "nouakchott": "Africa",
+  // Middle East (additional)
+  "hodeidah": "Middle East", "aden": "Middle East", "jebel ali": "Middle East",
+  "al 'aqabah": "Middle East", "haifa israel shipyards port": "Middle East",
+  "djibouti": "Middle East",
+  // LATAM (additional)
+  "altamira": "LATAM", "ensenada": "LATAM", "point lisas": "LATAM",
+  // US (additional)
+  "mobile": "US", "east saint louis": "US",
+  // Indian Ocean
+  "port victoria": "Indian Subcontinent",
   // Middle East
   "basra": "Middle East",
   "erbil international apt": "Middle East", "erbil": "Middle East",
