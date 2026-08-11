@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v137';
+var CACHE_VERSION = 'ocean-v138';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -8373,8 +8373,6 @@ document.addEventListener('click', function(ev){
   }
   else if(act==='pendencyExpandAll'){
     ev.stopPropagation();
-    // Sales Rep: zones are hidden anyway, don't collapse/expand them
-    if (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') { render(); return; }
     var pzones = JSON.parse(el.getAttribute('data-zones')||'[]');
     var anyCollapsed = pzones.some(function(z){ return state.pendencyZoneOpen[z] === false; });
     var newVal = anyCollapsed ? true : false;
@@ -8383,8 +8381,6 @@ document.addEventListener('click', function(ev){
   }
   else if(act==='toggleAllZones'){
     ev.stopPropagation();
-    // Sales Rep: zones always open — don't collapse
-    if (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') { render(); return; }
     var zones = getZones();
     var anyExpanded = zones.some(function(z){ return state.zoneOpen[z] !== false; });
     // Also check if any shipment detail rows are open
