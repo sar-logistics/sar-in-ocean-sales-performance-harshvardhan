@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-30T-ocean-v77-bulk-upsert-users";
+const DEPLOY_TS = "2026-07-30T-ocean-v78-bulk-upsert-reportsto";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -3029,7 +3029,7 @@ module.exports = async function handler(req, res) {
     if (!u.email) continue;
     await col.updateOne(
       { email: u.email.toLowerCase().trim() },
-      { $set: { name: u.name, email: u.email.toLowerCase().trim(), role: u.role, zone: u.zone||"", region: u.region||"", isActive: true } },
+      { $set: { name: u.name, email: u.email.toLowerCase().trim(), role: u.role, zone: u.zone||"", region: u.region||"", reportsTo: (u.reportsTo||"").toLowerCase().trim(), isActive: true } },
       { upsert: true }
     );
     upserted++;
