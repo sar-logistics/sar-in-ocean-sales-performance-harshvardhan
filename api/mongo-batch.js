@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v93-sea-export-port-fallback";
+const DEPLOY_TS = "2026-08-12T-ocean-v94-comprehensive-ports";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1673,6 +1673,31 @@ const CITY_TRADELANE_MAP = {
   "mogadishu": "Africa",
   "hargeisa": "Africa",
   "gaborone": "Africa",
+  // Indian ports
+  "nhava sheva port": "Indian Subcontinent", "nhava sheva": "Indian Subcontinent",
+  "mundra": "Indian Subcontinent", "chennai (ex madras)": "Indian Subcontinent",
+  "chennai": "Indian Subcontinent", "kolkata": "Indian Subcontinent",
+  "cochin": "Indian Subcontinent", "tuticorin": "Indian Subcontinent",
+  "hazira": "Indian Subcontinent", "pipavav": "Indian Subcontinent",
+  "visakhapatnam": "Indian Subcontinent",
+  // US ports (additional)
+  "savannah": "US", "new york": "US", "norfolk": "US", "houston": "US",
+  "miami": "US", "los angeles": "US", "long beach": "US", "seattle": "US",
+  "tacoma": "US", "charleston": "US", "baltimore": "US", "boston": "US",
+  "jacksonville": "US", "san juan": "US", "vancouver": "US",
+  // Canada
+  "montreal": "Canada", "toronto": "Canada", "calgary": "Canada",
+  // Europe
+  "felixstowe": "Europe", "hamburg": "Europe", "barcelona": "Med",
+  "rotterdam": "Europe", "antwerp": "Europe", "bremerhaven": "Europe",
+  "valencia": "Med", "genoa": "Med", "marseille": "Med",
+  // Asia
+  "ho chi minh city": "Asia", "qingdao": "Asia", "shanghai": "Asia",
+  "ningbo": "Asia", "tianjin": "Asia", "guangzhou": "Asia",
+  "colombo": "Indian Subcontinent", "bangkok": "Asia",
+  // Middle East
+  "jeddah": "Middle East", "jebel ali": "Middle East",
+  "caucedo": "LATAM",
   // Middle East
   "basra": "Middle East",
   "erbil international apt": "Middle East", "erbil": "Middle East",
