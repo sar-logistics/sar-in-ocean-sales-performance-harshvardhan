@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v158';
+var CACHE_VERSION = 'ocean-v159';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -7304,6 +7304,14 @@ function openInsightDrill(drillType, name, drillMonth) {
       // Fetch from SRR server
       var _tlDateFrom = state.dateFrom;
       var _tlDateTo   = state.dateTo;
+      // If specific month clicked, narrow to that month
+      if (drillMonth && !drillMonth.startsWith('RANGE:') && drillMonth !== 'FY Total') {
+        _tlDateFrom = drillMonth; _tlDateTo = drillMonth;
+      } else if (drillMonth && drillMonth.startsWith('RANGE:')) {
+        var _rp2 = drillMonth.split(':');
+        _tlDateFrom = _rp2[1] || state.dateFrom;
+        _tlDateTo   = _rp2[2] || state.dateTo;
+      }
       var _tlLobParam = state.tradelaneLob || 'Ocean';
       var _tlUrl = '/api/mongo-batch?action=tradelaneDrill'
         + '&tradelane=' + encodeURIComponent(name)
