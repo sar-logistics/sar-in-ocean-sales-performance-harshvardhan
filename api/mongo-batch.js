@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v105-drill-tg-srr";
+const DEPLOY_TS = "2026-08-12T-ocean-v106-tradelaneDrill-get";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2536,7 +2536,7 @@ module.exports = async function handler(req, res) {
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "tradelaneDrill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -3039,7 +3039,97 @@ module.exports = async function handler(req, res) {
       return res.json({ success: true, deleted: result.deletedCount, collection: collName, fy });
     }
 
-    if (action === "wipeCollection") {
+    if (action === "tradelaneDrill") {
+  const tl       = req.query.tradelane || "";
+  const dateFrom = req.query.dateFrom  || "";
+  const dateTo   = req.query.dateTo    || "";
+  const lob      = req.query.lob       || "Ocean";
+
+  const FY_MONTHS = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
+    "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
+    "Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26",
+    "Oct-26","Nov-26","Dec-26","Jan-27","Feb-27","Mar-27"];
+  let activeMonthSet = null;
+  if (dateFrom && dateTo) {
+    const fi = FY_MONTHS.indexOf(dateFrom), ti = FY_MONTHS.indexOf(dateTo);
+    if (fi >= 0 && ti >= 0) activeMonthSet = new Set(FY_MONTHS.slice(fi, ti + 1));
+  }
+
+  const cfgs = lob === "Ocean" ? [
+    { srrColl:"srr_sea_export", jobColl:"jobs_sea_export", dir:"Export", countryField:"Discharge Country", fromPort:false, dateCol:"ETD Loading Port" },
+    { srrColl:"srr_sea_import", jobColl:"jobs_sea_import", dir:"Import", countryField:"Loading Port",       fromPort:true,  dateCol:"ETA Discharge" },
+  ] : [];
+
+  const rows = [];
+  for (const cfg of cfgs) {
+    const srrRows = await db.collection(cfg.srrColl).find({}).toArray();
+    const srrByNo = {};
+    for (const r of srrRows) {
+      const sno = String(r["Shipment No"] || "").trim();
+      if (!sno) continue;
+      const raw = String(r[cfg.countryField] || "").trim();
+      let tlName = "";
+      if (cfg.fromPort) {
+        const info = portToInfo(raw);
+        tlName = info.tradelane ? info.tradelane + " – IN" : "Others";
+      } else {
+        const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
+        const tlBase = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
+        tlName = tlBase ? "IN – " + tlBase : "Others";
+      }
+      srrByNo[sno] = { tradelane:tlName, dischargeCountry:cfg.fromPort?"":raw, srrLoadingPort:cfg.fromPort?raw:"" };
+    }
+
+    const matchingSNos = Object.entries(srrByNo)
+      .filter(([,v]) => tl === "Grand Total" || v.tradelane === tl)
+      .map(([k]) => k);
+    if (!matchingSNos.length) continue;
+
+    const jobs = await db.collection(cfg.jobColl).find({"Shipment No":{$in:matchingSNos}}).toArray();
+    for (const job of jobs) {
+      const sno = String(job["Shipment No"] || "").trim();
+      const srr = srrByNo[sno];
+      if (!srr) continue;
+      if (activeMonthSet) {
+        const rawDate = String(job[cfg.dateCol] || "").trim();
+        if (!rawDate) continue;
+        const dObj = parseSheetDate(rawDate);
+        if (!dObj) continue;
+        const ml = MONTH_NAMES[dObj.getMonth()] + "-" + String(dObj.getFullYear()).slice(2);
+        if (!activeMonthSet.has(ml)) continue;
+      }
+      const cls = { kind:"SEA", direction:cfg.dir==="Export"?"EXPORT":"IMPORT" };
+      const { gp } = pickGP(job, cls);
+      const rev = parseFloat(job["Billed Revenue (C)"] || job["Provisional Revenue (A)"] || 0) || 0;
+      rows.push({
+        shipmentNo:      sno,
+        lob:             cfg.dir==="Export"?"SEA EXPORT":"SEA IMPORT",
+        tradelane:       srr.tradelane,
+        dischargeCountry:srr.dischargeCountry,
+        loadingPort:     srr.srrLoadingPort,
+        dischargePort:   job["Discharge Port"] || "",
+        jobDate:         job["Job Date"] || "",
+        masterNo:        job["Master No."] || "",
+        cargoType:       job["Cargo Type"] || "",
+        carrier:         job["Carrier"] || "",
+        customer:        job["Customer"] || "",
+        consignee:       job["Consignee"] || "",
+        shipper:         job["Shipper"] || "",
+        teu:             parseFloat(job["Container TEU"] || 0) || 0,
+        gp:              gp,
+        revenue:         rev,
+        salesPerson:     job["Sales Person"] || "",
+        jobOwner:        job["Job Owner"] || "",
+        location:        job["Location"] || "",
+        operationLock:   job["Operation Lock"] || "",
+        financialLock:   job["Financial Lock"] || "",
+      });
+    }
+  }
+  return res.status(200).json({ success:true, count:rows.length, rows });
+}
+
+if (action === "wipeCollection") {
       // Wipe an entire job or SRR collection so Apps Script can re-push clean data
       const collName = (req.body && req.body.collection) || req.query.collection;
       if (!collName) return res.status(400).json({ error: "collection required" });
