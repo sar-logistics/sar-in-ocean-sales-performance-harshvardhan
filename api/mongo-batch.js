@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-30T-ocean-v76-drill-on-demand";
+const DEPLOY_TS = "2026-08-12T-ocean-v103-directional-srr-only";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -595,7 +595,8 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           const _raw = cls.direction === "EXPORT"
             ? (String(job["Consignee Country"] || job["Destination Country"] || "").trim())
             : (String(job["Shipper Country"]   || job["Origin Port Country"] || "").trim());
-          _tg = countryNameToTradelane(_raw) || _raw;
+          const _tgBaseI = countryNameToTradelane(_raw) || _raw;
+          _tg = _tgBaseI ? (cls.direction === "EXPORT" ? "IN – " + _tgBaseI : _tgBaseI + " – IN") : "Others";
         }
 
         allRows.push({
@@ -1397,6 +1398,7 @@ const agentCacheMap = {}; // key → { data, time }
 
 // ─── Tradelane Insights ───────────────────────────────────────────────────────
 const tradelaneCacheMap = {}; // key → { data, time }
+let srrTgCache = null; // shipmentNo → directional tradelane built from SRR
 
 // ── Port code → Country + Tradelane lookup (from "Tradelane Mapping" sheet) ──
 // iso2 → { country, tradelane }
@@ -1773,6 +1775,12 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
     } catch (e) { /* collection may not exist yet */ }
   }));
 
+  // ── Build srrTgCache for drill row _tg lookup ──────────────────────────────
+  srrTgCache = {};
+  for (const [sno, entry] of Object.entries(srrMap)) {
+    if (entry.tradelane) srrTgCache[sno] = entry.tradelane;
+  }
+
   // ── Step 2: Scan job collections, join with SRR map ──────────────────────────
   const JOB_COLL_MAP = [
     { coll: "jobs_sea_export",     lob: "Ocean", dir: "Export", dateCol: "ETD Loading Port" },
@@ -1842,14 +1850,11 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
           : (String(job["Shipper Country"]   || job["Origin Port Country"] || "").trim());
 
         if (!rawCountry || rawCountry.toLowerCase() === "india") {
-          // Try Trade Lane field as last resort
-          const tl = String(job["Trade Lane"] || "").trim();
-          if (!tl) continue;
-          tradelane = tl;
-          country   = tl;
+          tradelane = "Others"; country = "Others";
         } else {
           country   = rawCountry;
-          tradelane = countryNameToTradelane(rawCountry) || rawCountry;
+          const _tlBase = countryNameToTradelane(rawCountry) || rawCountry;
+          tradelane = cfg.dir === "Export" ? "IN – " + _tlBase : _tlBase + " – IN";
         }
       }
       if (!tradelane) continue;
