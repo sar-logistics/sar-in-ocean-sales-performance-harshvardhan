@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v89-tradelane-fixes";
+const DEPLOY_TS = "2026-08-12T-ocean-v90-tradelane-map-fix";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1500,6 +1500,12 @@ const TRADELANE_MAP = {
   "TG":{"country":"Togo","tradelane":"Africa"},
   "CR":{"country":"Costa Rica","tradelane":"LATAM"},
   "ZM":{"country":"Zambia","tradelane":"Africa"},
+"KR2":{"country":"Korea, Republic of","tradelane":"Asia"},
+"TZ2":{"country":"Tanzania, United Republic of","tradelane":"Africa"},
+"CD2":{"country":"Congo, The Democratic Republic","tradelane":"Africa"},
+"BN":{"country":"Brunei Darussalam","tradelane":"Asia"},
+"AW":{"country":"Aruba","tradelane":"LATAM"},
+"CZ":{"country":"Czech Republic","tradelane":"Europe"},
 "CZ":{"country":"Czech Republic","tradelane":"Europe"},
 "AW":{"country":"Aruba","tradelane":"LATAM"},
 "BN":{"country":"Brunei Darussalam","tradelane":"Asia"},
