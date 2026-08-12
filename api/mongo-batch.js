@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v114-tradelaneDrill-srr-primary";
+const DEPLOY_TS = "2026-08-12T-ocean-v115-tradelaneDrill-scan-all-jobs";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -3069,84 +3069,61 @@ module.exports = async function handler(req, res) {
   }
 
   const cfgs = lob === "Ocean" ? [
-    { srrColl:"srr_sea_export", jobColl:"jobs_sea_export", dir:"Export", countryField:"Discharge Country", fromPort:false },
-    { srrColl:"srr_sea_import", jobColl:"jobs_sea_import", dir:"Import", countryField:"Loading Port", fromPort:true },
+    { srrColl:"srr_sea_export", jobColl:"jobs_sea_export", dir:"Export", fromPort:false },
+    { srrColl:"srr_sea_import", jobColl:"jobs_sea_import", dir:"Import", fromPort:true },
   ] : [];
 
   const rows = [];
   for (const cfg of cfgs) {
-    // Step 1: Get all SRR rows and compute tradelane
+    // Build SRR lookup for extra fields (dischargeCountry, loadingPort)
     const srrRows = await db.collection(cfg.srrColl).find({}).toArray();
     const srrByNo = {};
     for (const r of srrRows) {
       const sno = String(r["Shipment No"] || "").trim();
       if (!sno) continue;
-      const raw = String(r[cfg.countryField] || "").trim();
-      let tlName = "";
-      if (cfg.fromPort) {
-        const info = portToInfo(raw);
-        tlName = info.tradelane ? info.tradelane + " \u2013 IN" : "Others";
-      } else {
-        const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
-        const tlBase = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
-        tlName = tlBase ? "IN \u2013 " + tlBase : "Others";
-      }
-      // Date filter using SRR date fields
-      if (activeMonthSet) {
-        const rawDate = cfg.fromPort
-          ? (r["ETD Loading Port"] || r["Job Date"] || "")
-          : (r["ETD Loading Port"] || r["Job Date"] || "");
-        if (rawDate) {
-          const dObj = parseSheetDate(rawDate);
-          if (dObj) {
-            const ml = MONTH_NAMES[dObj.getMonth()] + "-" + String(dObj.getFullYear()).slice(2);
-            if (!activeMonthSet.has(ml)) continue;
-          }
-        }
-      }
-      if (tl !== "Grand Total" && tlName !== tl) continue;
       srrByNo[sno] = {
-        tradelane: tlName,
-        dischargeCountry: cfg.fromPort ? "" : raw,
-        srrLoadingPort: cfg.fromPort ? raw : "",
+        dischargeCountry: cfg.fromPort ? "" : String(r["Discharge Country"] || "").trim(),
+        srrLoadingPort:   cfg.fromPort ? String(r["Loading Port"] || "").trim() : "",
       };
     }
 
-    if (!Object.keys(srrByNo).length) continue;
+    // Scan ALL jobs — same as SRR aggregate
+    const cls = { kind:"SEA", direction: cfg.dir === "Export" ? "EXPORT" : "IMPORT" };
+    const jobs = await db.collection(cfg.jobColl).find({}).toArray();
 
-    // Step 2: Fetch JPA jobs for those shipment numbers
-    const matchingSNos = Object.keys(srrByNo);
-    const jobs = await db.collection(cfg.jobColl)
-      .find({"Shipment No": {$in: matchingSNos}}).toArray();
-
-    // Build JPA lookup map
-    const jpaByNo = {};
     for (const job of jobs) {
       const sno = String(job["Shipment No"] || "").trim();
-      if (sno) jpaByNo[sno] = job;
-    }
 
-    // Step 3: For each SRR shipment, look up JPA
-    for (const [sno, srr] of Object.entries(srrByNo)) {
-      const job = jpaByNo[sno];
-
-      if (!job) {
-        // Not found in JPA — show dash row
-        rows.push({
-          shipmentNo: sno,
-          lob: cfg.dir === "Export" ? "SEA EXPORT" : "SEA IMPORT",
-          tradelane: srr.tradelane,
-          dischargeCountry: srr.dischargeCountry,
-          loadingPort: srr.srrLoadingPort,
-          _notInJpa: true,
-        });
-        continue;
+      // Compute tradelane same as SRR aggregate
+      let tlName = "";
+      if (cfg.dir === "Export") {
+        const rawCountry = String(job["Consignee Country"] || job["Destination Country"] || "").trim();
+        if (rawCountry && rawCountry.toLowerCase() !== "india") {
+          const tlBase = countryNameToTradelane(rawCountry) || rawCountry;
+          tlName = tlBase ? "IN \u2013 " + tlBase : "Others";
+        } else {
+          const tl2 = String(job["Trade Lane"] || "").trim();
+          tlName = tl2 ? "IN \u2013 " + tl2 : "Others";
+        }
+      } else {
+        const rawCountry = String(job["Shipper Country"] || job["Origin Port Country"] || "").trim();
+        if (rawCountry && rawCountry.toLowerCase() !== "india") {
+          const tlBase = countryNameToTradelane(rawCountry) || rawCountry;
+          tlName = tlBase ? tlBase + " \u2013 IN" : "Others";
+        } else {
+          const lp = String(job["Loading Port"] || "").trim();
+          const info = portToInfo(lp);
+          const tlBase = info.tradelane || cityToTradelane(lp);
+          tlName = tlBase ? tlBase + " \u2013 IN" : "Others";
+        }
       }
 
-      // Date filter using JPA ETD/ETA
+      // Filter by requested tradelane
+      if (tl !== "Grand Total" && tlName !== tl) continue;
+
+      // Date filter
       if (activeMonthSet) {
-        const _cls2 = { direction: cfg.dir === "Export" ? "EXPORT" : "IMPORT" };
-        const rawDate = getDateValueFor(job, _cls2);
+        const rawDate = getDateValueFor(job, cls);
         if (!rawDate) continue;
         const dObj = parseSheetDate(rawDate);
         if (!dObj || isNaN(dObj.getTime())) continue;
@@ -3155,7 +3132,7 @@ module.exports = async function handler(req, res) {
         job._primaryDate = dObj;
       }
 
-      const cls = { kind:"SEA", direction: cfg.dir === "Export" ? "EXPORT" : "IMPORT" };
+      // GP/Revenue with lock logic
       const { gp } = pickGP(job, cls);
       const isLocked = !!(String(job["Job Rev Recognition Date"] || "").trim());
       const provRev = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
@@ -3164,11 +3141,14 @@ module.exports = async function handler(req, res) {
       const provCost = parseFloat(job["Provisional Cost (E)"] || 0) || 0;
       const postCost = parseFloat(job["Posted Cost (G)"] || 0) || 0;
 
+      // Get SRR extra fields if available
+      const srr = srrByNo[sno] || {};
+
       rows.push({
         shipmentNo:          sno,
         lob:                 cfg.dir === "Export" ? "SEA EXPORT" : "SEA IMPORT",
-        tradelane:           srr.tradelane,
-        dischargeCountry:    srr.dischargeCountry,
+        tradelane:           tlName,
+        dischargeCountry:    srr.dischargeCountry || "",
         loadingPort:         srr.srrLoadingPort || job["Loading Port"] || "",
         dischargePort:       job["Discharge Port"] || "",
         jobDate:             (job._primaryDate || parseSheetDate(getDateValueFor(job, cls) || job["Job Date"]||"") || new Date(0)).toISOString(),
