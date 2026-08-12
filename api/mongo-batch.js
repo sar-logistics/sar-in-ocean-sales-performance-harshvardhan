@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v100-srr-tg-cache";
+const DEPLOY_TS = "2026-08-12T-ocean-v101-others-fix";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1741,6 +1741,26 @@ const CITY_TRADELANE_MAP = {
   // LATAM (additional)
   "veracruz": "LATAM", "manzanillo": "LATAM", "puerto cortes": "LATAM",
   "mersin": "Med",
+  // US East/West additional
+  "newark": "US", "oakland": "US", "saint-john": "Canada",
+  // Africa additional
+  "matadi": "Africa", "mombasa": "Africa",
+  // Middle East additional
+  "khor al fakkan": "Middle East", "bahrain port": "Middle East",
+  // Asia additional
+  "chittagong": "Indian Subcontinent", "tuticorin": "Indian Subcontinent",
+  "chennai (ex madras)": "Indian Subcontinent",
+  "port klang (pelabuhan klang)": "Asia", "port klang": "Asia",
+  // Europe additional
+  "rijeka": "Europe",
+  // LATAM additional
+  "ensenada": "LATAM", "montevideo": "LATAM",
+  // Indian ports (for SEA IMPORT loading ports)
+  "nhava sheva port": "Indian Subcontinent", "nhava sheva": "Indian Subcontinent",
+  "mundra": "Indian Subcontinent", "chennai": "Indian Subcontinent",
+  "kolkata": "Indian Subcontinent", "cochin": "Indian Subcontinent",
+  "port jawaharlal nehru": "Indian Subcontinent",
+  "jawaharlal nehru port": "Indian Subcontinent",
   // Middle East
   "basra": "Middle East",
   "erbil international apt": "Middle East", "erbil": "Middle East",
