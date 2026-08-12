@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-30T-ocean-v76-drill-on-demand";
+const DEPLOY_TS = "2026-08-12T-ocean-v89-tradelane-fixes";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1503,9 +1503,6 @@ const TRADELANE_MAP = {
 "CZ":{"country":"Czech Republic","tradelane":"Europe"},
 "AW":{"country":"Aruba","tradelane":"LATAM"},
 "BN":{"country":"Brunei Darussalam","tradelane":"Asia"},
-"KR":{"country":"Korea, Republic of","tradelane":"Asia"},
-"TZ2":{"country":"Tanzania, United Republic of","tradelane":"Africa"},
-"CD2":{"country":"Congo, The Democratic Republic","tradelane":"Africa"},
   "HK":{"country":"Hong Kong","tradelane":"Asia"},
   "SK":{"country":"Slovakia","tradelane":"Others"},
   "IQ":{"country":"Iraq","tradelane":"Middle East"},
@@ -1717,18 +1714,10 @@ Object.values(TRADELANE_MAP).forEach(function(e) {
 function countryNameToTradelane(name) {
   if (!name) return "";
   var _extra = {
-    'korea, republic of': 'Asia',
-    'tanzania, united republic of': 'Africa',
-    'congo, the democratic republic': 'Africa',
-    'brunei darussalam': 'Asia',
-    'aruba': 'LATAM',
-    'czech republic': 'Europe',
-    'dominican republic': 'LATAM',
-    'macao': 'Asia',
-    'hong kong': 'Asia',
-    'viet nam': 'Asia',
-    'myanmar': 'Asia',
-    'lao people\'s democratic republic': 'Asia',
+    "korea, republic of": "Asia", "tanzania, united republic of": "Africa",
+    "congo, the democratic republic": "Africa", "brunei darussalam": "Asia",
+    "aruba": "LATAM", "czech republic": "Europe", "dominican republic": "LATAM",
+    "hong kong": "Asia", "viet nam": "Asia", "macao": "Asia"
   };
   return _countryToTradelane[String(name).toLowerCase().trim()] || _extra[String(name).toLowerCase().trim()] || "";
 }
