@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v154';
+var CACHE_VERSION = 'ocean-v155';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -7377,12 +7377,33 @@ function openInsightDrill(drillType, name, drillMonth) {
         ? (row.destAgent || '').toLowerCase() === nameLower
         : (row.originAgent || '').toLowerCase() === nameLower;
     } else if (drillType === 'tradelane') {
-      // Match _tg field directly
       if (row._tg) {
         match = row._tg.toLowerCase() === nameLower;
       } else {
-        // Fallback for null _tg — use CITY_TRADELANE_MAP client-side
-        match = false;
+        // Fallback for null _tg — map discharge country to tradelane
+        var _COUNTRY_TL = {
+          'united states':'us','canada':'canada','united kingdom':'europe',
+          'germany':'europe','france':'med','italy':'med','spain':'med',
+          'netherlands':'europe','belgium':'europe','poland':'europe',
+          'china':'asia','japan':'asia','south korea':'asia','korea, republic of':'asia',
+          'taiwan':'asia','vietnam':'asia','viet nam':'asia','thailand':'asia',
+          'malaysia':'asia','singapore':'asia','indonesia':'asia','philippines':'asia',
+          'bangladesh':'asia','myanmar':'asia','brunei darussalam':'asia','brunei':'asia',
+          'hong kong':'asia','macao':'asia',
+          'australia':'oceania','new zealand':'oceania',
+          'united arab emirates':'middle east','saudi arabia':'middle east',
+          'kuwait':'middle east','qatar':'middle east','oman':'middle east',
+          'jordan':'middle east','israel':'med','lebanon':'med',
+          'nigeria':'africa','kenya':'africa','south africa':'africa',
+          'ghana':'africa','tanzania':'africa','tanzania, united republic of':'africa',
+          'congo, the democratic republic':'africa','dr congo':'africa',
+          'brazil':'latam','mexico':'latam','colombia':'latam','peru':'latam',
+          'chile':'latam','argentina':'latam','dominican republic':'latam',
+          'aruba':'latam','puerto rico':'latam'
+        };
+        var _dc = (row.dischargePort||row.loadingPort||'').toLowerCase().trim();
+        var _tgFb = _COUNTRY_TL[_dc] || '';
+        match = _tgFb === nameLower;
       }
     }
     if (!match) continue;
