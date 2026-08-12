@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v99-comprehensive-city-map";
+const DEPLOY_TS = "2026-08-12T-ocean-v100-srr-tg-cache";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -584,7 +584,11 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           // Fallback: try city name lookup when ISO2 code not found
           if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
         } else if (cls.kind === "SEA") {
-          if (cls.direction === "EXPORT") {
+          // First try srrTgCache (most accurate — uses SRR Discharge Country)
+          const _sno = String(job["Shipment No"] || "").trim();
+          if (srrTgCache && srrTgCache[_sno]) {
+            _tg = srrTgCache[_sno];
+          } else if (cls.direction === "EXPORT") {
             const _dc = String(job["Discharge Country"] || job["Consignee Country"] || "").trim();
             let _tgBase = countryNameToTradelane(_dc) || _dc;
             if (!_tgBase) {
@@ -1405,6 +1409,7 @@ const agentCacheMap = {}; // key → { data, time }
 
 // ─── Tradelane Insights ───────────────────────────────────────────────────────
 const tradelaneCacheMap = {}; // key → { data, time }
+let srrTgCache = null; // shipmentNo → directional tradelane (IN – US etc)
 
 // ── Port code → Country + Tradelane lookup (from "Tradelane Mapping" sheet) ──
 // iso2 → { country, tradelane }
@@ -1874,6 +1879,12 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       }
     } catch (e) { /* collection may not exist yet */ }
   }));
+
+  // ── Build srrTgCache for drill row _tg lookup ──────────────────────────────
+  srrTgCache = {};
+  for (const [sno, entry] of Object.entries(srrMap)) {
+    srrTgCache[sno] = entry.tradelane || null;
+  }
 
   // ── Step 2: Scan job collections, join with SRR map ──────────────────────────
   const JOB_COLL_MAP = [
