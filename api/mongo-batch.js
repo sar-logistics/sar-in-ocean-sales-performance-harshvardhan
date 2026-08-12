@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v95-directional-tg";
+const DEPLOY_TS = "2026-08-12T-ocean-v96-srr-directional";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1826,6 +1826,10 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
           country = raw;
           const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
           tradelane = entry ? entry.tradelane : (countryNameToTradelane(raw) || raw); // fallback
+        }
+        // Add directional prefix: IN – X for export, X – IN for import
+        if (tradelane && cfg.lob === "Ocean") {
+          tradelane = cfg.dir === "Export" ? "IN – " + tradelane : tradelane + " – IN";
         }
         if (country) srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
       }
