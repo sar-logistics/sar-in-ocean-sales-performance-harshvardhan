@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v104-srr-direction-clean";
+const DEPLOY_TS = "2026-08-12T-ocean-v105-drill-tg-srr";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -584,12 +584,18 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           // Fallback: try city name lookup when ISO2 code not found
           if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
         } else if (cls.kind === "SEA") {
-          if (cls.direction === "EXPORT") {
-            _tg = countryNameToTradelane(job["Discharge Country"] || "") || (job["Discharge Country"] || "");
+          // Use srrTgCache first (SRR is most accurate)
+          const _sno3 = String(job["Shipment No"] || "").trim();
+          if (srrTgCache && srrTgCache[_sno3]) {
+            _tg = srrTgCache[_sno3];
+          } else if (cls.direction === "EXPORT") {
+            const _dc = String(job["Discharge Country"] || job["Consignee Country"] || "").trim();
+            const _tgBase = countryNameToTradelane(_dc) || _dc;
+            _tg = _tgBase ? "IN – " + _tgBase : "Others";
           } else {
             const _portVal = String(job["Loading Port"] || "").trim();
-            _tg = portToInfo(_portVal).tradelane;
-            if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
+            const _tgBase = portToInfo(_portVal).tradelane;
+            _tg = _tgBase ? _tgBase + " – IN" : "Others";
           }
         } else if (cls.kind === "ISOTANK") {
           const _raw = cls.direction === "EXPORT"
