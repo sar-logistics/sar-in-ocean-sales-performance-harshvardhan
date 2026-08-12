@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v112-tradelaneDrill-srr-only-lockbased";
+const DEPLOY_TS = "2026-08-12T-ocean-v113-ungrouped-tradelane-fix";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1437,7 +1437,7 @@ const TRADELANE_MAP = {
   "CN":{"country":"China","tradelane":"Asia"},
   "HN":{"country":"Honduras","tradelane":"LATAM"},
   "PE":{"country":"Peru","tradelane":"LATAM"},
-  "DO":{"country":"Dominican Republic","tradelane":"Dominican Republic"},
+  "DO":{"country":"Dominican Republic","tradelane":"LATAM"},
   "PK":{"country":"Pakistan","tradelane":"Asia"},
   "KE":{"country":"Kenya","tradelane":"Africa"},
   "MR":{"country":"Mauritania","tradelane":"Africa"},
@@ -1508,6 +1508,12 @@ const TRADELANE_MAP = {
   "TG":{"country":"Togo","tradelane":"Africa"},
   "CR":{"country":"Costa Rica","tradelane":"LATAM"},
   "ZM":{"country":"Zambia","tradelane":"Africa"},
+"AW":{"country":"Aruba","tradelane":"LATAM"},
+"KR2":{"country":"Korea, Republic of","tradelane":"Asia"},
+"TZ2":{"country":"Tanzania, United Republic of","tradelane":"Africa"},
+"CD2":{"country":"Congo, The Democratic Republic","tradelane":"Africa"},
+"CZ2":{"country":"Czech Republic","tradelane":"Europe"},
+"BN2":{"country":"Brunei Darussalam","tradelane":"Asia"},
   "HK":{"country":"Hong Kong","tradelane":"Asia"},
   "SK":{"country":"Slovakia","tradelane":"Others"},
   "IQ":{"country":"Iraq","tradelane":"Middle East"},
@@ -1717,7 +1723,14 @@ Object.values(TRADELANE_MAP).forEach(function(e) {
 });
 function countryNameToTradelane(name) {
   if (!name) return "";
-  return _countryToTradelane[String(name).toLowerCase().trim()] || "";
+  const _extra = {
+    "korea, republic of": "Asia", "tanzania, united republic of": "Africa",
+    "congo, the democratic republic": "Africa", "brunei darussalam": "Asia",
+    "aruba": "LATAM", "czech republic": "Europe", "dominican republic": "LATAM",
+    "hong kong": "Asia", "viet nam": "Asia", "macao": "Asia",
+    "iran, islamic republic of": "Middle East",
+  };
+  return _countryToTradelane[String(name).toLowerCase().trim()] || _extra[String(name).toLowerCase().trim()] || "";
 }
 
 async function getTradelaneAggregate(db, force, dateFrom, dateTo, cacheKey) {
