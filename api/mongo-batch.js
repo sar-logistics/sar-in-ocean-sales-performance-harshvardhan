@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-07-30T-ocean-v76-drill-on-demand";
+const DEPLOY_TS = "2026-08-12T-ocean-v100-srr-tg-cache";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -584,18 +584,30 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           // Fallback: try city name lookup when ISO2 code not found
           if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
         } else if (cls.kind === "SEA") {
-          if (cls.direction === "EXPORT") {
-            _tg = countryNameToTradelane(job["Discharge Country"] || "") || (job["Discharge Country"] || "");
+          // First try srrTgCache (most accurate — uses SRR Discharge Country)
+          const _sno = String(job["Shipment No"] || "").trim();
+          if (srrTgCache && srrTgCache[_sno]) {
+            _tg = srrTgCache[_sno];
+          } else if (cls.direction === "EXPORT") {
+            const _dc = String(job["Discharge Country"] || job["Consignee Country"] || "").trim();
+            let _tgBase = countryNameToTradelane(_dc) || _dc;
+            if (!_tgBase) {
+              const _dp = String(job["Discharge Port"] || "").trim();
+              _tgBase = portToInfo(_dp).tradelane || cityToTradelane(_dp);
+            }
+            _tg = _tgBase ? "IN – " + _tgBase : "Others";
           } else {
             const _portVal = String(job["Loading Port"] || "").trim();
-            _tg = portToInfo(_portVal).tradelane;
-            if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
+            let _tgBase = portToInfo(_portVal).tradelane;
+            if (!_tgBase && _portVal) _tgBase = cityToTradelane(_portVal);
+            _tg = _tgBase ? _tgBase + " – IN" : "Others";
           }
         } else if (cls.kind === "ISOTANK") {
           const _raw = cls.direction === "EXPORT"
             ? (String(job["Consignee Country"] || job["Destination Country"] || "").trim())
             : (String(job["Shipper Country"]   || job["Origin Port Country"] || "").trim());
-          _tg = countryNameToTradelane(_raw) || _raw;
+          const _tgBase2 = countryNameToTradelane(_raw) || _raw;
+          _tg = _tgBase2 ? (cls.direction === "EXPORT" ? "IN – " + _tgBase2 : _tgBase2 + " – IN") : "Others";
         }
 
         allRows.push({
@@ -1397,6 +1409,7 @@ const agentCacheMap = {}; // key → { data, time }
 
 // ─── Tradelane Insights ───────────────────────────────────────────────────────
 const tradelaneCacheMap = {}; // key → { data, time }
+let srrTgCache = null; // shipmentNo → directional tradelane (IN – US etc)
 
 // ── Port code → Country + Tradelane lookup (from "Tradelane Mapping" sheet) ──
 // iso2 → { country, tradelane }
@@ -1429,7 +1442,7 @@ const TRADELANE_MAP = {
   "CN":{"country":"China","tradelane":"Asia"},
   "HN":{"country":"Honduras","tradelane":"LATAM"},
   "PE":{"country":"Peru","tradelane":"LATAM"},
-  "DO":{"country":"Dominican Republic","tradelane":"Dominican Republic"},
+  "DO":{"country":"Dominican Republic","tradelane":"LATAM"},
   "PK":{"country":"Pakistan","tradelane":"Asia"},
   "KE":{"country":"Kenya","tradelane":"Africa"},
   "MR":{"country":"Mauritania","tradelane":"Africa"},
@@ -1500,6 +1513,25 @@ const TRADELANE_MAP = {
   "TG":{"country":"Togo","tradelane":"Africa"},
   "CR":{"country":"Costa Rica","tradelane":"LATAM"},
   "ZM":{"country":"Zambia","tradelane":"Africa"},
+"KR2":{"country":"Korea, Republic of","tradelane":"Asia"},
+"TZ2":{"country":"Tanzania, United Republic of","tradelane":"Africa"},
+"CD2":{"country":"Congo, The Democratic Republic","tradelane":"Africa"},
+"BN":{"country":"Brunei Darussalam","tradelane":"Asia"},
+"IR":{"country":"Iran, Islamic Republic of","tradelane":"Middle East"},
+"CI2":{"country":"Côte d'Ivoire","tradelane":"Africa"},
+"RE":{"country":"Réunion","tradelane":"Africa"},
+"AG":{"country":"Antigua and Barbuda","tradelane":"LATAM"},
+"CW":{"country":"Curaçao","tradelane":"LATAM"},
+"AW":{"country":"Aruba","tradelane":"LATAM"},
+"CZ":{"country":"Czech Republic","tradelane":"Europe"},
+"CZ":{"country":"Czech Republic","tradelane":"Europe"},
+"AW":{"country":"Aruba","tradelane":"LATAM"},
+"BN":{"country":"Brunei Darussalam","tradelane":"Asia"},
+"IR":{"country":"Iran, Islamic Republic of","tradelane":"Middle East"},
+"CI2":{"country":"Côte d'Ivoire","tradelane":"Africa"},
+"RE":{"country":"Réunion","tradelane":"Africa"},
+"AG":{"country":"Antigua and Barbuda","tradelane":"LATAM"},
+"CW":{"country":"Curaçao","tradelane":"LATAM"},
   "HK":{"country":"Hong Kong","tradelane":"Asia"},
   "SK":{"country":"Slovakia","tradelane":"Others"},
   "IQ":{"country":"Iraq","tradelane":"Middle East"},
@@ -1649,6 +1681,66 @@ const CITY_TRADELANE_MAP = {
   "mogadishu": "Africa",
   "hargeisa": "Africa",
   "gaborone": "Africa",
+  // Indian ports
+  "nhava sheva port": "Indian Subcontinent", "nhava sheva": "Indian Subcontinent",
+  "mundra": "Indian Subcontinent", "chennai (ex madras)": "Indian Subcontinent",
+  "chennai": "Indian Subcontinent", "kolkata": "Indian Subcontinent",
+  "cochin": "Indian Subcontinent", "tuticorin": "Indian Subcontinent",
+  "hazira": "Indian Subcontinent", "pipavav": "Indian Subcontinent",
+  "visakhapatnam": "Indian Subcontinent",
+  // US ports (additional)
+  "savannah": "US", "new york": "US", "norfolk": "US", "houston": "US",
+  "miami": "US", "los angeles": "US", "long beach": "US", "seattle": "US",
+  "tacoma": "US", "charleston": "US", "baltimore": "US", "boston": "US",
+  "jacksonville": "US", "san juan": "US", "vancouver": "US",
+  // Canada
+  "montreal": "Canada", "toronto": "Canada", "calgary": "Canada",
+  // Europe
+  "felixstowe": "Europe", "hamburg": "Europe", "barcelona": "Med",
+  "rotterdam": "Europe", "antwerp": "Europe", "bremerhaven": "Europe",
+  "valencia": "Med", "genoa": "Med", "marseille": "Med",
+  // Asia
+  "ho chi minh city": "Asia", "qingdao": "Asia", "shanghai": "Asia",
+  "ningbo": "Asia", "tianjin": "Asia", "guangzhou": "Asia",
+  "colombo": "Indian Subcontinent", "bangkok": "Asia",
+  // Middle East
+  "jeddah": "Middle East", "jebel ali": "Middle East",
+  "caucedo": "LATAM",
+  // Europe (additional)
+  "trieste": "Med", "klaipeda": "Europe", "tallinn": "Europe",
+  "fos-sur-mer": "Med", "london gateway port": "Europe",
+  "london gateway": "Europe", "tilbury": "Europe",
+  "piraeus": "Med", "thessaloniki": "Med", "izmir": "Med",
+  "valencia": "Med", "tarragona": "Med", "bilbao": "Med",
+  "vigo": "Med", "algeciras": "Med", "seville": "Med",
+  "marseille": "Med", "le havre": "Europe", "dunkirk": "Europe",
+  "zeebrugge": "Europe", "ghent": "Europe", "gdansk": "Europe",
+  "riga": "Europe", "tallinn": "Europe", "helsinki": "Europe",
+  "stockholm": "Europe", "oslo": "Europe", "copenhagen": "Europe",
+  "aarhus": "Europe", "gothenburg": "Europe",
+  // Asia (additional)
+  "singapore": "Asia", "yokohama": "Asia", "kobe": "Asia",
+  "osaka": "Asia", "nagoya": "Asia", "tokyo": "Asia",
+  "busan": "Asia", "guangzhou": "Asia", "shenzhen": "Asia",
+  "ho chi minh city": "Asia", "hanoi": "Asia", "haiphong": "Asia",
+  "jakarta": "Asia", "surabaya": "Asia", "manila": "Asia",
+  "bangkok": "Asia", "laem chabang": "Asia", "port klang": "Asia",
+  "penang": "Asia", "colombo": "Indian Subcontinent",
+  // Oceania (additional)
+  "fremantle": "Oceania", "melbourne": "Oceania", "sydney": "Oceania",
+  "brisbane": "Oceania", "auckland": "Oceania", "suva": "Oceania",
+  // US (additional)
+  "port everglades": "US", "edmonton": "Canada",
+  // Middle East (additional)
+  "ain sukhna": "Middle East", "sokhna port": "Middle East",
+  "shuwaikh": "Middle East", "jeddah": "Middle East",
+  "dammam": "Middle East", "muscat": "Middle East",
+  // Africa (additional)
+  "mombasa": "Africa", "apapa": "Africa", "durban": "Africa",
+  "dar es salaam": "Africa", "beira": "Africa",
+  // LATAM (additional)
+  "veracruz": "LATAM", "manzanillo": "LATAM", "puerto cortes": "LATAM",
+  "mersin": "Med",
   // Middle East
   "basra": "Middle East",
   "erbil international apt": "Middle East", "erbil": "Middle East",
@@ -1676,6 +1768,7 @@ const CITY_TRADELANE_MAP = {
   // Oceania / Indian Ocean islands
   "mahe island apt": "Others", "mahe": "Others",  // Seychelles
   "male": "Indian Subcontinent",  // Maldives
+  "muara": "Asia",  // Brunei Darussalam
   "malta": "Med",
   "port louis": "Africa",  // Mauritius → Africa
   "sir seewoosagur ramgoolam int apt": "Africa",  // Mauritius
@@ -1709,7 +1802,13 @@ Object.values(TRADELANE_MAP).forEach(function(e) {
 });
 function countryNameToTradelane(name) {
   if (!name) return "";
-  return _countryToTradelane[String(name).toLowerCase().trim()] || "";
+  var _extra = {
+    "korea, republic of": "Asia", "tanzania, united republic of": "Africa",
+    "congo, the democratic republic": "Africa", "brunei darussalam": "Asia",
+    "aruba": "LATAM", "czech republic": "Europe", "dominican republic": "LATAM",
+    "hong kong": "Asia", "viet nam": "Asia", "macao": "Asia"
+  };
+  return _countryToTradelane[String(name).toLowerCase().trim()] || _extra[String(name).toLowerCase().trim()] || "";
 }
 
 async function getTradelaneAggregate(db, force, dateFrom, dateTo, cacheKey) {
@@ -1762,16 +1861,30 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         if (cfg.fromPort) {
           const info = portToInfo(raw);
           country = info.country; tradelane = info.tradelane;
+          // Fallback to city map if portToInfo didn't resolve
+          if (!tradelane && raw) tradelane = cityToTradelane(raw);
         } else {
           // Direct country name — reverse-lookup tradelane from TRADELANE_MAP by country name
           country = raw;
           const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
-          tradelane = entry ? entry.tradelane : raw; // fallback to country name if not found
+          tradelane = entry ? entry.tradelane : (countryNameToTradelane(raw) || raw); // fallback
+        }
+        // Add directional prefix: IN – X for export, X – IN for import
+        if (tradelane && cfg.lob === "Ocean") {
+          tradelane = cfg.dir === "Export" ? "IN – " + tradelane : tradelane + " – IN";
+        } else if (!tradelane && cfg.lob === "Ocean") {
+          tradelane = "Others";
         }
         if (country) srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
       }
     } catch (e) { /* collection may not exist yet */ }
   }));
+
+  // ── Build srrTgCache for drill row _tg lookup ──────────────────────────────
+  srrTgCache = {};
+  for (const [sno, entry] of Object.entries(srrMap)) {
+    srrTgCache[sno] = entry.tradelane || null;
+  }
 
   // ── Step 2: Scan job collections, join with SRR map ──────────────────────────
   const JOB_COLL_MAP = [
@@ -1844,12 +1957,12 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         if (!rawCountry || rawCountry.toLowerCase() === "india") {
           // Try Trade Lane field as last resort
           const tl = String(job["Trade Lane"] || "").trim();
-          if (!tl) continue;
-          tradelane = tl;
-          country   = tl;
+          if (!tl) { tradelane = "Others"; country = "Others"; }
+          else { tradelane = tl; country = tl; }
         } else {
           country   = rawCountry;
-          tradelane = countryNameToTradelane(rawCountry) || rawCountry;
+          const _tlBase = countryNameToTradelane(rawCountry) || rawCountry;
+          tradelane = cfg.dir === "Export" ? "IN – " + _tlBase : _tlBase + " – IN";
         }
       }
       if (!tradelane) continue;
