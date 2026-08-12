@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v96-srr-directional";
+const DEPLOY_TS = "2026-08-12T-ocean-v97-srr-direction-fix";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1821,6 +1821,8 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         if (cfg.fromPort) {
           const info = portToInfo(raw);
           country = info.country; tradelane = info.tradelane;
+          // Fallback to city map if portToInfo didn't resolve
+          if (!tradelane && raw) tradelane = cityToTradelane(raw);
         } else {
           // Direct country name — reverse-lookup tradelane from TRADELANE_MAP by country name
           country = raw;
@@ -1830,6 +1832,8 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         // Add directional prefix: IN – X for export, X – IN for import
         if (tradelane && cfg.lob === "Ocean") {
           tradelane = cfg.dir === "Export" ? "IN – " + tradelane : tradelane + " – IN";
+        } else if (!tradelane && cfg.lob === "Ocean") {
+          tradelane = "Others";
         }
         if (country) srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
       }
