@@ -1429,7 +1429,7 @@ const TRADELANE_MAP = {
   "CN":{"country":"China","tradelane":"Asia"},
   "HN":{"country":"Honduras","tradelane":"LATAM"},
   "PE":{"country":"Peru","tradelane":"LATAM"},
-  "DO":{"country":"Dominican Republic","tradelane":"Dominican Republic"},
+  "DO":{"country":"Dominican Republic","tradelane":"LATAM"},
   "PK":{"country":"Pakistan","tradelane":"Asia"},
   "KE":{"country":"Kenya","tradelane":"Africa"},
   "MR":{"country":"Mauritania","tradelane":"Africa"},
@@ -1500,6 +1500,12 @@ const TRADELANE_MAP = {
   "TG":{"country":"Togo","tradelane":"Africa"},
   "CR":{"country":"Costa Rica","tradelane":"LATAM"},
   "ZM":{"country":"Zambia","tradelane":"Africa"},
+"CZ":{"country":"Czech Republic","tradelane":"Europe"},
+"AW":{"country":"Aruba","tradelane":"LATAM"},
+"BN":{"country":"Brunei Darussalam","tradelane":"Asia"},
+"KR":{"country":"Korea, Republic of","tradelane":"Asia"},
+"TZ2":{"country":"Tanzania, United Republic of","tradelane":"Africa"},
+"CD2":{"country":"Congo, The Democratic Republic","tradelane":"Africa"},
   "HK":{"country":"Hong Kong","tradelane":"Asia"},
   "SK":{"country":"Slovakia","tradelane":"Others"},
   "IQ":{"country":"Iraq","tradelane":"Middle East"},
@@ -1709,7 +1715,21 @@ Object.values(TRADELANE_MAP).forEach(function(e) {
 });
 function countryNameToTradelane(name) {
   if (!name) return "";
-  return _countryToTradelane[String(name).toLowerCase().trim()] || "";
+  var _extra = {
+    'korea, republic of': 'Asia',
+    'tanzania, united republic of': 'Africa',
+    'congo, the democratic republic': 'Africa',
+    'brunei darussalam': 'Asia',
+    'aruba': 'LATAM',
+    'czech republic': 'Europe',
+    'dominican republic': 'LATAM',
+    'macao': 'Asia',
+    'hong kong': 'Asia',
+    'viet nam': 'Asia',
+    'myanmar': 'Asia',
+    'lao people\'s democratic republic': 'Asia',
+  };
+  return _countryToTradelane[String(name).toLowerCase().trim()] || _extra[String(name).toLowerCase().trim()] || "";
 }
 
 async function getTradelaneAggregate(db, force, dateFrom, dateTo, cacheKey) {
