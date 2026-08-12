@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v110-tradelaneDrill-all-jobs";
+const DEPLOY_TS = "2026-08-12T-ocean-v111-tradelaneDrill-revenue-fix";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -3122,7 +3122,7 @@ module.exports = async function handler(req, res) {
       }
       const cls = { kind:"SEA", direction:cfg.dir==="Export"?"EXPORT":"IMPORT" };
       const { gp } = pickGP(job, cls);
-      const rev = parseFloat(job["Billed Revenue (C)"] || job["Provisional Revenue (A)"] || 0) || 0;
+      const rev = parseFloat(job["Billed Revenue (C)"] || 0) || 0; // match SRR aggregate — Billed Revenue only
       const isLocked = cfg.dir==="Export" ? !!job["Operation Lock"] : !!job["Financial Lock"];
       const provRev  = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
       const billRev  = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
