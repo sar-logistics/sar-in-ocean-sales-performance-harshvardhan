@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v108-tradelaneDrill-date-fix";
+const DEPLOY_TS = "2026-08-12T-ocean-v109-tradelaneDrill-date-fix2";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -3095,9 +3095,10 @@ module.exports = async function handler(req, res) {
         const rawDate = getDateValueFor(job, _cls2);
         if (!rawDate) continue;
         const dObj = parseSheetDate(rawDate);
-        if (!dObj) continue;
+        if (!dObj || isNaN(dObj.getTime())) continue;
         const ml = MONTH_NAMES[dObj.getMonth()] + "-" + String(dObj.getFullYear()).slice(2);
         if (!activeMonthSet.has(ml)) continue;
+        job._primaryDate = dObj; // store for jobDate in response
       }
       const cls = { kind:"SEA", direction:cfg.dir==="Export"?"EXPORT":"IMPORT" };
       const { gp } = pickGP(job, cls);
@@ -3114,7 +3115,7 @@ module.exports = async function handler(req, res) {
         dischargeCountry:   srr.dischargeCountry,
         loadingPort:        srr.srrLoadingPort || job["Loading Port"] || "",
         dischargePort:      job["Discharge Port"] || "",
-        jobDate:            job["Job Date"] || "",
+        jobDate:            (job._primaryDate || parseSheetDate(job["Job Date"]) || new Date(job["Job Date"]||0)).toISOString(),
         masterNo:           job["Master No."] || "",
         houseNo:            job["House No."] || "",
         consolNo:           job["Consol No."] || "",
