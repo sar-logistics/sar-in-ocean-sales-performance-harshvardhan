@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v106-tradelaneDrill-get";
+const DEPLOY_TS = "2026-08-12T-ocean-v107-tradelaneDrill-full-jpa";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -3101,28 +3101,58 @@ module.exports = async function handler(req, res) {
       const cls = { kind:"SEA", direction:cfg.dir==="Export"?"EXPORT":"IMPORT" };
       const { gp } = pickGP(job, cls);
       const rev = parseFloat(job["Billed Revenue (C)"] || job["Provisional Revenue (A)"] || 0) || 0;
+      const isLocked = cfg.dir==="Export" ? !!job["Operation Lock"] : !!job["Financial Lock"];
+      const provRev  = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
+      const billRev  = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
+      const provCost = parseFloat(job["Provisional Cost (E)"] || 0) || 0;
+      const postCost = parseFloat(job["Posted Cost (G)"] || 0) || 0;
       rows.push({
-        shipmentNo:      sno,
-        lob:             cfg.dir==="Export"?"SEA EXPORT":"SEA IMPORT",
-        tradelane:       srr.tradelane,
-        dischargeCountry:srr.dischargeCountry,
-        loadingPort:     srr.srrLoadingPort,
-        dischargePort:   job["Discharge Port"] || "",
-        jobDate:         job["Job Date"] || "",
-        masterNo:        job["Master No."] || "",
-        cargoType:       job["Cargo Type"] || "",
-        carrier:         job["Carrier"] || "",
-        customer:        job["Customer"] || "",
-        consignee:       job["Consignee"] || "",
-        shipper:         job["Shipper"] || "",
-        teu:             parseFloat(job["Container TEU"] || 0) || 0,
-        gp:              gp,
-        revenue:         rev,
-        salesPerson:     job["Sales Person"] || "",
-        jobOwner:        job["Job Owner"] || "",
-        location:        job["Location"] || "",
-        operationLock:   job["Operation Lock"] || "",
-        financialLock:   job["Financial Lock"] || "",
+        shipmentNo:         sno,
+        lob:                cfg.dir==="Export"?"SEA EXPORT":"SEA IMPORT",
+        tradelane:          srr.tradelane,
+        dischargeCountry:   srr.dischargeCountry,
+        loadingPort:        srr.srrLoadingPort || job["Loading Port"] || "",
+        dischargePort:      job["Discharge Port"] || "",
+        jobDate:            job["Job Date"] || "",
+        masterNo:           job["Master No."] || "",
+        houseNo:            job["House No."] || "",
+        consolNo:           job["Consol No."] || "",
+        cargoType:          job["Cargo Type"] || "",
+        carrier:            job["Carrier"] || "",
+        customer:           job["Customer"] || "",
+        consignee:          job["Consignee"] || "",
+        shipper:            job["Shipper"] || "",
+        consolType:         job["Consol Type"] || "",
+        teu:                parseFloat(job["Container TEU"] || 0) || 0,
+        destAgent:          job["Destination Agent"] || "",
+        originAgent:        job["Origin Agent"] || "",
+        etaDischarge:       job["ETA Discharge"] || "",
+        etdLoading:         job["ETD Loading Port"] || "",
+        ataDischarge:       job["ATA Discharge"] || "",
+        atdLoading:         job["ATD Loading Port"] || "",
+        jobRevRecogDate:    job["Job Rev Recognition Date"] || "",
+        provRevenue:        provRev,
+        billedRevenue:      billRev,
+        unbilledRevenue:    provRev - billRev,
+        provCost:           provCost,
+        postedCost:         postCost,
+        unpostedCost:       provCost - postCost,
+        provisionalProfit:  provRev - provCost,
+        actualProfit:       billRev - postCost,
+        g:                  gp,
+        r:                  rev,
+        gp:                 gp,
+        revenue:            rev,
+        salesPerson:        job["Sales Person"] || "",
+        jobOwner:           job["Job Owner"] || "",
+        location:           job["Location"] || "",
+        operationLock:      job["Operation Lock"] || "",
+        financialLock:      job["Financial Lock"] || "",
+        volume:             parseFloat(job["Volume"] || 0) || 0,
+        volumeUnit:         job["Volume Unit"] || "",
+        chargeableWeight:   parseFloat(job["Chargeable Weight"] || 0) || 0,
+        chargeableWeightUnit: job["Chargeable Weight Unit"] || "",
+        tons:               parseFloat(job["Calculated Tons"] || 0) || 0,
       });
     }
   }
