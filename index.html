@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v158';
+var CACHE_VERSION = 'ocean-v151';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -6079,10 +6079,7 @@ function drawer(){
       { k:'customer', l:'Customer', t:'text', truncate:140 },
       { k:'ataDischarge', l:'ATA Discharge', t:'date' },
       { k:'atdLoading', l:'ATD Loading Port', t:'date' },
-      { k:'loadingPort', l:'Loading Port', t:'text', truncate:130 },
-  { k:'dischargePort', l:'Discharge Port', t:'text', truncate:130 },
-  { k:'_tg', l:'Tradelane', t:'text', truncate:130 },
-  { k:'location', l:'Location', t:'text' },
+      { k:'location', l:'Location', t:'text' },
       { k:'consignee', l:'Consignee', t:'text', truncate:140 },
       { k:'consolType', l:'Consol Type', t:'text' },
       { k:'teu', l:'Container TEU', t:'num' },
@@ -7351,20 +7348,6 @@ function openInsightDrill(drillType, name, drillMonth) {
 
   // RLS rep filter — compute ONCE outside loop
   var _rlsRepsNorm = _getRLSReps().map(function(n){ return normalizeName(n); });
-  // For tradelane drill: build shipmentNo set from SRR tradelaneData
-  var _tlSrrShipNos = null;
-  if (drillType === 'tradelane' && drillName !== 'Grand Total' && tradelaneData && tradelaneData.lobs) {
-    _tlSrrShipNos = {};
-    Object.values(tradelaneData.lobs).forEach(function(lob){
-      if (!lob.allCountries) return;
-      lob.allCountries.forEach(function(c){
-        var _cTl = c.name.toLowerCase();
-        if (_cTl === drillName.toLowerCase() || (c.tradelane||'').toLowerCase() === drillName.toLowerCase()) {
-          (c.shipmentNos||[]).forEach(function(sno){ _tlSrrShipNos[sno] = true; });
-        }
-      });
-    });
-  }
   // Zone/rep filters from state
   var _iFlZones = state.filterZones && state.filterZones.length > 0 ? state.filterZones : null;
   var _iFlReps  = state.filterReps  && state.filterReps.length  > 0 ? state.filterReps.map(function(x){return normalizeName(x);}) : null;
@@ -7394,9 +7377,9 @@ function openInsightDrill(drillType, name, drillMonth) {
         ? (row.destAgent || '').toLowerCase() === nameLower
         : (row.originAgent || '').toLowerCase() === nameLower;
     } else if (drillType === 'tradelane') {
-      // Match _tg OR check if shipment is in SRR tradelane shipmentNos
-      match = row._tg && row._tg.toLowerCase() === nameLower;
-      if (!match && _tlSrrShipNos && _tlSrrShipNos[row.shipmentNo]) match = true;
+      // Tradelane groups (US, Europe etc) can't be matched client-side
+      // without SRR data — server handles this via getDrillRows
+      match = false;
     }
     if (!match) continue;
     matched.push(row);
