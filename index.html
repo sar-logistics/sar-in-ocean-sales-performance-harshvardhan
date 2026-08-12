@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v151';
+var CACHE_VERSION = 'ocean-v152';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -4154,7 +4154,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
 
   var tbody = '<tbody>'
     + buildBlock('Grand Total', 'GT', 0, grand, grandMD, true)
-    + rows.map(function(r){ return buildBlock(r.name, tlIni(r.name), tlHue(r.name), r, isWeekly ? (r.weekData||{}) : (r.monthData||{}), false); }).join('')
+    + rows.map(function(r){ var _displayName = (activeLob==='Ocean') ? 'IN – '+r.name : r.name; return buildBlock(_displayName, tlIni(r.name), tlHue(r.name), r, isWeekly ? (r.weekData||{}) : (r.monthData||{}), false); }).join('')
     + '</tbody>';
 
   return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
