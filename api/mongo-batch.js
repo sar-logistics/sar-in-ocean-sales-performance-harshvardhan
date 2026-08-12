@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v103-directional-srr-only";
+const DEPLOY_TS = "2026-08-12T-ocean-v104-srr-direction-clean";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1762,15 +1762,22 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         const raw = String(r[cfg.countryField] || "").trim();
         let country = "", tradelane = "";
         if (cfg.fromPort) {
+          // SEA IMPORT: portToInfo on Loading Port
           const info = portToInfo(raw);
           country = info.country; tradelane = info.tradelane;
         } else {
-          // Direct country name — reverse-lookup tradelane from TRADELANE_MAP by country name
+          // SEA EXPORT: Discharge Country direct lookup
           country = raw;
           const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
-          tradelane = entry ? entry.tradelane : raw; // fallback to country name if not found
+          tradelane = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
         }
-        if (country) srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
+        // Add directional prefix for Ocean — blank becomes Others
+        if (cfg.lob === "Ocean") {
+          tradelane = tradelane
+            ? (cfg.dir === "Export" ? "IN – " + tradelane : tradelane + " – IN")
+            : "Others";
+        }
+        if (country || cfg.lob === "Ocean") srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
       }
     } catch (e) { /* collection may not exist yet */ }
   }));
