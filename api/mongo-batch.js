@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v90-tradelane-map-fix";
+const DEPLOY_TS = "2026-08-12T-ocean-v91-tradelane-map-final";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1504,11 +1504,21 @@ const TRADELANE_MAP = {
 "TZ2":{"country":"Tanzania, United Republic of","tradelane":"Africa"},
 "CD2":{"country":"Congo, The Democratic Republic","tradelane":"Africa"},
 "BN":{"country":"Brunei Darussalam","tradelane":"Asia"},
+"IR":{"country":"Iran, Islamic Republic of","tradelane":"Middle East"},
+"CI2":{"country":"Côte d'Ivoire","tradelane":"Africa"},
+"RE":{"country":"Réunion","tradelane":"Africa"},
+"AG":{"country":"Antigua and Barbuda","tradelane":"LATAM"},
+"CW":{"country":"Curaçao","tradelane":"LATAM"},
 "AW":{"country":"Aruba","tradelane":"LATAM"},
 "CZ":{"country":"Czech Republic","tradelane":"Europe"},
 "CZ":{"country":"Czech Republic","tradelane":"Europe"},
 "AW":{"country":"Aruba","tradelane":"LATAM"},
 "BN":{"country":"Brunei Darussalam","tradelane":"Asia"},
+"IR":{"country":"Iran, Islamic Republic of","tradelane":"Middle East"},
+"CI2":{"country":"Côte d'Ivoire","tradelane":"Africa"},
+"RE":{"country":"Réunion","tradelane":"Africa"},
+"AG":{"country":"Antigua and Barbuda","tradelane":"LATAM"},
+"CW":{"country":"Curaçao","tradelane":"LATAM"},
   "HK":{"country":"Hong Kong","tradelane":"Asia"},
   "SK":{"country":"Slovakia","tradelane":"Others"},
   "IQ":{"country":"Iraq","tradelane":"Middle East"},
