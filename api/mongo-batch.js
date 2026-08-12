@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v107-tradelaneDrill-full-jpa";
+const DEPLOY_TS = "2026-08-12T-ocean-v108-tradelaneDrill-date-fix";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -3091,7 +3091,8 @@ module.exports = async function handler(req, res) {
       const srr = srrByNo[sno];
       if (!srr) continue;
       if (activeMonthSet) {
-        const rawDate = String(job[cfg.dateCol] || "").trim();
+        const _cls2 = { direction: cfg.dir === "Export" ? "EXPORT" : "IMPORT" };
+        const rawDate = getDateValueFor(job, _cls2);
         if (!rawDate) continue;
         const dObj = parseSheetDate(rawDate);
         if (!dObj) continue;
