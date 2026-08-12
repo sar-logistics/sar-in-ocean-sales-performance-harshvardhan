@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v98-full-direction-fix";
+const DEPLOY_TS = "2026-08-12T-ocean-v99-comprehensive-city-map";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1701,6 +1701,41 @@ const CITY_TRADELANE_MAP = {
   // Middle East
   "jeddah": "Middle East", "jebel ali": "Middle East",
   "caucedo": "LATAM",
+  // Europe (additional)
+  "trieste": "Med", "klaipeda": "Europe", "tallinn": "Europe",
+  "fos-sur-mer": "Med", "london gateway port": "Europe",
+  "london gateway": "Europe", "tilbury": "Europe",
+  "piraeus": "Med", "thessaloniki": "Med", "izmir": "Med",
+  "valencia": "Med", "tarragona": "Med", "bilbao": "Med",
+  "vigo": "Med", "algeciras": "Med", "seville": "Med",
+  "marseille": "Med", "le havre": "Europe", "dunkirk": "Europe",
+  "zeebrugge": "Europe", "ghent": "Europe", "gdansk": "Europe",
+  "riga": "Europe", "tallinn": "Europe", "helsinki": "Europe",
+  "stockholm": "Europe", "oslo": "Europe", "copenhagen": "Europe",
+  "aarhus": "Europe", "gothenburg": "Europe",
+  // Asia (additional)
+  "singapore": "Asia", "yokohama": "Asia", "kobe": "Asia",
+  "osaka": "Asia", "nagoya": "Asia", "tokyo": "Asia",
+  "busan": "Asia", "guangzhou": "Asia", "shenzhen": "Asia",
+  "ho chi minh city": "Asia", "hanoi": "Asia", "haiphong": "Asia",
+  "jakarta": "Asia", "surabaya": "Asia", "manila": "Asia",
+  "bangkok": "Asia", "laem chabang": "Asia", "port klang": "Asia",
+  "penang": "Asia", "colombo": "Indian Subcontinent",
+  // Oceania (additional)
+  "fremantle": "Oceania", "melbourne": "Oceania", "sydney": "Oceania",
+  "brisbane": "Oceania", "auckland": "Oceania", "suva": "Oceania",
+  // US (additional)
+  "port everglades": "US", "edmonton": "Canada",
+  // Middle East (additional)
+  "ain sukhna": "Middle East", "sokhna port": "Middle East",
+  "shuwaikh": "Middle East", "jeddah": "Middle East",
+  "dammam": "Middle East", "muscat": "Middle East",
+  // Africa (additional)
+  "mombasa": "Africa", "apapa": "Africa", "durban": "Africa",
+  "dar es salaam": "Africa", "beira": "Africa",
+  // LATAM (additional)
+  "veracruz": "LATAM", "manzanillo": "LATAM", "puerto cortes": "LATAM",
+  "mersin": "Med",
   // Middle East
   "basra": "Middle East",
   "erbil international apt": "Middle East", "erbil": "Middle East",
