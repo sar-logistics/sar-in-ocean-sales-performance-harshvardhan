@@ -7298,36 +7298,34 @@ function openInsightDrill(drillType, name, drillMonth) {
         }
       }
 
-      var _tlSeenSno = {};
-      var _tlRows = (allDrillRows||[]).filter(function(row){
-        // LOB filter
-        if (_tlLobFilter.length && _tlLobFilter.indexOf(row.lob) === -1) return false;
-        // Active months filter — always applied
-        if (!_tlActiveMonsSet[row._ml]) return false;
-        // Tradelane group filter: use _tg only — rows with empty _tg are excluded
-        // (shipmentNos fallback removed — was causing wrong inclusions from SRR mismatches)
-        if (name !== 'Grand Total') {
-          if (row._tg !== name) return false;
+      // Fetch from SRR server
+      var _tlDateFrom = state.dateFrom;
+      var _tlDateTo   = state.dateTo;
+      var _tlLobParam = state.tradelaneLob || 'Ocean';
+      var _tlUrl = '/api/mongo-batch?action=tradelaneDrill'
+        + '&tradelane=' + encodeURIComponent(name)
+        + '&dateFrom='  + encodeURIComponent(_tlDateFrom)
+        + '&dateTo='    + encodeURIComponent(_tlDateTo)
+        + '&lob='       + encodeURIComponent(_tlLobParam);
+      fetch(_tlUrl).then(function(r){ return r.json(); }).then(function(data){
+        if (!data.success) { state.drill.loading=false; state.drill.rows=[]; render(); return; }
+        var _tlRows = data.rows || [];
+        if (_tlEffReps) {
+          _tlRows = _tlRows.filter(function(r){
+            return _tlEffReps.indexOf(normalizeName(r.salesPerson||'')) > -1;
+          });
         }
-        // Rep/zone filter
-        if (_tlEffReps && _tlEffReps.indexOf(row._sp) === -1) return false;
-        // Deduplicate
-        if (_tlSeenSno[row.shipmentNo]) return false;
-        _tlSeenSno[row.shipmentNo] = true;
-        return true;
-      });
-
-      _tlRows.sort(function(a,b){ return (b._d||0)-(a._d||0); });
-      var _tlGP=0, _tlRev=0;
-      _tlRows.forEach(function(r){ _tlGP+=r.g||0; _tlRev+=r.r||0; });
-      var _tlResult = { entity:name, metric:'Shipments', col:'FY Total', valueFmt:null,
-        loading:false, rows:_tlRows, count:_tlRows.length,
-        totalMetric:_tlRows.length, totalGP:_tlGP, totalProvGP:0, totalActualGP:_tlGP,
-        totalRevenue:_tlRev, totalCost:_tlRev-_tlGP,
-        lobTab:'ALL', insightDrill:true, columnFilters:{}, openFilterCol:null, filterDraft:{} };
-      _insightDrillCache[_tlCacheKey] = _tlResult;
-      state.drill = _tlResult;
-      render();
+        var _tlGP=0, _tlRev=0;
+        _tlRows.forEach(function(r){ _tlGP+=r.gp||0; _tlRev+=r.revenue||0; });
+        var _tlResult = { entity:name, metric:'Shipments', col:'FY Total', valueFmt:null,
+          loading:false, rows:_tlRows, count:_tlRows.length,
+          totalMetric:_tlRows.length, totalGP:_tlGP, totalProvGP:0, totalActualGP:_tlGP,
+          totalRevenue:_tlRev, totalCost:_tlRev-_tlGP,
+          lobTab:'ALL', insightDrill:true, columnFilters:{}, openFilterCol:null, filterDraft:{}, isTlDrill:true };
+        _insightDrillCache[_tlCacheKey] = _tlResult;
+        state.drill = _tlResult;
+        render();
+      }).catch(function(){ state.drill.loading=false; state.drill.rows=[]; render(); });
     });
     return;
   }
