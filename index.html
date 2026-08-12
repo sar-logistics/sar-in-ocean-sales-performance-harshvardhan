@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v156';
+var CACHE_VERSION = 'ocean-v157';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -3910,9 +3910,8 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     });
   }
 
-  // Override per-country shipment counts from allDrillRows using _tg (tradelane group)
-  // This ensures country rows match the drill (deduped) rather than SRR aggregate (raw)
-  if (allDrillRows && allDrillRows.length > 0) {
+  // Tradelane shipment counts come from SRR aggregate directly — no allDrillRows override
+  if (false && allDrillRows && allDrillRows.length > 0) {
     var _tgActiveMonsSet = {};
     activeMons.forEach(function(m){ _tgActiveMonsSet[m] = true; });
     var _tgFyMonsSet = {};
