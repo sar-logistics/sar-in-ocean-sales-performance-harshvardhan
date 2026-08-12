@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v113-ungrouped-tradelane-fix";
+const DEPLOY_TS = "2026-08-12T-ocean-v114-tradelaneDrill-srr-primary";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -3075,7 +3075,7 @@ module.exports = async function handler(req, res) {
 
   const rows = [];
   for (const cfg of cfgs) {
-    // Step 1: Get SRR rows and build tradelane map
+    // Step 1: Get all SRR rows and compute tradelane
     const srrRows = await db.collection(cfg.srrColl).find({}).toArray();
     const srrByNo = {};
     for (const r of srrRows) {
@@ -3091,6 +3091,20 @@ module.exports = async function handler(req, res) {
         const tlBase = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
         tlName = tlBase ? "IN \u2013 " + tlBase : "Others";
       }
+      // Date filter using SRR date fields
+      if (activeMonthSet) {
+        const rawDate = cfg.fromPort
+          ? (r["ETD Loading Port"] || r["Job Date"] || "")
+          : (r["ETD Loading Port"] || r["Job Date"] || "");
+        if (rawDate) {
+          const dObj = parseSheetDate(rawDate);
+          if (dObj) {
+            const ml = MONTH_NAMES[dObj.getMonth()] + "-" + String(dObj.getFullYear()).slice(2);
+            if (!activeMonthSet.has(ml)) continue;
+          }
+        }
+      }
+      if (tl !== "Grand Total" && tlName !== tl) continue;
       srrByNo[sno] = {
         tradelane: tlName,
         dischargeCountry: cfg.fromPort ? "" : raw,
@@ -3098,22 +3112,38 @@ module.exports = async function handler(req, res) {
       };
     }
 
-    // Step 2: Filter SRR by requested tradelane
-    const matchingSNos = Object.entries(srrByNo)
-      .filter(([,v]) => tl === "Grand Total" || v.tradelane === tl)
-      .map(([k]) => k);
-    if (!matchingSNos.length) continue;
+    if (!Object.keys(srrByNo).length) continue;
 
-    // Step 3: Fetch JPA jobs for those shipment numbers only
+    // Step 2: Fetch JPA jobs for those shipment numbers
+    const matchingSNos = Object.keys(srrByNo);
     const jobs = await db.collection(cfg.jobColl)
       .find({"Shipment No": {$in: matchingSNos}}).toArray();
 
+    // Build JPA lookup map
+    const jpaByNo = {};
     for (const job of jobs) {
       const sno = String(job["Shipment No"] || "").trim();
-      const srr = srrByNo[sno];
-      if (!srr) continue;
+      if (sno) jpaByNo[sno] = job;
+    }
 
-      // Step 4: Date filter using ETD/ETA same as main aggregate
+    // Step 3: For each SRR shipment, look up JPA
+    for (const [sno, srr] of Object.entries(srrByNo)) {
+      const job = jpaByNo[sno];
+
+      if (!job) {
+        // Not found in JPA — show dash row
+        rows.push({
+          shipmentNo: sno,
+          lob: cfg.dir === "Export" ? "SEA EXPORT" : "SEA IMPORT",
+          tradelane: srr.tradelane,
+          dischargeCountry: srr.dischargeCountry,
+          loadingPort: srr.srrLoadingPort,
+          _notInJpa: true,
+        });
+        continue;
+      }
+
+      // Date filter using JPA ETD/ETA
       if (activeMonthSet) {
         const _cls2 = { direction: cfg.dir === "Export" ? "EXPORT" : "IMPORT" };
         const rawDate = getDateValueFor(job, _cls2);
@@ -3125,12 +3155,9 @@ module.exports = async function handler(req, res) {
         job._primaryDate = dObj;
       }
 
-      // Step 5: Apply lock-based GP and Revenue from JPA
       const cls = { kind:"SEA", direction: cfg.dir === "Export" ? "EXPORT" : "IMPORT" };
       const { gp } = pickGP(job, cls);
-      const isLocked = cfg.dir === "Export"
-        ? !!(job["Job Rev Recognition Date"] || "").trim()
-        : !!(job["Financial Lock"] || "").trim();
+      const isLocked = !!(String(job["Job Rev Recognition Date"] || "").trim());
       const provRev = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
       const billRev = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
       const rev = isLocked ? billRev : provRev;
