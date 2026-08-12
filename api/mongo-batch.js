@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v94-comprehensive-ports";
+const DEPLOY_TS = "2026-08-12T-ocean-v95-directional-tg";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -586,21 +586,24 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         } else if (cls.kind === "SEA") {
           if (cls.direction === "EXPORT") {
             const _dc = String(job["Discharge Country"] || job["Consignee Country"] || "").trim();
-            _tg = countryNameToTradelane(_dc) || _dc;
-            if (!_tg) {
+            let _tgBase = countryNameToTradelane(_dc) || _dc;
+            if (!_tgBase) {
               const _dp = String(job["Discharge Port"] || "").trim();
-              _tg = portToInfo(_dp).tradelane || cityToTradelane(_dp);
+              _tgBase = portToInfo(_dp).tradelane || cityToTradelane(_dp);
             }
+            _tg = _tgBase ? "IN – " + _tgBase : "Others";
           } else {
             const _portVal = String(job["Loading Port"] || "").trim();
-            _tg = portToInfo(_portVal).tradelane;
-            if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
+            let _tgBase = portToInfo(_portVal).tradelane;
+            if (!_tgBase && _portVal) _tgBase = cityToTradelane(_portVal);
+            _tg = _tgBase ? _tgBase + " – IN" : "Others";
           }
         } else if (cls.kind === "ISOTANK") {
           const _raw = cls.direction === "EXPORT"
             ? (String(job["Consignee Country"] || job["Destination Country"] || "").trim())
             : (String(job["Shipper Country"]   || job["Origin Port Country"] || "").trim());
-          _tg = countryNameToTradelane(_raw) || _raw;
+          const _tgBase2 = countryNameToTradelane(_raw) || _raw;
+          _tg = _tgBase2 ? (cls.direction === "EXPORT" ? "IN – " + _tgBase2 : _tgBase2 + " – IN") : "Others";
         }
 
         allRows.push({
