@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v101-others-fix";
+const DEPLOY_TS = "2026-08-12T-ocean-v102-import-ports";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1761,6 +1761,13 @@ const CITY_TRADELANE_MAP = {
   "kolkata": "Indian Subcontinent", "cochin": "Indian Subcontinent",
   "port jawaharlal nehru": "Indian Subcontinent",
   "jawaharlal nehru port": "Indian Subcontinent",
+  // Additional loading ports for SEA IMPORT
+  "koper": "Europe",  // Slovenia
+  "dalian": "Asia",   // China
+  "izmit": "Med",     // Turkey
+  "nansha": "Asia",   // China
+  "port newark": "US",
+  "freeport, grand bahama": "LATAM",
   // Middle East
   "basra": "Middle East",
   "erbil international apt": "Middle East", "erbil": "Middle East",
