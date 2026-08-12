@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v153';
+var CACHE_VERSION = 'ocean-v154';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -7377,9 +7377,13 @@ function openInsightDrill(drillType, name, drillMonth) {
         ? (row.destAgent || '').toLowerCase() === nameLower
         : (row.originAgent || '').toLowerCase() === nameLower;
     } else if (drillType === 'tradelane') {
-      // Tradelane groups (US, Europe etc) can't be matched client-side
-      // without SRR data — server handles this via getDrillRows
-      match = false;
+      // Match _tg field directly
+      if (row._tg) {
+        match = row._tg.toLowerCase() === nameLower;
+      } else {
+        // Fallback for null _tg — use CITY_TRADELANE_MAP client-side
+        match = false;
+      }
     }
     if (!match) continue;
     matched.push(row);
