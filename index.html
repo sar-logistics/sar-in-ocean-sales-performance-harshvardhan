@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v152';
+var CACHE_VERSION = 'ocean-v153';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -6079,7 +6079,10 @@ function drawer(){
       { k:'customer', l:'Customer', t:'text', truncate:140 },
       { k:'ataDischarge', l:'ATA Discharge', t:'date' },
       { k:'atdLoading', l:'ATD Loading Port', t:'date' },
-      { k:'location', l:'Location', t:'text' },
+      { k:'loadingPort', l:'Loading Port', t:'text', truncate:130 },
+  { k:'dischargePort', l:'Discharge Port', t:'text', truncate:130 },
+  { k:'_tg', l:'Tradelane', t:'text', truncate:130 },
+  { k:'location', l:'Location', t:'text' },
       { k:'consignee', l:'Consignee', t:'text', truncate:140 },
       { k:'consolType', l:'Consol Type', t:'text' },
       { k:'teu', l:'Container TEU', t:'num' },
