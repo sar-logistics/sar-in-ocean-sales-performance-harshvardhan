@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v92-srr-fallback";
+const DEPLOY_TS = "2026-08-12T-ocean-v93-sea-export-port-fallback";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -585,7 +585,12 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
         } else if (cls.kind === "SEA") {
           if (cls.direction === "EXPORT") {
-            _tg = countryNameToTradelane(job["Discharge Country"] || "") || (job["Discharge Country"] || "");
+            const _dc = String(job["Discharge Country"] || job["Consignee Country"] || "").trim();
+            _tg = countryNameToTradelane(_dc) || _dc;
+            if (!_tg) {
+              const _dp = String(job["Discharge Port"] || "").trim();
+              _tg = portToInfo(_dp).tradelane || cityToTradelane(_dp);
+            }
           } else {
             const _portVal = String(job["Loading Port"] || "").trim();
             _tg = portToInfo(_portVal).tradelane;
