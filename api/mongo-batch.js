@@ -1682,6 +1682,7 @@ const CITY_TRADELANE_MAP = {
   // Oceania / Indian Ocean islands
   "mahe island apt": "Others", "mahe": "Others",  // Seychelles
   "male": "Indian Subcontinent",  // Maldives
+  "muara": "Asia",  // Brunei Darussalam
   "malta": "Med",
   "port louis": "Africa",  // Mauritius → Africa
   "sir seewoosagur ramgoolam int apt": "Africa",  // Mauritius
