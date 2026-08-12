@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v109-tradelaneDrill-date-fix2";
+const DEPLOY_TS = "2026-08-12T-ocean-v110-tradelaneDrill-all-jobs";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -3080,16 +3080,36 @@ module.exports = async function handler(req, res) {
       srrByNo[sno] = { tradelane:tlName, dischargeCountry:cfg.fromPort?"":raw, srrLoadingPort:cfg.fromPort?raw:"" };
     }
 
-    const matchingSNos = Object.entries(srrByNo)
+    const matchingSNos = new Set(Object.entries(srrByNo)
       .filter(([,v]) => tl === "Grand Total" || v.tradelane === tl)
-      .map(([k]) => k);
-    if (!matchingSNos.length) continue;
+      .map(([k]) => k));
 
-    const jobs = await db.collection(cfg.jobColl).find({"Shipment No":{$in:matchingSNos}}).toArray();
+    // Fetch ALL jobs in date range, not just SRR-matched ones
+    const jobs = await db.collection(cfg.jobColl).find({}).toArray();
     for (const job of jobs) {
       const sno = String(job["Shipment No"] || "").trim();
-      const srr = srrByNo[sno];
-      if (!srr) continue;
+      // Get tradelane from SRR if available, otherwise compute from job fields
+      let srr = srrByNo[sno];
+      if (!srr) {
+        // Compute tradelane from job fields
+        let tlBase = "";
+        if (cfg.dir === "Export") {
+          const dc = String(job["Discharge Country"] || job["Consignee Country"] || "").trim();
+          tlBase = countryNameToTradelane(dc) || dc;
+          const computedTl = tlBase ? "IN \u2013 " + tlBase : "Others";
+          if (tl !== "Grand Total" && computedTl !== tl) continue;
+          srr = { tradelane: computedTl, dischargeCountry: dc, srrLoadingPort: "" };
+        } else {
+          const lp = String(job["Loading Port"] || "").trim();
+          const info = portToInfo(lp);
+          tlBase = info.tradelane || cityToTradelane(lp);
+          const computedTl = tlBase ? tlBase + " \u2013 IN" : "Others";
+          if (tl !== "Grand Total" && computedTl !== tl) continue;
+          srr = { tradelane: computedTl, dischargeCountry: "", srrLoadingPort: lp };
+        }
+      } else if (tl !== "Grand Total" && !matchingSNos.has(sno)) {
+        continue;
+      }
       if (activeMonthSet) {
         const _cls2 = { direction: cfg.dir === "Export" ? "EXPORT" : "IMPORT" };
         const rawDate = getDateValueFor(job, _cls2);
