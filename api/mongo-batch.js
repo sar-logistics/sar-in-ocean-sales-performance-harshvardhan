@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v91-tradelane-map-final";
+const DEPLOY_TS = "2026-08-12T-ocean-v92-srr-fallback";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1792,7 +1792,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
           // Direct country name — reverse-lookup tradelane from TRADELANE_MAP by country name
           country = raw;
           const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
-          tradelane = entry ? entry.tradelane : raw; // fallback to country name if not found
+          tradelane = entry ? entry.tradelane : (countryNameToTradelane(raw) || raw); // fallback
         }
         if (country) srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
       }
