@@ -6099,7 +6099,17 @@ function drawer(){
       { k:'financialLock', l:'Financial Lock', t:'text' },
     ];
 
-    function cellVal(c, s){ return c.derived ? c.derived(s) : s[c.k]; }
+    // Extra columns for tradelane drill only
+  var _activeDrillCols = drillCols;
+  if (d.isTlDrill) {
+    _activeDrillCols = [
+      { k:'tradelane', l:'Tradelane', t:'text', truncate:130 },
+      { k:'dischargeCountry', l:'Discharge Country', t:'text', truncate:130 },
+      { k:'loadingPort', l:'Loading Port', t:'text', truncate:130 },
+      { k:'dischargePort', l:'Discharge Port', t:'text', truncate:130 },
+    ].concat(drillCols);
+  }
+  function cellVal(c, s){ return c.derived ? c.derived(s) : s[c.k]; }
 
     // ── LOB tabs — computed from whatever LOB values actually appear ──
     var lobCounts = {};
