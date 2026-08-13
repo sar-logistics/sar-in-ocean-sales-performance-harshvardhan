@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-13T-ocean-v141-country-name-fix-1786615871";
+const DEPLOY_TS = "2026-08-13T-ocean-v142-tg-directional-1786616004";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -584,18 +584,25 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           // Fallback: try city name lookup when ISO2 code not found
           if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
         } else if (cls.kind === "SEA") {
-          if (cls.direction === "EXPORT") {
-            _tg = countryNameToTradelane(job["Discharge Country"] || "") || (job["Discharge Country"] || "");
+          // Use srrTgCache first for most accurate tradelane
+          const _snoKey = String(job["Shipment No"] || "").trim();
+          if (srrTgCache && srrTgCache[_snoKey]) {
+            _tg = srrTgCache[_snoKey];
+          } else if (cls.direction === "EXPORT") {
+            const _dc = String(job["Discharge Country"] || "").trim();
+            const _tlBase = countryNameToTradelane(_dc) || _dc;
+            _tg = _tlBase ? "IN – " + _tlBase : "Others";
           } else {
             const _portVal = String(job["Loading Port"] || "").trim();
-            _tg = portToInfo(_portVal).tradelane;
-            if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
+            const _tlBase = portToInfo(_portVal).tradelane || cityToTradelane(_portVal);
+            _tg = _tlBase ? _tlBase + " – IN" : "Others";
           }
         } else if (cls.kind === "ISOTANK") {
           const _raw = cls.direction === "EXPORT"
             ? (String(job["Consignee Country"] || job["Destination Country"] || "").trim())
             : (String(job["Shipper Country"]   || job["Origin Port Country"] || "").trim());
-          _tg = countryNameToTradelane(_raw) || _raw;
+          const _tlBase2 = countryNameToTradelane(_raw) || _raw;
+          _tg = _tlBase2 ? (cls.direction === "EXPORT" ? "IN – " + _tlBase2 : _tlBase2 + " – IN") : "Others";
         }
 
         allRows.push({
