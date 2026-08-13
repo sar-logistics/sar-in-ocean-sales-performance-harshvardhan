@@ -1865,23 +1865,9 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       } else if (cfg.lob === "Air") {
         // Air: skip if not in SRR
         continue;
-      } else if (cfg.dir === "Export") {
-        // Export fallback: Consignee Country
-        const rawCountry = String(job["Consignee Country"] || job["Destination Country"] || "").trim();
-        if (!rawCountry || rawCountry.toLowerCase() === "india") {
-          tradelane = "Others"; country = "Others";
-        } else {
-          country = rawCountry;
-          const _tlBase = countryNameToTradelane(rawCountry) || rawCountry;
-          tradelane = "IN \u2013 " + _tlBase;
-        }
       } else {
-        // Import fallback: Loading Port via portToInfo
-        const lp = String(job["Loading Port"] || "").trim();
-        const info = portToInfo(lp);
-        const _tlBase = info.tradelane || cityToTradelane(lp);
-        tradelane = _tlBase ? _tlBase + " \u2013 IN" : "Others";
-        country = _tlBase || "Others";
+        // Not in SRR → Others (no fallback)
+        tradelane = "Others"; country = "Others";
       }
       if (!tradelane) continue;
 
