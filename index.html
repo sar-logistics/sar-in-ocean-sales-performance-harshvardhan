@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v162';
+var CACHE_VERSION = 'ocean-v163';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -6075,6 +6075,11 @@ function drawer(){
       { k:'unpostedCost', l:'Unposted Cost (H=E-G)', t:'cur' },
       { k:'provisionalProfit', l:'Provisional Profit (I=A-E)', t:'cur', signed:true },
       { k:'actualProfit', l:'Actual Profit (J=C-G)', t:'cur', signed:true },
+      { k:'effectiveRev', l:'Effective Revenue', t:'cur', color:'#2563EB', derived:function(s){
+          var isAir = s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT';
+          var locked = isAir ? !!s.financialLock : !!s.operationLock;
+          return locked ? (s.billedRevenue||0) : (s.provRevenue||0);
+        } },
       { k:'customer', l:'Customer', t:'text', truncate:140 },
       { k:'ataDischarge', l:'ATA Discharge', t:'date' },
       { k:'atdLoading', l:'ATD Loading Port', t:'date' },
