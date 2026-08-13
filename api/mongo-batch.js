@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-13T-ocean-v134-lock-revenue-fixed";
+const DEPLOY_TS = "2026-08-13T-ocean-v135-force-redeploy-1786611084";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
