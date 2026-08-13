@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v119-projection-job-rev-recog2";
+const DEPLOY_TS = "2026-07-30T-ocean-v76-drill-on-demand";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -584,25 +584,18 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           // Fallback: try city name lookup when ISO2 code not found
           if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
         } else if (cls.kind === "SEA") {
-          // Use srrTgCache first (SRR is most accurate)
-          const _sno3 = String(job["Shipment No"] || "").trim();
-          if (srrTgCache && srrTgCache[_sno3]) {
-            _tg = srrTgCache[_sno3];
-          } else if (cls.direction === "EXPORT") {
-            const _dc = String(job["Discharge Country"] || job["Consignee Country"] || "").trim();
-            const _tgBase = countryNameToTradelane(_dc) || _dc;
-            _tg = _tgBase ? "IN – " + _tgBase : "Others";
+          if (cls.direction === "EXPORT") {
+            _tg = countryNameToTradelane(job["Discharge Country"] || "") || (job["Discharge Country"] || "");
           } else {
             const _portVal = String(job["Loading Port"] || "").trim();
-            const _tgBase = portToInfo(_portVal).tradelane;
-            _tg = _tgBase ? _tgBase + " – IN" : "Others";
+            _tg = portToInfo(_portVal).tradelane;
+            if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
           }
         } else if (cls.kind === "ISOTANK") {
           const _raw = cls.direction === "EXPORT"
             ? (String(job["Consignee Country"] || job["Destination Country"] || "").trim())
             : (String(job["Shipper Country"]   || job["Origin Port Country"] || "").trim());
-          const _tgBaseI = countryNameToTradelane(_raw) || _raw;
-          _tg = _tgBaseI ? (cls.direction === "EXPORT" ? "IN – " + _tgBaseI : _tgBaseI + " – IN") : "Others";
+          _tg = countryNameToTradelane(_raw) || _raw;
         }
 
         allRows.push({
@@ -1252,7 +1245,7 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
     "Customer": 1, "Billed Revenue (C)": 1,
     "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
     "Sales Person": 1,
-    "Financial Lock": 1, "Operation Lock": 1, "Job Rev Recognition Date": 1,
+    "Financial Lock": 1, "Operation Lock": 1,
     "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1, "Volume": 1, "Volume Unit": 1,
     "ETD Loading Port": 1, "ETD First Leg of Origin": 1, "ETA Discharge": 1, "ETA Last Leg of Destination": 1, "Job Date": 1,
@@ -1404,7 +1397,6 @@ const agentCacheMap = {}; // key → { data, time }
 
 // ─── Tradelane Insights ───────────────────────────────────────────────────────
 const tradelaneCacheMap = {}; // key → { data, time }
-let srrTgCache = null; // shipmentNo → directional tradelane built from SRR
 
 // ── Port code → Country + Tradelane lookup (from "Tradelane Mapping" sheet) ──
 // iso2 → { country, tradelane }
@@ -1437,7 +1429,7 @@ const TRADELANE_MAP = {
   "CN":{"country":"China","tradelane":"Asia"},
   "HN":{"country":"Honduras","tradelane":"LATAM"},
   "PE":{"country":"Peru","tradelane":"LATAM"},
-  "DO":{"country":"Dominican Republic","tradelane":"LATAM"},
+  "DO":{"country":"Dominican Republic","tradelane":"Dominican Republic"},
   "PK":{"country":"Pakistan","tradelane":"Asia"},
   "KE":{"country":"Kenya","tradelane":"Africa"},
   "MR":{"country":"Mauritania","tradelane":"Africa"},
@@ -1508,12 +1500,6 @@ const TRADELANE_MAP = {
   "TG":{"country":"Togo","tradelane":"Africa"},
   "CR":{"country":"Costa Rica","tradelane":"LATAM"},
   "ZM":{"country":"Zambia","tradelane":"Africa"},
-"AW":{"country":"Aruba","tradelane":"LATAM"},
-"KR2":{"country":"Korea, Republic of","tradelane":"Asia"},
-"TZ2":{"country":"Tanzania, United Republic of","tradelane":"Africa"},
-"CD2":{"country":"Congo, The Democratic Republic","tradelane":"Africa"},
-"CZ2":{"country":"Czech Republic","tradelane":"Europe"},
-"BN2":{"country":"Brunei Darussalam","tradelane":"Asia"},
   "HK":{"country":"Hong Kong","tradelane":"Asia"},
   "SK":{"country":"Slovakia","tradelane":"Others"},
   "IQ":{"country":"Iraq","tradelane":"Middle East"},
@@ -1723,14 +1709,7 @@ Object.values(TRADELANE_MAP).forEach(function(e) {
 });
 function countryNameToTradelane(name) {
   if (!name) return "";
-  const _extra = {
-    "korea, republic of": "Asia", "tanzania, united republic of": "Africa",
-    "congo, the democratic republic": "Africa", "brunei darussalam": "Asia",
-    "aruba": "LATAM", "czech republic": "Europe", "dominican republic": "LATAM",
-    "hong kong": "Asia", "viet nam": "Asia", "macao": "Asia",
-    "iran, islamic republic of": "Middle East",
-  };
-  return _countryToTradelane[String(name).toLowerCase().trim()] || _extra[String(name).toLowerCase().trim()] || "";
+  return _countryToTradelane[String(name).toLowerCase().trim()] || "";
 }
 
 async function getTradelaneAggregate(db, force, dateFrom, dateTo, cacheKey) {
@@ -1781,31 +1760,18 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         const raw = String(r[cfg.countryField] || "").trim();
         let country = "", tradelane = "";
         if (cfg.fromPort) {
-          // SEA IMPORT: portToInfo on Loading Port
           const info = portToInfo(raw);
           country = info.country; tradelane = info.tradelane;
         } else {
-          // SEA EXPORT: Discharge Country direct lookup
+          // Direct country name — reverse-lookup tradelane from TRADELANE_MAP by country name
           country = raw;
           const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
-          tradelane = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
+          tradelane = entry ? entry.tradelane : raw; // fallback to country name if not found
         }
-        // Add directional prefix for Ocean — blank becomes Others
-        if (cfg.lob === "Ocean") {
-          tradelane = tradelane
-            ? (cfg.dir === "Export" ? "IN – " + tradelane : tradelane + " – IN")
-            : "Others";
-        }
-        if (country || cfg.lob === "Ocean") srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
+        if (country) srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
       }
     } catch (e) { /* collection may not exist yet */ }
   }));
-
-  // ── Build srrTgCache for drill row _tg lookup ──────────────────────────────
-  srrTgCache = {};
-  for (const [sno, entry] of Object.entries(srrMap)) {
-    if (entry.tradelane) srrTgCache[sno] = entry.tradelane;
-  }
 
   // ── Step 2: Scan job collections, join with SRR map ──────────────────────────
   const JOB_COLL_MAP = [
@@ -1820,7 +1786,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
   const projection = {
     "Shipment No": 1, "Billed Revenue (C)": 1,
     "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
-    "Financial Lock": 1, "Operation Lock": 1, "Job Rev Recognition Date": 1,
+    "Financial Lock": 1, "Operation Lock": 1,
     "Sales Person": 1, "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1, "Volume": 1, "Volume Unit": 1, "Cargo Type": 1,
     "ETD Loading Port": 1, "ETD First Leg of Origin": 1, "ETA Discharge": 1, "ETA Last Leg of Destination": 1, "Job Date": 1,
@@ -1876,11 +1842,14 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
           : (String(job["Shipper Country"]   || job["Origin Port Country"] || "").trim());
 
         if (!rawCountry || rawCountry.toLowerCase() === "india") {
-          tradelane = "Others"; country = "Others";
+          // Try Trade Lane field as last resort
+          const tl = String(job["Trade Lane"] || "").trim();
+          if (!tl) continue;
+          tradelane = tl;
+          country   = tl;
         } else {
           country   = rawCountry;
-          const _tlBase = countryNameToTradelane(rawCountry) || rawCountry;
-          tradelane = cfg.dir === "Export" ? "IN – " + _tlBase : _tlBase + " – IN";
+          tradelane = countryNameToTradelane(rawCountry) || rawCountry;
         }
       }
       if (!tradelane) continue;
@@ -2059,7 +2028,7 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
     "Destination Agent": 1, "Origin Agent": 1,
     "Billed Revenue (C)": 1,
     "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
-    "Financial Lock": 1, "Operation Lock": 1, "Job Rev Recognition Date": 1,
+    "Financial Lock": 1, "Operation Lock": 1,
     "Sales Person": 1,
     "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1,
@@ -2549,7 +2518,7 @@ module.exports = async function handler(req, res) {
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "tradelaneDrill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -3052,153 +3021,7 @@ module.exports = async function handler(req, res) {
       return res.json({ success: true, deleted: result.deletedCount, collection: collName, fy });
     }
 
-    if (action === "tradelaneDrill") {
-  const tl       = req.query.tradelane || "";
-  const dateFrom = req.query.dateFrom  || "";
-  const dateTo   = req.query.dateTo    || "";
-  const lob      = req.query.lob       || "Ocean";
-
-  const FY_MONTHS = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
-    "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
-    "Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26",
-    "Oct-26","Nov-26","Dec-26","Jan-27","Feb-27","Mar-27"];
-  let activeMonthSet = null;
-  if (dateFrom && dateTo) {
-    const fi = FY_MONTHS.indexOf(dateFrom), ti = FY_MONTHS.indexOf(dateTo);
-    if (fi >= 0 && ti >= 0) activeMonthSet = new Set(FY_MONTHS.slice(fi, ti + 1));
-  }
-
-  const cfgs = lob === "Ocean" ? [
-    { srrColl:"srr_sea_export", jobColl:"jobs_sea_export", dir:"Export" },
-    { srrColl:"srr_sea_import", jobColl:"jobs_sea_import", dir:"Import" },
-  ] : [];
-
-  const rows = [];
-  for (const cfg of cfgs) {
-    // Build SRR lookup for extra fields + tradelane (most accurate)
-    const srrRows = await db.collection(cfg.srrColl).find({}).toArray();
-    const srrByNo = {};
-    for (const r of srrRows) {
-      const sno = String(r["Shipment No"] || "").trim();
-      if (!sno) continue;
-      const raw = cfg.dir === "Export"
-        ? String(r["Discharge Country"] || "").trim()
-        : String(r["Loading Port"] || "").trim();
-      let tlName = "";
-      if (cfg.dir === "Import") {
-        const info = portToInfo(raw);
-        tlName = info.tradelane ? info.tradelane + " \u2013 IN" : "";
-      } else {
-        const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
-        const tlBase = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
-        tlName = tlBase ? "IN \u2013 " + tlBase : "";
-      }
-      srrByNo[sno] = {
-        tradelane: tlName,
-        dischargeCountry: cfg.dir === "Export" ? raw : "",
-        srrLoadingPort:   cfg.dir === "Import" ? raw : "",
-      };
-    }
-
-    const cls = { kind:"SEA", direction: cfg.dir === "Export" ? "EXPORT" : "IMPORT" };
-    const jobs = await db.collection(cfg.jobColl).find({}).toArray();
-
-    for (const job of jobs) {
-      const sno = String(job["Shipment No"] || "").trim();
-      const srrEntry = srrByNo[sno];
-
-      // Compute tradelane — EXACT same logic as SRR aggregate Step 2
-      let tradelane = "";
-      if (srrEntry && srrEntry.tradelane) {
-        tradelane = srrEntry.tradelane;
-      } else {
-        const rawCountry = cfg.dir === "Export"
-          ? String(job["Consignee Country"] || job["Destination Country"] || "").trim()
-          : String(job["Shipper Country"]   || job["Origin Port Country"] || "").trim();
-        if (!rawCountry || rawCountry.toLowerCase() === "india") {
-          tradelane = "Others";
-        } else {
-          const _tlBase = countryNameToTradelane(rawCountry) || rawCountry;
-          tradelane = cfg.dir === "Export" ? "IN \u2013 " + _tlBase : _tlBase + " \u2013 IN";
-        }
-      }
-
-      if (tl !== "Grand Total" && tradelane !== tl) continue;
-
-      // Date filter — same as SRR aggregate
-      if (activeMonthSet) {
-        const _tCls = { direction: cfg.dir === "Export" ? "EXPORT" : "IMPORT" };
-        const rawDate = getDateValueFor(job, _tCls);
-        if (!rawDate) continue;
-        const dObj = parseSheetDate(rawDate);
-        if (!dObj || isNaN(dObj.getTime())) continue;
-        const ml = MONTH_NAMES[dObj.getMonth()] + "-" + String(dObj.getFullYear()).slice(2);
-        if (!activeMonthSet.has(ml)) continue;
-        job._primaryDate = dObj;
-      }
-
-      // GP/Revenue — same as SRR aggregate: Billed Revenue + pickGP
-      const { gp } = pickGP(job, cls);
-      const provRev = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
-      const billRev = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
-      const rev = billRev; // SRR aggregate always uses Billed Revenue
-      const provCost = parseFloat(job["Provisional Cost (E)"] || 0) || 0;
-      const postCost = parseFloat(job["Posted Cost (G)"] || 0) || 0;
-
-      rows.push({
-        shipmentNo:          sno,
-        lob:                 cfg.dir === "Export" ? "SEA EXPORT" : "SEA IMPORT",
-        tradelane:           tradelane,
-        dischargeCountry:    srrEntry ? srrEntry.dischargeCountry : "",
-        loadingPort:         srrEntry ? srrEntry.srrLoadingPort : (job["Loading Port"] || ""),
-        dischargePort:       job["Discharge Port"] || "",
-        jobDate:             (job._primaryDate || parseSheetDate(getDateValueFor(job, cls) || job["Job Date"]||"") || new Date(0)).toISOString(),
-        masterNo:            job["Master No."] || "",
-        houseNo:             job["House No."] || "",
-        consolNo:            job["Consol No."] || "",
-        cargoType:           job["Cargo Type"] || "",
-        carrier:             job["Carrier"] || "",
-        customer:            job["Customer"] || "",
-        consignee:           job["Consignee"] || "",
-        shipper:             job["Shipper"] || "",
-        consolType:          job["Consol Type"] || "",
-        teu:                 parseFloat(job["Container TEU"] || 0) || 0,
-        destAgent:           job["Destination Agent"] || "",
-        originAgent:         job["Origin Agent"] || "",
-        etaDischarge:        job["ETA Discharge"] || "",
-        etdLoading:          job["ETD Loading Port"] || "",
-        ataDischarge:        job["ATA Discharge"] || "",
-        atdLoading:          job["ATD Loading Port"] || "",
-        jobRevRecogDate:     job["Job Rev Recognition Date"] || "",
-        provRevenue:         provRev,
-        billedRevenue:       billRev,
-        unbilledRevenue:     provRev - billRev,
-        provCost:            provCost,
-        postedCost:          postCost,
-        unpostedCost:        provCost - postCost,
-        provisionalProfit:   provRev - provCost,
-        actualProfit:        billRev - postCost,
-        g:                   gp,
-        r:                   rev,
-        gp:                  gp,
-        revenue:             rev,
-        salesPerson:         job["Sales Person"] || "",
-        jobOwner:            job["Job Owner"] || "",
-        location:            job["Location"] || "",
-        operationLock:       job["Operation Lock"] || "",
-        financialLock:       job["Financial Lock"] || "",
-        volume:              parseFloat(job["Volume"] || 0) || 0,
-        volumeUnit:          job["Volume Unit"] || "",
-        chargeableWeight:    parseFloat(job["Chargeable Weight"] || 0) || 0,
-        chargeableWeightUnit:job["Chargeable Weight Unit"] || "",
-        tons:                parseFloat(job["Calculated Tons"] || 0) || 0,
-      });
-    }
-  }
-  return res.status(200).json({ success:true, count:rows.length, rows });
-}
-
-if (action === "wipeCollection") {
+    if (action === "wipeCollection") {
       // Wipe an entire job or SRR collection so Apps Script can re-push clean data
       const collName = (req.body && req.body.collection) || req.query.collection;
       if (!collName) return res.status(400).json({ error: "collection required" });
