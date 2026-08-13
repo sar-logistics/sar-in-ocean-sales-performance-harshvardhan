@@ -6069,6 +6069,11 @@ function drawer(){
         } },
       { k:'provRevenue', l:'Provisional Revenue (A)', t:'cur' },
       { k:'billedRevenue', l:'Billed Revenue (C)', t:'cur', color:'#2563EB' },
+  { k:'effectiveRevenue', l:'Effective Revenue', t:'cur', color:'#2563EB', derived:function(s){
+    var isAir = s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT';
+    var locked = isAir ? !!s.financialLock : !!s.operationLock;
+    return locked ? (s.billedRevenue||0) : (s.provRevenue||0);
+  } },
       { k:'unbilledRevenue', l:'Unbilled Revenue (D=A-C)', t:'cur' },
       { k:'provCost', l:'Provisional Cost (E)', t:'cur' },
       { k:'postedCost', l:'Posted Cost (G)', t:'cur', color:'#DC2626' },
