@@ -1350,9 +1350,9 @@ function prefetchAgentRanges() {
 }
 
 // ── Tradelane Insights fetch ──────────────────────────────────────────────────
-var _tradelaneCache = {};
-// Clear stale tradelane cache on load
+// Clear stale tradelane cache synchronously before anything else
 (function(){ var v = 'ocean-v156'; if (localStorage.getItem('sar_tl_cache_ver') !== v) { Object.keys(localStorage).forEach(function(k){ if(k.startsWith('tradelane_')) localStorage.removeItem(k); }); localStorage.setItem('sar_tl_cache_ver', v); } })();
+var _tradelaneCache = {};
 var _tradelaneFetchTimer = null;
 var _tradelanePrefetchDone = false;
 
