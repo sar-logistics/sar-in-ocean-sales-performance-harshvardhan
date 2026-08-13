@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-13T-ocean-v142-tg-directional-1786616004";
+const DEPLOY_TS = "2026-08-13T-ocean-v143-fix-500-1786619035";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -584,11 +584,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           // Fallback: try city name lookup when ISO2 code not found
           if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
         } else if (cls.kind === "SEA") {
-          // Use srrTgCache first for most accurate tradelane
-          const _snoKey = String(job["Shipment No"] || "").trim();
-          if (srrTgCache && srrTgCache[_snoKey]) {
-            _tg = srrTgCache[_snoKey];
-          } else if (cls.direction === "EXPORT") {
+          if (cls.direction === "EXPORT") {
             const _dc = String(job["Discharge Country"] || "").trim();
             const _tlBase = countryNameToTradelane(_dc) || _dc;
             _tg = _tlBase ? "IN – " + _tlBase : "Others";
