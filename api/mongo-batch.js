@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v115-tradelaneDrill-scan-all-jobs";
+const DEPLOY_TS = "2026-08-12T-ocean-v116-tradelaneDrill-exact-srr-logic";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -3069,61 +3069,66 @@ module.exports = async function handler(req, res) {
   }
 
   const cfgs = lob === "Ocean" ? [
-    { srrColl:"srr_sea_export", jobColl:"jobs_sea_export", dir:"Export", fromPort:false },
-    { srrColl:"srr_sea_import", jobColl:"jobs_sea_import", dir:"Import", fromPort:true },
+    { srrColl:"srr_sea_export", jobColl:"jobs_sea_export", dir:"Export" },
+    { srrColl:"srr_sea_import", jobColl:"jobs_sea_import", dir:"Import" },
   ] : [];
 
   const rows = [];
   for (const cfg of cfgs) {
-    // Build SRR lookup for extra fields (dischargeCountry, loadingPort)
+    // Build SRR lookup for extra fields + tradelane (most accurate)
     const srrRows = await db.collection(cfg.srrColl).find({}).toArray();
     const srrByNo = {};
     for (const r of srrRows) {
       const sno = String(r["Shipment No"] || "").trim();
       if (!sno) continue;
+      const raw = cfg.dir === "Export"
+        ? String(r["Discharge Country"] || "").trim()
+        : String(r["Loading Port"] || "").trim();
+      let tlName = "";
+      if (cfg.dir === "Import") {
+        const info = portToInfo(raw);
+        tlName = info.tradelane ? info.tradelane + " \u2013 IN" : "";
+      } else {
+        const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
+        const tlBase = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
+        tlName = tlBase ? "IN \u2013 " + tlBase : "";
+      }
       srrByNo[sno] = {
-        dischargeCountry: cfg.fromPort ? "" : String(r["Discharge Country"] || "").trim(),
-        srrLoadingPort:   cfg.fromPort ? String(r["Loading Port"] || "").trim() : "",
+        tradelane: tlName,
+        dischargeCountry: cfg.dir === "Export" ? raw : "",
+        srrLoadingPort:   cfg.dir === "Import" ? raw : "",
       };
     }
 
-    // Scan ALL jobs — same as SRR aggregate
     const cls = { kind:"SEA", direction: cfg.dir === "Export" ? "EXPORT" : "IMPORT" };
     const jobs = await db.collection(cfg.jobColl).find({}).toArray();
 
     for (const job of jobs) {
       const sno = String(job["Shipment No"] || "").trim();
+      const srrEntry = srrByNo[sno];
 
-      // Compute tradelane same as SRR aggregate
-      let tlName = "";
-      if (cfg.dir === "Export") {
-        const rawCountry = String(job["Consignee Country"] || job["Destination Country"] || "").trim();
-        if (rawCountry && rawCountry.toLowerCase() !== "india") {
-          const tlBase = countryNameToTradelane(rawCountry) || rawCountry;
-          tlName = tlBase ? "IN \u2013 " + tlBase : "Others";
-        } else {
-          const tl2 = String(job["Trade Lane"] || "").trim();
-          tlName = tl2 ? "IN \u2013 " + tl2 : "Others";
-        }
+      // Compute tradelane — EXACT same logic as SRR aggregate Step 2
+      let tradelane = "";
+      if (srrEntry && srrEntry.tradelane) {
+        tradelane = srrEntry.tradelane;
       } else {
-        const rawCountry = String(job["Shipper Country"] || job["Origin Port Country"] || "").trim();
-        if (rawCountry && rawCountry.toLowerCase() !== "india") {
-          const tlBase = countryNameToTradelane(rawCountry) || rawCountry;
-          tlName = tlBase ? tlBase + " \u2013 IN" : "Others";
+        const rawCountry = cfg.dir === "Export"
+          ? String(job["Consignee Country"] || job["Destination Country"] || "").trim()
+          : String(job["Shipper Country"]   || job["Origin Port Country"] || "").trim();
+        if (!rawCountry || rawCountry.toLowerCase() === "india") {
+          tradelane = "Others";
         } else {
-          const lp = String(job["Loading Port"] || "").trim();
-          const info = portToInfo(lp);
-          const tlBase = info.tradelane || cityToTradelane(lp);
-          tlName = tlBase ? tlBase + " \u2013 IN" : "Others";
+          const _tlBase = countryNameToTradelane(rawCountry) || rawCountry;
+          tradelane = cfg.dir === "Export" ? "IN \u2013 " + _tlBase : _tlBase + " \u2013 IN";
         }
       }
 
-      // Filter by requested tradelane
-      if (tl !== "Grand Total" && tlName !== tl) continue;
+      if (tl !== "Grand Total" && tradelane !== tl) continue;
 
-      // Date filter
+      // Date filter — same as SRR aggregate
       if (activeMonthSet) {
-        const rawDate = getDateValueFor(job, cls);
+        const _tCls = { direction: cfg.dir === "Export" ? "EXPORT" : "IMPORT" };
+        const rawDate = getDateValueFor(job, _tCls);
         if (!rawDate) continue;
         const dObj = parseSheetDate(rawDate);
         if (!dObj || isNaN(dObj.getTime())) continue;
@@ -3141,15 +3146,12 @@ module.exports = async function handler(req, res) {
       const provCost = parseFloat(job["Provisional Cost (E)"] || 0) || 0;
       const postCost = parseFloat(job["Posted Cost (G)"] || 0) || 0;
 
-      // Get SRR extra fields if available
-      const srr = srrByNo[sno] || {};
-
       rows.push({
         shipmentNo:          sno,
         lob:                 cfg.dir === "Export" ? "SEA EXPORT" : "SEA IMPORT",
-        tradelane:           tlName,
-        dischargeCountry:    srr.dischargeCountry || "",
-        loadingPort:         srr.srrLoadingPort || job["Loading Port"] || "",
+        tradelane:           tradelane,
+        dischargeCountry:    srrEntry ? srrEntry.dischargeCountry : "",
+        loadingPort:         srrEntry ? srrEntry.srrLoadingPort : (job["Loading Port"] || ""),
         dischargePort:       job["Discharge Port"] || "",
         jobDate:             (job._primaryDate || parseSheetDate(getDateValueFor(job, cls) || job["Job Date"]||"") || new Date(0)).toISOString(),
         masterNo:            job["Master No."] || "",
