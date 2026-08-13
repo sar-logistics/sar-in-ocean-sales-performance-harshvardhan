@@ -1865,23 +1865,23 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       } else if (cfg.lob === "Air") {
         // Air: no country fields on job row — skip if not in SRR
         continue;
-      } else {
-        // Ocean / ISO Tank: use country fields directly on the job row
-        // Export: foreign country = Consignee Country (destination)
-        // Import: foreign country = Shipper Country (origin)
-        // Export: Consignee Country or Destination Country (foreign destination)
-        // Import: Shipper Country or Origin Port Country (foreign origin)
-        const rawCountry = cfg.dir === "Export"
-          ? (String(job["Consignee Country"] || job["Destination Country"] || "").trim())
-          : (String(job["Shipper Country"]   || job["Origin Port Country"] || "").trim());
-
+      } else if (cfg.dir === "Export") {
+        // Export: Consignee Country
+        const rawCountry = String(job["Consignee Country"] || job["Destination Country"] || "").trim();
         if (!rawCountry || rawCountry.toLowerCase() === "india") {
           tradelane = "Others"; country = "Others";
         } else {
           country   = rawCountry;
           const _tlBase = countryNameToTradelane(rawCountry) || rawCountry;
-          tradelane = cfg.dir === "Export" ? "IN – " + _tlBase : _tlBase + " – IN";
+          tradelane = "IN – " + _tlBase;
         }
+      } else {
+        // Import: Loading Port from job (same field SRR uses)
+        const lp = String(job["Loading Port"] || "").trim();
+        const info = portToInfo(lp);
+        const _tlBase = info.tradelane || cityToTradelane(lp);
+        tradelane = _tlBase ? _tlBase + " – IN" : "Others";
+        country = _tlBase || "Others";
       }
       if (!tradelane) continue;
 
