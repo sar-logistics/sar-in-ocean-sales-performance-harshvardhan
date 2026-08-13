@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-13T-ocean-v133-lock-revenue";
+const DEPLOY_TS = "2026-08-13T-ocean-v134-lock-revenue-fixed";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1854,8 +1854,13 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       }
       if (!tradelane) continue;
 
-      const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
       const { gp } = pickGP(job, cls);
+      const _isLockedRev = isAir
+        ? !!(job["Financial Lock"] && String(job["Financial Lock"]).trim())
+        : !!(job["Job Rev Recognition Date"] && String(job["Job Rev Recognition Date"]).trim());
+      const _provRev = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
+      const _billRev = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
+      const revenue = _isLockedRev ? _billRev : _provRev;
 
       let tons = 0;
       if (isAir) {
@@ -2073,8 +2078,13 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
         : String(job["Origin Agent"] || "").trim();
       if (!agentRaw) continue;
 
-      const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
       const { gp } = pickGP(job, cls);
+      const _isLockedRev = isAir
+        ? !!(job["Financial Lock"] && String(job["Financial Lock"]).trim())
+        : !!(job["Job Rev Recognition Date"] && String(job["Job Rev Recognition Date"]).trim());
+      const _provRev = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
+      const _billRev = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
+      const revenue = _isLockedRev ? _billRev : _provRev;
 
       let tons = 0;
       if (isAir) {
