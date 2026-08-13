@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v157';;
+var CACHE_VERSION = 'ocean-v158';;
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -1352,7 +1352,7 @@ function prefetchAgentRanges() {
 // ── Tradelane Insights fetch ──────────────────────────────────────────────────
 // Clear stale tradelane cache synchronously before anything else
 var _tradelaneCache = {};
-(function(){ var v = 'ocean-v157'; if (localStorage.getItem('sar_tl_cache_ver') !== v) { Object.keys(localStorage).forEach(function(k){ if(k.startsWith('tradelane_')) localStorage.removeItem(k); }); localStorage.setItem('sar_tl_cache_ver', v); _tradelaneCache = {}; } })();
+(function(){ var v = 'ocean-v158'; if (localStorage.getItem('sar_tl_cache_ver') !== v) { Object.keys(localStorage).forEach(function(k){ if(k.startsWith('tradelane_')) localStorage.removeItem(k); }); localStorage.setItem('sar_tl_cache_ver', v); _tradelaneCache = {}; } })();
 var _tradelaneFetchTimer = null;
 var _tradelanePrefetchDone = false;
 
@@ -1378,7 +1378,17 @@ function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
     + (dateFrom ? '&dateFrom=' + encodeURIComponent(dateFrom) : '')
     + (dateTo   ? '&dateTo='   + encodeURIComponent(dateTo)   : '');
   if (!force) {
-    if (_tradelaneCache[key]) { tradelaneData = _tradelaneCache[key]; tradelaneDataReady = true; if (callback) callback(); return; }
+    if (_tradelaneCache[key]) {
+      // Validate cached data has correct tradelane format
+      var _cachedLob = _tradelaneCache[key].lobs && _tradelaneCache[key].lobs['Ocean'];
+      var _firstCountry = _cachedLob && _cachedLob.allCountries && _cachedLob.allCountries[0];
+      var _isOldFormat = _firstCountry && _firstCountry.name && !_firstCountry.name.includes('–');
+      if (!_isOldFormat) {
+        tradelaneData = _tradelaneCache[key]; tradelaneDataReady = true; if (callback) callback(); return;
+      }
+      // Old format detected — delete and re-fetch
+      delete _tradelaneCache[key];
+    }
     // No localStorage — data too large, in-memory only
   }
   fetch(qs).then(function(r){ return r.json(); })
