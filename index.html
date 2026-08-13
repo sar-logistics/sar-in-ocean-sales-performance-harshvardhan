@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v160';
+var CACHE_VERSION = 'ocean-v161';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -6080,10 +6080,6 @@ function drawer(){
       { k:'atdLoading', l:'ATD Loading Port', t:'date' },
       { k:'port', l:'Port (Discharge/Loading)', t:'text', truncate:130, derived:function(s){ return s.lob && s.lob.includes('EXPORT') ? s.dischargePort : s.loadingPort; } },
   { k:'_tg', l:'Tradelane', t:'text', truncate:130 },
-  { k:'tradelane', l:'Tradelane', t:'text', truncate:130 },
-  { k:'dischargeCountry', l:'Discharge Country', t:'text', truncate:130 },
-  { k:'loadingPort', l:'Loading Port', t:'text', truncate:130 },
-  { k:'dischargePort', l:'Discharge Port', t:'text', truncate:130 },
   { k:'location', l:'Location', t:'text' },
       { k:'consignee', l:'Consignee', t:'text', truncate:140 },
       { k:'consolType', l:'Consol Type', t:'text' },
@@ -6105,10 +6101,7 @@ function drawer(){
       { k:'financialLock', l:'Financial Lock', t:'text' },
     ];
 
-    function cellVal(c, s){
-  if (s._notInJpa && c.k !== 'shipmentNo' && c.k !== 'lob' && c.k !== 'tradelane' && c.k !== 'dischargeCountry' && c.k !== 'loadingPort') return '\u2013';
-  return c.derived ? c.derived(s) : s[c.k];
-}
+    function cellVal(c, s){ return c.derived ? c.derived(s) : s[c.k]; }
 
     // ── LOB tabs — computed from whatever LOB values actually appear ──
     var lobCounts = {};
