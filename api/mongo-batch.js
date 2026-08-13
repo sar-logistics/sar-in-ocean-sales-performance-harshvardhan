@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-13T-ocean-v132-clean-rebuild";
+const DEPLOY_TS = "2026-08-13T-ocean-v136-agg-directional-1786611430";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1763,12 +1763,18 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
           const info = portToInfo(raw);
           country = info.country; tradelane = info.tradelane;
         } else {
-          // Direct country name — reverse-lookup tradelane from TRADELANE_MAP by country name
           country = raw;
           const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
-          tradelane = entry ? entry.tradelane : raw; // fallback to country name if not found
+          const tlBase = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
+          tradelane = tlBase;
         }
-        if (country) srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
+        // Add directional prefix for Ocean
+        if (cfg.lob === "Ocean" && tradelane) {
+          tradelane = cfg.dir === "Export" ? "IN – " + tradelane : tradelane + " – IN";
+        } else if (cfg.lob === "Ocean" && !tradelane) {
+          tradelane = "Others";
+        }
+        if (country || cfg.lob === "Ocean") srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
       }
     } catch (e) { /* collection may not exist yet */ }
   }));
@@ -1854,8 +1860,13 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       }
       if (!tradelane) continue;
 
-      const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
       const { gp } = pickGP(job, cls);
+      const _isLockedRev = isAir
+        ? !!(job["Financial Lock"] && String(job["Financial Lock"]).trim())
+        : !!(job["Job Rev Recognition Date"] && String(job["Job Rev Recognition Date"]).trim());
+      const _provRev = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
+      const _billRev = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
+      const revenue = _isLockedRev ? _billRev : _provRev;
 
       let tons = 0;
       if (isAir) {
@@ -2073,8 +2084,13 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
         : String(job["Origin Agent"] || "").trim();
       if (!agentRaw) continue;
 
-      const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
       const { gp } = pickGP(job, cls);
+      const _isLockedRev = isAir
+        ? !!(job["Financial Lock"] && String(job["Financial Lock"]).trim())
+        : !!(job["Job Rev Recognition Date"] && String(job["Job Rev Recognition Date"]).trim());
+      const _provRev = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
+      const _billRev = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
+      const revenue = _isLockedRev ? _billRev : _provRev;
 
       let tons = 0;
       if (isAir) {
