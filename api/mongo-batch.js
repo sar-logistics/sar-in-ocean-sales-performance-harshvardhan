@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-13T-ocean-v132-clean-rebuild";
+const DEPLOY_TS = "2026-08-13T-ocean-v137-full-directional-1786612137";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1763,12 +1763,18 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
           const info = portToInfo(raw);
           country = info.country; tradelane = info.tradelane;
         } else {
-          // Direct country name — reverse-lookup tradelane from TRADELANE_MAP by country name
           country = raw;
           const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
-          tradelane = entry ? entry.tradelane : raw; // fallback to country name if not found
+          const tlBase = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
+          tradelane = tlBase;
         }
-        if (country) srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
+        // Directional prefix for Ocean
+        if (cfg.lob === "Ocean") {
+          tradelane = tradelane
+            ? (cfg.dir === "Export" ? "IN – " + tradelane : tradelane + " – IN")
+            : "Others";
+        }
+        if (country || cfg.lob === "Ocean") srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
       }
     } catch (e) { /* collection may not exist yet */ }
   }));
