@@ -1859,8 +1859,8 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
 
       let tradelane = "", country = "";
       if (srrEntry) {
-        // SRR match — most accurate source
-        tradelane = srrEntry.tradelane || srrEntry.country;
+        // SRR match — use tradelane directly, empty → Others
+        tradelane = srrEntry.tradelane || "Others";
         country   = srrEntry.country;
       } else if (cfg.lob === "Air") {
         // Air: skip if not in SRR
