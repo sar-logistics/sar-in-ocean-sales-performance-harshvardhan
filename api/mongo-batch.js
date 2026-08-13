@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v116-tradelaneDrill-exact-srr-logic";
+const DEPLOY_TS = "2026-08-12T-ocean-v117-tradelaneDrill-billed-rev";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -3137,12 +3137,11 @@ module.exports = async function handler(req, res) {
         job._primaryDate = dObj;
       }
 
-      // GP/Revenue with lock logic
+      // GP/Revenue — same as SRR aggregate: Billed Revenue + pickGP
       const { gp } = pickGP(job, cls);
-      const isLocked = !!(String(job["Job Rev Recognition Date"] || "").trim());
       const provRev = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
       const billRev = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
-      const rev = isLocked ? billRev : provRev;
+      const rev = billRev; // SRR aggregate always uses Billed Revenue
       const provCost = parseFloat(job["Provisional Cost (E)"] || 0) || 0;
       const postCost = parseFloat(job["Posted Cost (G)"] || 0) || 0;
 
