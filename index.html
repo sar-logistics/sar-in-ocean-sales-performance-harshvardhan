@@ -6156,7 +6156,7 @@ function drawer(){
       +'</th>';
     }
 
-    var headCells = COLS.map(th).join('');
+    var headCells = _activeDrillCols.map(th).join('');
 
 
     // Compute counts and totals FIRST before building any HTML
@@ -6205,7 +6205,7 @@ function drawer(){
 
     var bodyRows = renderRows.map(function(s, idx){
       var rowBg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
-      var cells = COLS.map(function(c){
+      var cells = _activeDrillCols.map(function(c){
         var v = cellVal(c, s);
         var isSticky = c.sticky !== undefined;
         var isLastSticky = c.k === 'lob';
@@ -6225,7 +6225,7 @@ function drawer(){
       var _locked = (r.lob==='AIR EXPORT'||r.lob==='AIR IMPORT') ? !!r.financialLock : !!r.operationLock;
       if (_locked) dActualGpSum += (r.actualProfit || 0);
       else dProvGpSum += (r.provisionalProfit || 0);
-      COLS.forEach(function(c){
+      _activeDrillCols.forEach(function(c){
         if (c.t !== 'cur' && c.t !== 'num') return;
         var v = c.derived ? c.derived(r) : r[c.k];
         if (v !== null && v !== undefined && !isNaN(Number(v))) {
