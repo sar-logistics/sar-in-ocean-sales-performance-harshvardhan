@@ -1863,25 +1863,11 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         tradelane = srrEntry.tradelane || srrEntry.country;
         country   = srrEntry.country;
       } else if (cfg.lob === "Air") {
-        // Air: no country fields on job row — skip if not in SRR
+        // Air: skip if not in SRR
         continue;
-      } else if (cfg.dir === "Export") {
-        // Export: Consignee Country
-        const rawCountry = String(job["Consignee Country"] || job["Destination Country"] || "").trim();
-        if (!rawCountry || rawCountry.toLowerCase() === "india") {
-          tradelane = "Others"; country = "Others";
-        } else {
-          country   = rawCountry;
-          const _tlBase = countryNameToTradelane(rawCountry) || rawCountry;
-          tradelane = "IN – " + _tlBase;
-        }
       } else {
-        // Import: Loading Port from job (same field SRR uses)
-        const lp = String(job["Loading Port"] || "").trim();
-        const info = portToInfo(lp);
-        const _tlBase = info.tradelane || cityToTradelane(lp);
-        tradelane = _tlBase ? _tlBase + " – IN" : "Others";
-        country = _tlBase || "Others";
+        // Ocean/ISOTank: not in SRR → Others
+        tradelane = "Others"; country = "Others";
       }
       if (!tradelane) continue;
 
@@ -3123,20 +3109,9 @@ module.exports = async function handler(req, res) {
       let tradelane = "";
       if (srrEntry && srrEntry.tradelane) {
         tradelane = srrEntry.tradelane;
-      } else if (cfg.dir === "Export") {
-        const rawCountry = String(job["Consignee Country"] || job["Destination Country"] || "").trim();
-        if (!rawCountry || rawCountry.toLowerCase() === "india") {
-          tradelane = "Others";
-        } else {
-          const _tlBase = countryNameToTradelane(rawCountry) || rawCountry;
-          tradelane = "IN \u2013 " + _tlBase;
-        }
       } else {
-        // Import: use Loading Port from job same as SRR uses Loading Port field
-        const lp = String(job["Loading Port"] || "").trim();
-        const info = portToInfo(lp);
-        const _tlBase = info.tradelane || cityToTradelane(lp);
-        tradelane = _tlBase ? _tlBase + " \u2013 IN" : "Others";
+        // Not in SRR → Others
+        tradelane = "Others";
       }
 
       if (tl !== "Grand Total" && tradelane !== tl) continue;
