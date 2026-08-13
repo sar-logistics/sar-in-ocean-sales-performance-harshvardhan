@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-12T-ocean-v117-tradelaneDrill-billed-rev";
+const DEPLOY_TS = "2026-08-12T-ocean-v118-projection-job-rev-recog";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
