@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-13T-ocean-v140-no-jpa-fallback-1786613689";
+const DEPLOY_TS = "2026-08-13T-ocean-v141-country-name-fix-1786615871";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1709,7 +1709,26 @@ Object.values(TRADELANE_MAP).forEach(function(e) {
 });
 function countryNameToTradelane(name) {
   if (!name) return "";
-  return _countryToTradelane[String(name).toLowerCase().trim()] || "";
+  const _extra = {
+    "korea, republic of": "Asia",
+    "tanzania, united republic of": "Africa",
+    "congo, the democratic republic": "Africa",
+    "congo, the democratic republic of the": "Africa",
+    "brunei darussalam": "Asia",
+    "aruba": "LATAM",
+    "czech republic": "Europe",
+    "dominican republic": "LATAM",
+    "hong kong": "Asia",
+    "viet nam": "Asia",
+    "macao": "Asia",
+    "iran, islamic republic of": "Middle East",
+    "taiwan, province of china": "Asia",
+    "myanmar": "Asia",
+    "bolivia, plurinational state of": "LATAM",
+    "venezuela, bolivarian republic of": "LATAM",
+    "lao people's democratic republic": "Asia",
+  };
+  return _countryToTradelane[String(name).toLowerCase().trim()] || _extra[String(name).toLowerCase().trim()] || "";
 }
 
 async function getTradelaneAggregate(db, force, dateFrom, dateTo, cacheKey) {
