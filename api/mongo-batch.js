@@ -3119,20 +3119,24 @@ module.exports = async function handler(req, res) {
       const sno = String(job["Shipment No"] || "").trim();
       const srrEntry = srrByNo[sno];
 
-      // Compute tradelane — EXACT same logic as SRR aggregate Step 2
+      // Compute tradelane — same as SRR aggregate
       let tradelane = "";
       if (srrEntry && srrEntry.tradelane) {
         tradelane = srrEntry.tradelane;
-      } else {
-        const rawCountry = cfg.dir === "Export"
-          ? String(job["Consignee Country"] || job["Destination Country"] || "").trim()
-          : String(job["Shipper Country"]   || job["Origin Port Country"] || "").trim();
+      } else if (cfg.dir === "Export") {
+        const rawCountry = String(job["Consignee Country"] || job["Destination Country"] || "").trim();
         if (!rawCountry || rawCountry.toLowerCase() === "india") {
           tradelane = "Others";
         } else {
           const _tlBase = countryNameToTradelane(rawCountry) || rawCountry;
-          tradelane = cfg.dir === "Export" ? "IN \u2013 " + _tlBase : _tlBase + " \u2013 IN";
+          tradelane = "IN \u2013 " + _tlBase;
         }
+      } else {
+        // Import: use Loading Port from job same as SRR uses Loading Port field
+        const lp = String(job["Loading Port"] || "").trim();
+        const info = portToInfo(lp);
+        const _tlBase = info.tradelane || cityToTradelane(lp);
+        tradelane = _tlBase ? _tlBase + " \u2013 IN" : "Others";
       }
 
       if (tl !== "Grand Total" && tradelane !== tl) continue;
