@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v159';;
+var CACHE_VERSION = 'ocean-v160';;
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region
@@ -1352,7 +1352,7 @@ function prefetchAgentRanges() {
 // ── Tradelane Insights fetch ──────────────────────────────────────────────────
 // Clear stale tradelane cache synchronously before anything else
 var _tradelaneCache = {};
-(function(){ var v = 'ocean-v159'; if (localStorage.getItem('sar_tl_cache_ver') !== v) { Object.keys(localStorage).forEach(function(k){ if(k.startsWith('tradelane_')) localStorage.removeItem(k); }); localStorage.setItem('sar_tl_cache_ver', v); _tradelaneCache = {}; } })();
+(function(){ var v = 'ocean-v160'; if (localStorage.getItem('sar_tl_cache_ver') !== v) { Object.keys(localStorage).forEach(function(k){ if(k.startsWith('tradelane_')) localStorage.removeItem(k); }); localStorage.setItem('sar_tl_cache_ver', v); _tradelaneCache = {}; } })();
 var _tradelaneFetchTimer = null;
 var _tradelanePrefetchDone = false;
 
@@ -3923,8 +3923,8 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     });
   }
 
-  // Tradelane shipment counts come from SRR aggregate directly — no allDrillRows override
-  if (false && allDrillRows && allDrillRows.length > 0) {
+  // Override per-tradelane shipment counts from allDrillRows using _tg
+  if (allDrillRows && allDrillRows.length > 0) {
     var _tgActiveMonsSet = {};
     activeMons.forEach(function(m){ _tgActiveMonsSet[m] = true; });
     var _tgFyMonsSet = {};
