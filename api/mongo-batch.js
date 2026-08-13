@@ -1840,7 +1840,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       direction: cfg.dir === "Import" ? "IMPORT" : "EXPORT",
     };
     const isAir = cfg.lob === "Air";
-    const jobs = await db.collection(cfg.coll).find({}, { projection }).toArray();
+    const jobs = await db.collection(cfg.coll).find({}).toArray();
 
     for (const job of jobs) {
       // Date filter
