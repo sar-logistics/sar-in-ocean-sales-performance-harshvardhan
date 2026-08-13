@@ -1885,8 +1885,14 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       }
       if (!tradelane) continue;
 
-      const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
       const { gp } = pickGP(job, cls);
+      // Lock-based revenue — same as sales performance effectiveRevenue
+      const _isLocked2 = isAir
+        ? !!(job["Financial Lock"] && String(job["Financial Lock"]).trim())
+        : !!(job["Job Rev Recognition Date"] && String(job["Job Rev Recognition Date"]).trim());
+      const _provRev2 = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
+      const _billRev2 = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
+      const revenue = _isLocked2 ? _billRev2 : _provRev2;
 
       let tons = 0;
       if (isAir) {
@@ -2104,8 +2110,14 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
         : String(job["Origin Agent"] || "").trim();
       if (!agentRaw) continue;
 
-      const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
       const { gp } = pickGP(job, cls);
+      // Lock-based revenue — same as sales performance effectiveRevenue
+      const _isLocked2 = isAir
+        ? !!(job["Financial Lock"] && String(job["Financial Lock"]).trim())
+        : !!(job["Job Rev Recognition Date"] && String(job["Job Rev Recognition Date"]).trim());
+      const _provRev2 = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
+      const _billRev2 = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
+      const revenue = _isLocked2 ? _billRev2 : _provRev2;
 
       let tons = 0;
       if (isAir) {
