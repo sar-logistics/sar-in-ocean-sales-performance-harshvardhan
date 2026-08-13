@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-13T-ocean-v138-job-fallback-directional-1786612967";
+const DEPLOY_TS = "2026-08-13T-ocean-v139-drill-fallback-1786613314";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -3072,7 +3072,19 @@ module.exports = async function handler(req, res) {
     for (const job of jobs) {
       const sno = String(job["Shipment No"] || "").trim();
       const srrEntry = srrByNo[sno];
-      const tradelane = srrEntry ? srrEntry.tradelane : "Others";
+      let tradelane = srrEntry ? srrEntry.tradelane : "";
+      if (!tradelane) {
+        // Fallback — same as computeTradelaneAggregate job scan
+        const rawCountry = cfg.dir === "Export"
+          ? String(job["Consignee Country"] || job["Destination Country"] || "").trim()
+          : String(job["Shipper Country"] || job["Origin Port Country"] || "").trim();
+        if (!rawCountry || rawCountry.toLowerCase() === "india") {
+          tradelane = "Others";
+        } else {
+          const _tlBase = countryNameToTradelane(rawCountry) || rawCountry;
+          tradelane = cfg.dir === "Export" ? "IN \u2013 " + _tlBase : _tlBase + " \u2013 IN";
+        }
+      }
       if (tl !== "Grand Total" && tradelane !== tl) continue;
       if (activeMonthSet) {
         const _tCls = { direction: cfg.dir === "Export" ? "EXPORT" : "IMPORT" };
