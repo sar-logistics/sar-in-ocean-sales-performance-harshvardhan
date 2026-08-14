@@ -1353,12 +1353,28 @@ var _tradelaneReqSeq = {};  // key -> latest issued sequence number
 // which one's network round-trip finishes first.
 var _tradelaneReqSeq = {};
 var _tradelaneInFlightCb = {}; // key -> list of pending callbacks for an in-flight request
+function _tlLsKey(key){ return 'tl_agg_' + key; }
 function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
   var r = overrideDateFrom !== undefined
     ? { dateFrom: overrideDateFrom, dateTo: overrideDateTo }
     : getTradelaneDateRange();
   var dateFrom = r.dateFrom, dateTo = r.dateTo;
   var key = (dateFrom||'all') + '_' + (dateTo||'all');
+  // Instant path: show localStorage cache (if present) immediately, then
+  // always refresh in the background — same stale-while-revalidate pattern
+  // as sales performance's makeFetcher, but scoped per date-range key.
+  if (!force) {
+    var _cached = lsGet(_tlLsKey(key));
+    if (_cached && _cached.success) {
+      var _curRange0 = getTradelaneDateRange();
+      var _curKey0 = (_curRange0.dateFrom||'all') + '_' + (_curRange0.dateTo||'all');
+      if (key === _curKey0) {
+        _cached._cacheKey = key;
+        tradelaneData = _cached; tradelaneDataReady = true;
+        if (callback) callback();
+      }
+    }
+  }
   // If a request for this exact key is already in flight, just queue this
   // caller's callback onto it instead of firing a second overlapping request.
   if (!force && _tradelaneInFlightCb[key]) {
