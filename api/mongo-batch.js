@@ -1877,9 +1877,21 @@ async function getTradelaneAggregate(db, force, dateFrom, dateTo, cacheKey) {
         // a partial SRR map falsely dumps real shipments into "Others".
         if (!result.srrFetchErrors) {
           tradelaneCacheMap[fullKey] = { data: result, time: Date.now() };
+          // shipmentNos arrays across 24 months x every country/lob can get
+          // large — strip them before persisting so the cache document
+          // stays well under MongoDB's 16MB limit. Not needed for display;
+          // deriveTradelaneRange only reads name/shipments/monthData/etc.
+          const trimmed = JSON.parse(JSON.stringify(result));
+          const stripHeavyFields = (stats) => {
+            if (stats && stats.allCountries) {
+              for (const c of stats.allCountries) { delete c.shipmentNos; delete c.weekData; }
+            }
+          };
+          stripHeavyFields(trimmed);
+          if (trimmed.lobs) Object.values(trimmed.lobs).forEach(stripHeavyFields);
           db.collection("_cache_tradelane_full").updateOne(
             { _id: "current" },
-            { $set: { data: result, time: Date.now(), deployTs: DEPLOY_TS } },
+            { $set: { data: trimmed, time: Date.now(), deployTs: DEPLOY_TS } },
             { upsert: true }
           ).catch((e) => console.error("Failed to persist tradelane cache:", e && e.message));
         }
