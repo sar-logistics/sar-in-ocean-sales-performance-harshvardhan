@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-14T-ocean-v144-tg-parity-fix-1786693475";
+const DEPLOY_TS = "2026-08-14T-ocean-v145-date-parity-1786693884";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2051,8 +2051,10 @@ async function computeTradelaneAggregate(db) {
           ? (cfg.dir === "Import" ? "ISO Imp" : "ISO Exp")
           : (cfg.dir === "Import" ? "Sea Imp" : "Sea Exp");
 
-      // Derive month label for this job
-      const rawDateM = job[cfg.dateCol] || job["Job Date"];
+      // Derive month label for this job — use the SAME fallback chain as
+      // the drill-rows builder (getDateValueFor), not a shortened one, so
+      // a job never lands in a different month between the two.
+      const rawDateM = getDateValueFor(job, cls);
       let monthLabel = "";
       if (rawDateM) {
         const dM = parseSheetDate(rawDateM);
