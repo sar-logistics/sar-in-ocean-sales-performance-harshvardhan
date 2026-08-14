@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-14T-ocean-v146-lean-response-1786694159";
+const DEPLOY_TS = "2026-08-14T-ocean-v147-restore-weekdata-1786694207";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1801,12 +1801,11 @@ function deriveTradelaneRange(full, dateFrom, dateTo) {
         lcl       += md.lcl       || 0;
       }
       if (shipments <= 0) continue; // no activity in this range — drop the row
-      // Deliberately exclude shipmentNos (can be thousands of entries per
-      // country) and the unfiltered full-year weekData — neither is used
-      // by the client for display, and including them was bloating every
-      // single response, adding noticeable serialization/transfer lag on
-      // every date-range switch.
-      const { shipmentNos, weekData, ...leanRow } = row;
+      // Exclude shipmentNos only (can be thousands of entries per country,
+      // never read by the client for display). weekData IS kept — the
+      // tradelane page's Weekly view depends on it — stripping it would
+      // have silently broken that feature.
+      const { shipmentNos, ...leanRow } = row;
       narrowed.push({
         ...leanRow,
         shipments, revenue, gp, tons, teu, fclTeu, tankTeu, lcl,
