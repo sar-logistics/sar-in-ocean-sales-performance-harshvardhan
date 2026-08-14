@@ -6891,7 +6891,10 @@ function loadDrillData(callback){
       if (data.sales && data.sales.allDrillRows && data.sales.allDrillRows.length > 0) {
         allDrillRows = dedupDrillRows(data.sales.allDrillRows); _patchTgOnDrillRows(allDrillRows);
         _custLobRepMapCache = {}; _agentLobRepMapCache = {}; // clear cached maps — data changed
-        _patchTradelaneCacheWithDrillCounts();
+        // _patchTradelaneCacheWithDrillCounts() removed — it mutated the live
+        // tradelaneData in place using UNFILTERED full-dataset counts, silently
+        // overwriting the correctly date-scoped server data. This was the real
+        // root cause of the tradelane page randomly flipping to wrong numbers.
         // Re-render tradelane page if it was showing stale cached data
         if (state.page === 'tradelane' && tradelaneData && tradelaneData._isStale) {
           tradelaneData._isStale = false;
@@ -6919,8 +6922,6 @@ function loadDrillData(callback){
     });
 }
 
-// Patch all tradelane cache entries with correct shipment counts from allDrillRows
-// so cached data already has 2191 (correct) instead of 2204 (SRR aggregate)
 function _patchTradelaneCacheWithDrillCounts() {
   if (!allDrillRows || !allDrillRows.length) return;
 
