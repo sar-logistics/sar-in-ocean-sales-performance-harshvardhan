@@ -1353,23 +1353,25 @@ var _tradelaneReqSeq = {};  // key -> latest issued sequence number
 // which one's network round-trip finishes first.
 var _tradelaneReqSeq = {};
 var _tradelaneInFlightCb = {}; // key -> list of pending callbacks for an in-flight request
-function _tlLsKey(key){ return 'tl_agg_' + key; }
+var _tradelaneMemCache = {}; // key -> aggregate data, in-memory only (not localStorage — payloads too large)
 function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
   var r = overrideDateFrom !== undefined
     ? { dateFrom: overrideDateFrom, dateTo: overrideDateTo }
     : getTradelaneDateRange();
   var dateFrom = r.dateFrom, dateTo = r.dateTo;
   var key = (dateFrom||'all') + '_' + (dateTo||'all');
-  // Instant path: show localStorage cache (if present) immediately, then
-  // always refresh in the background — same stale-while-revalidate pattern
+  // Instant path: show in-memory cache (if present) immediately, then
+  // always refresh in the background — same stale-while-revalidate idea
   // as sales performance's makeFetcher, but scoped per date-range key.
+  // In-memory, NOT localStorage: a single range's payload can be 1MB+,
+  // which blows past localStorage's ~5-10MB total quota after just a
+  // couple of ranges and silently fails every write from then on.
   if (!force) {
-    var _cached = lsGet(_tlLsKey(key));
+    var _cached = _tradelaneMemCache[key];
     if (_cached && _cached.success) {
       var _curRange0 = getTradelaneDateRange();
       var _curKey0 = (_curRange0.dateFrom||'all') + '_' + (_curRange0.dateTo||'all');
       if (key === _curKey0) {
-        _cached._cacheKey = key;
         tradelaneData = _cached; tradelaneDataReady = true;
         if (callback) callback();
       }
@@ -1400,18 +1402,9 @@ function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
         } else if (_isStale) {
           console.warn('Discarded stale tradelane response for key', key);
         }
-        // Persist a trimmed copy for next visit's instant paint.
-        try {
-          var _tlSave = JSON.parse(JSON.stringify(data));
-          ['Air','Ocean','ISO Tank'].forEach(function(lob){
-            if (_tlSave.lobs && _tlSave.lobs[lob] && _tlSave.lobs[lob].allCountries) {
-              _tlSave.lobs[lob].allCountries.forEach(function(c){
-                delete c.shipmentNos; delete c.weekData; delete c.salesReps; delete c.countries;
-              });
-            }
-          });
-          lsSet(_tlLsKey(key), _tlSave);
-        } catch (e) {}
+        // Keep this range in memory for instant re-display on next visit
+        // within the same session. No size ceiling to worry about here.
+        _tradelaneMemCache[key] = data;
       }
       if (!force) {
         var _queued = _tradelaneInFlightCb[key] || [];
