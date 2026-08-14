@@ -545,6 +545,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
     // (job documents do not reliably carry Discharge Country / Loading Port).
     // Build shipmentNo -> tradelane maps, same logic as computeTradelaneAggregate.
     const _srrTgByNo = { export: {}, import: {} };
+    const _srrDetailByNo = { export: {}, import: {} }; // sno -> raw discharge country / loading port, for drill display
     try {
       const [_srrExpRows, _srrImpRows] = await Promise.all([
         db.collection("srr_sea_export").find({}, { projection: { "Shipment No": 1, "Discharge Country": 1 } }).toArray(),
@@ -556,6 +557,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
         const tlBase = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
         _srrTgByNo.export[sno] = tlBase ? "IN – " + tlBase : "Others";
+        _srrDetailByNo.export[sno] = raw;
       }
       for (const r of _srrImpRows) {
         const sno = String(r["Shipment No"] || "").trim(); if (!sno) continue;
@@ -563,6 +565,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         const info = portToInfo(raw);
         const tlBase = info.tradelane || cityToTradelane(raw);
         _srrTgByNo.import[sno] = tlBase ? tlBase + " – IN" : "Others";
+        _srrDetailByNo.import[sno] = raw;
       }
     } catch (e) { console.error("SRR tg map fetch failed:", e && e.message); }
 
@@ -601,7 +604,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
 
         // Compute tradelane group (_tg) from port field — mirrors SRR tradelane logic
         // Air Export: Discharge Port; Air Import: Loading Port; Sea Export: Discharge Country; Sea Import: Loading Port; ISO Tank: Consignee/Shipper Country
-        let _tg = "";
+        let _tg = "", _srrDischargeCountry = "", _srrLoadingPort = "";
         if (cls.kind === "AIR") {
           const _portField = cls.direction === "EXPORT" ? "Discharge Port" : "Loading Port";
           const _portVal = String(job[_portField] || "").trim();
@@ -615,6 +618,8 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           _tg = cls.direction === "EXPORT"
             ? (_srrTgByNo.export[_snoTg] || "Others")
             : (_srrTgByNo.import[_snoTg] || "Others");
+          _srrDischargeCountry = cls.direction === "EXPORT" ? (_srrDetailByNo.export[_snoTg] || "") : "";
+          _srrLoadingPort      = cls.direction === "IMPORT" ? (_srrDetailByNo.import[_snoTg] || "") : "";
         } else if (cls.kind === "ISOTANK") {
           const _raw = cls.direction === "EXPORT"
             ? (String(job["Consignee Country"] || job["Destination Country"] || "").trim())
@@ -676,7 +681,9 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           customer: String(job["Customer"] || "").trim(),
           _zone, // zone from mapping — null if unmapped
           _dn,   // display name from mapping — null if unmapped
-          _tg,   // tradelane group (US, LATAM, Asia, Europe etc) — for per-country count accuracy
+          _tg,   // tradelane group (IN – US, US – IN etc) — SRR-sourced, for per-country count accuracy
+          dischargeCountry: _srrDischargeCountry, // SRR-sourced, Sea Export only
+          srrLoadingPort:   _srrLoadingPort,       // SRR-sourced, Sea Import only
         });
       }
     }
