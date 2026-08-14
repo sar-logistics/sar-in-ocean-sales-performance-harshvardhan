@@ -2009,6 +2009,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
     },
     ...buildStats(countryMap),
     pushedAt: new Date().toISOString(),
+    srrFetchErrors: srrFetchErrors.length ? srrFetchErrors : undefined,
   };
 }
 
