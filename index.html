@@ -1427,38 +1427,15 @@ function _debouncedTradelaneFetch() {
   _tradelaneFetchTimer = setTimeout(function(){ tradelaneDataReady=false; fetchTradelaneData(function(){ render(); }); }, 300);
 }
 
-var _tradelaneServerPrefetched = {}; // key -> true, avoid re-warming the same range repeatedly
 function prefetchTradelaneRanges() {
-  // Safe background prefetch: warms ONLY the server's own cache for a few
-  // common ranges, via fire-and-forget requests whose responses are never
-  // read or assigned to anything client-side. This cannot cause the
-  // 'random flip' bug from before, because nothing here ever touches
-  // tradelaneData, _tradelaneCache, or localStorage — it just makes a
-  // LATER real fetchTradelaneData() call for that range come back fast
-  // because the server already computed and cached it.
+  // The server now computes ONE full-fiscal-year aggregate and derives any
+  // specific date range from it in pure JS (no Mongo query per range). So
+  // there's no need to separately warm several different ranges anymore —
+  // whichever range triggered the very first (non-forced) request already
+  // populated the shared full-year cache, and every other range becomes
+  // instant automatically. Nothing left to do here.
   if (_tradelanePrefetchDone) return;
   _tradelanePrefetchDone = true;
-  var allM = months26; if (!allM || !allM.length) return;
-  var queue = [
-    { dateFrom: allM[0], dateTo: allM[allM.length-1] }, // full year
-    { dateFrom: '', dateTo: '' },                        // all data
-  ];
-  [12,6,3].forEach(function(n){
-    if (allM.length >= n) queue.push({ dateFrom: allM[allM.length-n], dateTo: allM[allM.length-1] });
-  });
-  var idx = 0;
-  function next(){
-    if (idx >= queue.length) return;
-    var r = queue[idx++];
-    var key = (r.dateFrom||'all') + '_' + (r.dateTo||'all');
-    if (_tradelaneServerPrefetched[key]) { setTimeout(next, 50); return; }
-    _tradelaneServerPrefetched[key] = true;
-    var qs = '/api/mongo-batch?action=tradelane&force=1'
-      + (r.dateFrom ? '&dateFrom=' + encodeURIComponent(r.dateFrom) : '')
-      + (r.dateTo   ? '&dateTo='   + encodeURIComponent(r.dateTo)   : '');
-    fetch(qs).catch(function(){}).finally(function(){ setTimeout(next, 400); });
-  }
-  setTimeout(next, 1000); // start after the real page data has already loaded
 }
 var fetchOrgData = makeFetcher('org', 'org', function(d){ orgData = d; orgDataReady = true; });
 
