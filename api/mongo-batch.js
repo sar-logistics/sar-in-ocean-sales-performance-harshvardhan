@@ -1798,7 +1798,12 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         }
         if (country || cfg.lob === "Ocean") srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
       }
-    } catch (e) { /* collection may not exist yet */ }
+    } catch (e) {
+      // Do NOT silently continue with a partial SRR map — that produces a
+      // corrupted aggregate (most jobs falsely dumped into "Others").
+      // Only tolerate a true "collection missing" error; rethrow anything else.
+      if (!/ns does not exist|not found/i.test(String(e && e.message))) throw e;
+    }
   }));
 
   // ── Step 2: Scan job collections, join with SRR map ──────────────────────────
