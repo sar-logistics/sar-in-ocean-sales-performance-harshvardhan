@@ -2744,6 +2744,10 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "srrProbe") {
+      if (req.query.sampleGeneral === "1") {
+        const doc = await db.collection("jobs_general").findOne({});
+        return res.status(200).json({ success: true, sample: doc ? Object.keys(doc) : null, doc });
+      }
       if (req.query.counts === "1") {
         const counts = {};
         for (const c of JOB_COLLECTIONS) {
