@@ -1384,6 +1384,18 @@ function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
         } else if (_isStale) {
           console.warn('Discarded stale tradelane response for key', key);
         }
+        // Persist a trimmed copy for next visit's instant paint.
+        try {
+          var _tlSave = JSON.parse(JSON.stringify(data));
+          ['Air','Ocean','ISO Tank'].forEach(function(lob){
+            if (_tlSave.lobs && _tlSave.lobs[lob] && _tlSave.lobs[lob].allCountries) {
+              _tlSave.lobs[lob].allCountries.forEach(function(c){
+                delete c.shipmentNos; delete c.weekData; delete c.salesReps; delete c.countries;
+              });
+            }
+          });
+          lsSet(_tlLsKey(key), _tlSave);
+        } catch (e) {}
       }
       if (!force) {
         var _queued = _tradelaneInFlightCb[key] || [];
