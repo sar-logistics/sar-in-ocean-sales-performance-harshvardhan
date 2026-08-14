@@ -3676,8 +3676,11 @@ function tradelanePage(){
     +'</div>';
   }
 
-  // Table view: load allDrillRows in background for _tg shipment correction
-  if (activeView === 'table' && !allDrillRows && !_drillLoadAttempted) {
+  // Load allDrillRows in background regardless of Chart/Table view — once
+  // ready, every future date-range change on this page uses the instant
+  // client-side aggregate (computeTradelaneAggregateFromDrillRows) instead
+  // of a server round-trip.
+  if (!allDrillRows && !_drillLoadAttempted) {
     loadDrillData(function(){ _tradelanePivotCache={}; render(); });
   }
 
