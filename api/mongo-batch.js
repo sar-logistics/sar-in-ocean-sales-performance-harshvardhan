@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-14T-ocean-v147-restore-weekdata-1786694207";
+const DEPLOY_TS = "2026-08-14T-ocean-v148-general-opt-in-1786709207";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -573,8 +573,10 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
     for (const { collName, rows } of allResults) {
       for (const job of rows) {
         const cls = classifyRow(job, collName);
-        // Exclude GENERAL/Road/Clearance from drill rows — not shown in sales dashboard
-        if (cls.kind === 'GENERAL' || cls.kind === 'ROAD' || cls.kind === 'CLEARANCE') continue;
+        // Road/Clearance are excluded (empty collections, not modeled).
+        // General IS included now — it's an opt-in-only filter option on
+        // the client, invisible by default but available when selected.
+        if (cls.kind === 'ROAD' || cls.kind === 'CLEARANCE') continue;
         const primaryDateStr = getDateValueFor(job, cls);
         if (!primaryDateStr) continue;
         const d = parseSheetDate(primaryDateStr);
