@@ -1735,7 +1735,7 @@ function countryNameToTradelane(name) {
 }
 
 async function getTradelaneAggregate(db, force, dateFrom, dateTo, cacheKey) {
-  const key = cacheKey || "all";
+  const key = (cacheKey || "all") + "|" + DEPLOY_TS;
   const entry = tradelaneCacheMap[key];
   if (!force && entry && (Date.now() - entry.time) < SALES_CACHE_TTL_MS) {
     return { ...entry.data, cached: true };
