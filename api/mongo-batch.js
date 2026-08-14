@@ -541,6 +541,31 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
       JOB_COLLECTIONS.map(c => db.collection(c).find({}).toArray().then(r => ({ collName: c, rows: r })))
     );
 
+    // SRR is the authoritative source for tradelane data — NOT the job sheet
+    // (job documents do not reliably carry Discharge Country / Loading Port).
+    // Build shipmentNo -> tradelane maps, same logic as computeTradelaneAggregate.
+    const _srrTgByNo = { export: {}, import: {} };
+    try {
+      const [_srrExpRows, _srrImpRows] = await Promise.all([
+        db.collection("srr_sea_export").find({}, { projection: { "Shipment No": 1, "Discharge Country": 1 } }).toArray(),
+        db.collection("srr_sea_import").find({}, { projection: { "Shipment No": 1, "Loading Port": 1 } }).toArray(),
+      ]);
+      for (const r of _srrExpRows) {
+        const sno = String(r["Shipment No"] || "").trim(); if (!sno) continue;
+        const raw = String(r["Discharge Country"] || "").trim();
+        const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
+        const tlBase = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
+        _srrTgByNo.export[sno] = tlBase ? "IN – " + tlBase : "Others";
+      }
+      for (const r of _srrImpRows) {
+        const sno = String(r["Shipment No"] || "").trim(); if (!sno) continue;
+        const raw = String(r["Loading Port"] || "").trim();
+        const info = portToInfo(raw);
+        const tlBase = info.tradelane || cityToTradelane(raw);
+        _srrTgByNo.import[sno] = tlBase ? tlBase + " – IN" : "Others";
+      }
+    } catch (e) { console.error("SRR tg map fetch failed:", e && e.message); }
+
     const allRows = [];
     for (const { collName, rows } of allResults) {
       for (const job of rows) {
@@ -584,15 +609,12 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           // Fallback: try city name lookup when ISO2 code not found
           if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
         } else if (cls.kind === "SEA") {
-          if (cls.direction === "EXPORT") {
-            const _dc = String(job["Discharge Country"] || "").trim();
-            const _tlBase = countryNameToTradelane(_dc) || _dc;
-            _tg = _tlBase ? "IN – " + _tlBase : "Others";
-          } else {
-            const _portVal = String(job["Loading Port"] || "").trim();
-            const _tlBase = portToInfo(_portVal).tradelane || cityToTradelane(_portVal);
-            _tg = _tlBase ? _tlBase + " – IN" : "Others";
-          }
+          // SRR is the authoritative source for Sea tradelane — job sheet
+          // fields (Discharge Country / Loading Port) are not reliable here.
+          const _snoTg = String(job["Shipment No"] || "").trim();
+          _tg = cls.direction === "EXPORT"
+            ? (_srrTgByNo.export[_snoTg] || "Others")
+            : (_srrTgByNo.import[_snoTg] || "Others");
         } else if (cls.kind === "ISOTANK") {
           const _raw = cls.direction === "EXPORT"
             ? (String(job["Consignee Country"] || job["Destination Country"] || "").trim())
