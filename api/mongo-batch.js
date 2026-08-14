@@ -2732,6 +2732,25 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "srrProbe") {
+      const _probeSno = req.query.sno ? String(req.query.sno).trim() : null;
+      if (_probeSno) {
+        const _srrColls = ["srr_sea_export","srr_sea_import","srr_air_export","srr_air_import"];
+        const _jobColls = ["jobs_sea_export","jobs_sea_import"];
+        const found = {};
+        for (const c of _srrColls) {
+          try {
+            const doc = await db.collection(c).findOne({ "Shipment No": _probeSno });
+            found[c] = doc ? Object.fromEntries(Object.entries(doc).filter(([k]) => k !== "_id")) : null;
+          } catch (e) { found[c] = "error: " + e.message; }
+        }
+        for (const c of _jobColls) {
+          try {
+            const doc = await db.collection(c).findOne({ "Shipment No": _probeSno });
+            found[c] = doc ? { "Discharge Country": doc["Discharge Country"], "Loading Port": doc["Loading Port"], "Job Date": doc["Job Date"] } : null;
+          } catch (e) { found[c] = "error: " + e.message; }
+        }
+        return res.status(200).json({ success: true, shipmentNo: _probeSno, found });
+      }
       const cols = await db.listCollections().toArray();
       const allNames = cols.map(c => c.name);
       const srrNames = allNames.filter(n => n.toLowerCase().includes('srr'));
