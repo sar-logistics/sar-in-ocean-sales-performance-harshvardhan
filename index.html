@@ -1367,6 +1367,7 @@ function getTradelaneDateRange() {
 }
 function getTradelaneCacheKey() { var r = getTradelaneDateRange(); return (r.dateFrom||'all')+'_'+(r.dateTo||'all'); }
 
+var _tradelaneReqSeq = {};  // key -> latest issued sequence number
 function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo, _prefetchOnly) {
   var r = overrideDateFrom !== undefined
     ? { dateFrom: overrideDateFrom, dateTo: overrideDateTo }
@@ -1392,15 +1393,25 @@ function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo, _
     }
     // No localStorage — data too large, in-memory only
   }
+  // Sequence-number guard: if a NEWER request for this same key is issued
+  // (e.g. debounce fires again before this one returns), the older, slower
+  // response must never be allowed to overwrite the newer one on arrival.
+  var _mySeq = (_tradelaneReqSeq[key] || 0) + 1;
+  _tradelaneReqSeq[key] = _mySeq;
   fetch(qs).then(function(r){ return r.json(); })
     .then(function(data){
       if (data.success) {
-        data._cacheKey=key; _tradelaneCache[key]=data;
-        // Only update the live tradelaneData if this fetch matches the CURRENT active range
-        // (prevents background prefetch for other ranges from overwriting what's on screen)
-        var _curRange = getTradelaneDateRange();
-        var _curKey = (_curRange.dateFrom||'all') + '_' + (_curRange.dateTo||'all');
-        if (!_prefetchOnly || key === _curKey) { tradelaneData=data; tradelaneDataReady=true; }
+        var _isStaleResponse = _mySeq !== _tradelaneReqSeq[key];
+        if (!_isStaleResponse) {
+          data._cacheKey=key; _tradelaneCache[key]=data;
+          // Only update the live tradelaneData if this fetch matches the CURRENT active range
+          // (prevents background prefetch for other ranges from overwriting what's on screen)
+          var _curRange = getTradelaneDateRange();
+          var _curKey = (_curRange.dateFrom||'all') + '_' + (_curRange.dateTo||'all');
+          if (!_prefetchOnly || key === _curKey) { tradelaneData=data; tradelaneDataReady=true; }
+        } else {
+          console.warn('Discarded stale tradelane response for key', key);
+        }
       }
       if (callback) callback();
     })
