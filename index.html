@@ -1367,7 +1367,7 @@ function getTradelaneDateRange() {
 }
 function getTradelaneCacheKey() { var r = getTradelaneDateRange(); return (r.dateFrom||'all')+'_'+(r.dateTo||'all'); }
 
-function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
+function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo, _prefetchOnly) {
   var r = overrideDateFrom !== undefined
     ? { dateFrom: overrideDateFrom, dateTo: overrideDateTo }
     : getTradelaneDateRange();
@@ -1384,7 +1384,8 @@ function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
       var _firstCountry = _cachedLob && _cachedLob.allCountries && _cachedLob.allCountries[0];
       var _isOldFormat = _firstCountry && _firstCountry.name && !_firstCountry.name.includes('–');
       if (!_isOldFormat) {
-        tradelaneData = _tradelaneCache[key]; tradelaneDataReady = true; if (callback) callback(); return;
+        if (!_prefetchOnly) { tradelaneData = _tradelaneCache[key]; tradelaneDataReady = true; }
+        if (callback) callback(); return;
       }
       // Old format detected — delete and re-fetch
       delete _tradelaneCache[key];
@@ -1393,7 +1394,14 @@ function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
   }
   fetch(qs).then(function(r){ return r.json(); })
     .then(function(data){
-      if (data.success) { data._cacheKey=key; _tradelaneCache[key]=data; tradelaneData=data; tradelaneDataReady=true; }
+      if (data.success) {
+        data._cacheKey=key; _tradelaneCache[key]=data;
+        // Only update the live tradelaneData if this fetch matches the CURRENT active range
+        // (prevents background prefetch for other ranges from overwriting what's on screen)
+        var _curRange = getTradelaneDateRange();
+        var _curKey = (_curRange.dateFrom||'all') + '_' + (_curRange.dateTo||'all');
+        if (!_prefetchOnly || key === _curKey) { tradelaneData=data; tradelaneDataReady=true; }
+      }
       if (callback) callback();
     })
     .catch(function(e){ console.warn('Tradelane failed:',e.message); if(callback) callback(); });
