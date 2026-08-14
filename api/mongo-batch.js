@@ -1734,15 +1734,31 @@ function countryNameToTradelane(name) {
   return _countryToTradelane[String(name).toLowerCase().trim()] || _extra[String(name).toLowerCase().trim()] || "";
 }
 
+const tradelaneInFlight = {}; // key -> in-flight Promise, dedupes concurrent identical requests
 async function getTradelaneAggregate(db, force, dateFrom, dateTo, cacheKey) {
   const key = (cacheKey || "all") + "|" + DEPLOY_TS;
   const entry = tradelaneCacheMap[key];
   if (!force && entry && (Date.now() - entry.time) < SALES_CACHE_TTL_MS) {
     return { ...entry.data, cached: true };
   }
-  const result = await computeTradelaneAggregate(db, dateFrom, dateTo);
-  tradelaneCacheMap[key] = { data: result, time: Date.now() };
-  return result;
+  // If a computation for this exact key is already running, await THAT
+  // instead of starting a second concurrent one — this is what let a
+  // transient partial failure in one request silently poison the shared
+  // cache while a correct concurrent request was also in flight.
+  if (!force && tradelaneInFlight[key]) {
+    return await tradelaneInFlight[key];
+  }
+  const p = computeTradelaneAggregate(db, dateFrom, dateTo).then((result) => {
+    // Never cache (or use) a result where any SRR source failed to load —
+    // a partial SRR map falsely dumps real shipments into "Others".
+    if (!result.srrFetchErrors) {
+      tradelaneCacheMap[key] = { data: result, time: Date.now() };
+    }
+    delete tradelaneInFlight[key];
+    return result;
+  }).catch((e) => { delete tradelaneInFlight[key]; throw e; });
+  if (!force) tradelaneInFlight[key] = p;
+  return await p;
 }
 
 async function computeTradelaneAggregate(db, dateFrom, dateTo) {
