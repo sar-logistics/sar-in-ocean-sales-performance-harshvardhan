@@ -1440,17 +1440,6 @@ function computeTradelaneAggregateFromDrillRows(dateFrom, dateTo) {
 }
 
 
-
-// General is opt-in ONLY: unlike other LOBs (shown by default, filterable
-// out), General must be explicitly selected in the LOB filter to appear
-// anywhere at all — it stays excluded from every default/no-filter view.
-function _lobPassesFilter(rLob, filterLobsArr) {
-  if (rLob === 'GENERAL') {
-    return !!(filterLobsArr && filterLobsArr.indexOf('GENERAL') > -1);
-  }
-  if (filterLobsArr && filterLobsArr.length > 0 && filterLobsArr.indexOf(rLob) === -1) return false;
-  return true;
-}
 var _tradelaneReqSeq = {};  // key -> latest issued sequence number
 // ── Tradelane data fetching — deliberately simple. ─────────────────────────
 // No multi-key client cache, no format-heuristics, no cross-range fallback.
@@ -2661,7 +2650,7 @@ function topbar(){
         if (isFOpen) {
           var _isPendencyPage = state.page === 'op' || state.page === 'finance';
           var _isSalesPage = state.page === 'sales' || state.page === 'home' || !state.page;
-          var LOB_KEYS = ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT','GENERAL'];
+          var LOB_KEYS = ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT'];
           var LOB_LABELS = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','ISOTANK EXPORT':'ISO Tank Export','ISOTANK IMPORT':'ISO Tank Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import','GENERAL':'General'};
           // Always list from the FULL unfiltered dataset — otherwise once you filter
           // down to a subset, you could never see/re-select the excluded reps again
@@ -3983,7 +3972,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
       var _gtActiveMonsSet = {};
       activeMons.forEach(function(m){ _gtActiveMonsSet[m] = true; });
       allDrillRows.forEach(function(r){
-        if (!_lobPassesFilter(r.lob, filterLobs)) return;
+        if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
         if (effectiveReps && effectiveReps.length > 0 && effectiveReps.indexOf(r._sp) === -1) return;
         if (!_gtActiveMonsSet[r._ml]) return;
         var _eRev = effectiveRevenue(r);
@@ -4039,7 +4028,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     var _tgMDTons = {};
     allDrillRows.forEach(function(r){
       if (!r._tg) { return; }
-      if (!_lobPassesFilter(r.lob, filterLobs)) return;
+      if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
       if (effectiveReps && effectiveReps.length > 0 && effectiveReps.indexOf(r._sp) === -1) return;
       var inActive = _fyGroups ? !!_tgFyMonsSet[r._ml] : !!_tgActiveMonsSet[r._ml];
       if (!inActive) return;
@@ -7664,7 +7653,9 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
     }
 
     // Apply global LOB filter — pendency now respects LOB filter (General added as option)
-    if (!_lobPassesFilter(r.lob, state.filterLobs)) continue;
+    if (state.filterLobs && state.filterLobs.length > 0) {
+      if (state.filterLobs.indexOf(r.lob) === -1) continue;
+    }
 
     // Lock status filter
     var isDone = isOL ? r.olDone : r.flDone;
