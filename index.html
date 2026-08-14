@@ -7156,89 +7156,9 @@ function openInsightDrill(drillType, name, drillMonth) {
     }
   }
 
-  // Tradelane drill: use server API (needs SRR join not available client-side)
-  if (drillType === 'tradelane') {
-    // Build active months set from current view state
-    var _tlActiveMonsSet = {};
-    if (drillMonth && drillMonth.startsWith('RANGE:')) {
-      var _rParts = drillMonth.split(':');
-      var _rFrom = _rParts[1], _rTo = _rParts[2];
-      var _rFi = months26.indexOf(_rFrom), _rTi = months26.indexOf(_rTo);
-      if (_rFi >= 0 && _rTi >= 0) months26.slice(_rFi, _rTi+1).forEach(function(m){ _tlActiveMonsSet[m]=true; });
-    } else if (drillMonth) {
-      _tlActiveMonsSet[drillMonth] = true;
-    } else {
-      // No specific month — use currently active months from filteredMonthIndices
-      filteredMonthIndices().forEach(function(i){ _tlActiveMonsSet[months26[i]]=true; });
-    }
-
-    // Cache key includes active months so changing May→July busts cache
-    var _tlActiveMonsKey = Object.keys(_tlActiveMonsSet).sort(function(a,b){ return months26.indexOf(a)-months26.indexOf(b); }).join(',');
-    var _tlCacheKey = 'tl||'+name+'||'+_tlActiveMonsKey+'|'+(state.tradelaneLob||'Ocean')+'|'+_rlsUserKey;
-    if (_insightDrillCache[_tlCacheKey]) {
-      state.drill = _insightDrillCache[_tlCacheKey];
-      render();
-      return;
-    }
-
-    // Filter allDrillRows directly by _tg (tradelane group) + LOB + active months
-    // This bypasses shipmentNos entirely — accurate regardless of which cache is loaded
-    requestAnimationFrame(function(){
-      var _tlActiveLob = state.tradelaneLob || 'Ocean';
-      var _tlLobFilter = { 'Air':['AIR EXPORT','AIR IMPORT'], 'Ocean':['SEA EXPORT','SEA IMPORT'], 'ISO Tank':['ISOTANK EXPORT','ISOTANK IMPORT'] }[_tlActiveLob] || [];
-
-      // Build repFilter from RLS + zone/rep filters
-      var _tlRLSReps = _getRLSReps();
-      var _tlEffReps = null;
-      if (_tlRLSReps.length > 0) {
-        _tlEffReps = _tlRLSReps.map(function(x){return normalizeName(x);});
-      } else if ((state.filterZones||[]).length > 0 || (state.filterReps||[]).length > 0) {
-        _tlEffReps = zoneToRawSPs(state.filterZones||[]);
-        if ((state.filterReps||[]).length > 0) {
-          var _frn = (state.filterReps||[]).map(function(x){return normalizeName(x);});
-          _tlEffReps = _tlEffReps ? _tlEffReps.filter(function(sp){return _frn.indexOf(sp)>-1;}) : _frn;
-        }
-      }
-
-      // Fetch from SRR server
-      var _tlDateFrom = state.dateFrom;
-      var _tlDateTo   = state.dateTo;
-      // If specific month clicked, narrow to that month
-      if (drillMonth && !drillMonth.startsWith('RANGE:') && drillMonth !== 'FY Total') {
-        _tlDateFrom = drillMonth; _tlDateTo = drillMonth;
-      } else if (drillMonth && drillMonth.startsWith('RANGE:')) {
-        var _rp2 = drillMonth.split(':');
-        _tlDateFrom = _rp2[1] || state.dateFrom;
-        _tlDateTo   = _rp2[2] || state.dateTo;
-      }
-      var _tlLobParam = state.tradelaneLob || 'Ocean';
-      var _tlUrl = '/api/mongo-batch?action=tradelaneDrill'
-        + '&tradelane=' + encodeURIComponent(name)
-        + '&dateFrom='  + encodeURIComponent(_tlDateFrom)
-        + '&dateTo='    + encodeURIComponent(_tlDateTo)
-        + '&lob='       + encodeURIComponent(_tlLobParam);
-      fetch(_tlUrl).then(function(r){ return r.json(); }).then(function(data){
-        if (!data.success) { state.drill.loading=false; state.drill.rows=[]; render(); return; }
-        var _tlRows = data.rows || [];
-        if (_tlEffReps) {
-          _tlRows = _tlRows.filter(function(r){
-            return _tlEffReps.indexOf(normalizeName(r.salesPerson||'')) > -1;
-          });
-        }
-        var _tlGP=0, _tlRev=0;
-        _tlRows.forEach(function(r){ _tlGP+=r.gp||0; _tlRev+=r.revenue||0; });
-        var _tlResult = { entity:name, metric:'Shipments', col:'FY Total', valueFmt:null,
-          loading:false, rows:_tlRows, count:_tlRows.length,
-          totalMetric:_tlRows.length, totalGP:_tlGP, totalProvGP:0, totalActualGP:_tlGP,
-          totalRevenue:_tlRev, totalCost:_tlRev-_tlGP,
-          lobTab:'ALL', insightDrill:true, columnFilters:{}, openFilterCol:null, filterDraft:{}, isTlDrill:true };
-        _insightDrillCache[_tlCacheKey] = _tlResult;
-        state.drill = _tlResult;
-        render();
-      }).catch(function(){ state.drill.loading=false; state.drill.rows=[]; render(); });
-    });
-    return;
-  }
+  // Tradelane drill is now handled by the generic client-side loop below —
+  // allDrillRows._tg is SRR-sourced so it's safe to match directly, no
+  // server round-trip needed. This is what makes it as fast as customer/agent.
 
   // Defer heavy computation to next frame so loading state paints first
   requestAnimationFrame(function(){
@@ -7287,9 +7207,9 @@ function openInsightDrill(drillType, name, drillMonth) {
         ? (row.destAgent || '').toLowerCase() === nameLower
         : (row.originAgent || '').toLowerCase() === nameLower;
     } else if (drillType === 'tradelane') {
-      // Tradelane groups (US, Europe etc) can't be matched client-side
-      // without SRR data — server handles this via getDrillRows
-      match = false;
+      // allDrillRows._tg is SRR-sourced (matches the aggregate exactly) —
+      // safe to match client-side now, no server round-trip needed.
+      match = (name === 'Grand Total') || (row._tg === name);
     }
     if (!match) continue;
     matched.push(row);
@@ -7297,6 +7217,14 @@ function openInsightDrill(drillType, name, drillMonth) {
   matched.sort(function(a,b){ return (b._d||0)-(a._d||0); });
   var totalGP=0, totalRev=0, totalShip=0;
   matched.forEach(function(r){ totalGP+=r.g||0; totalRev+=r.r||0; totalShip++; });
+  // For tradelane drill, map each row's tradelane/port fields to the exact
+  // key names the drill table's tradelane-specific columns expect.
+  if (drillType === 'tradelane') {
+    matched.forEach(function(r){
+      r.tradelane = r._tg;
+      if (!r.loadingPort && r.srrLoadingPort) r.loadingPort = r.srrLoadingPort;
+    });
+  }
   var _iResult = {
     entity: name, metric: 'Shipments', col: 'FY Total', valueFmt: null,
     loading: false,
@@ -7305,7 +7233,7 @@ function openInsightDrill(drillType, name, drillMonth) {
     totalMetric: totalShip,
     totalGP: totalGP, totalProvGP: 0, totalActualGP: totalGP,
     totalRevenue: totalRev, totalCost: totalRev - totalGP,
-    lobTab: 'ALL', insightDrill: true,
+    lobTab: 'ALL', insightDrill: true, isTlDrill: drillType === 'tradelane',
     columnFilters: {}, openFilterCol: null, filterDraft: {}
   };
   _insightDrillCache[_iCacheKey] = _iResult;
