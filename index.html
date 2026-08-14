@@ -3641,38 +3641,13 @@ function tradelanePage(){
       topByGPPct:     top10tl(_filtered.filter(function(c){return c.shipments>=2;}),'gpPct'),
     };
   } else if (!_needsDrill) {
-    // No filter — patch shipments/tons from allDrillRows then apply LOB filter
-    if (allDrillRows && allDrillRows.length > 0 && lobData.allCountries) {
-      var _patchMonsSet = {};
-      filteredMonthIndices().forEach(function(i){ _patchMonsSet[months26[i]] = true; });
-      // Build _tg counts and tons from allDrillRows
-      var _ptgCount = {}, _ptgTons = {}, _ptgMDCount = {}, _ptgMDTons = {};
-      allDrillRows.forEach(function(r){
-        if (!r._tg || !r._ml || !_patchMonsSet[r._ml]) return;
-        if (filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
-        _ptgCount[r._tg] = (_ptgCount[r._tg]||0) + 1;
-        _ptgTons[r._tg]  = (_ptgTons[r._tg]||0) + (r.tons||0);
-        if (!_ptgMDCount[r._tg]) _ptgMDCount[r._tg] = {};
-        if (!_ptgMDTons[r._tg])  _ptgMDTons[r._tg]  = {};
-        _ptgMDCount[r._tg][r._ml] = (_ptgMDCount[r._tg][r._ml]||0) + 1;
-        _ptgMDTons[r._tg][r._ml]  = (_ptgMDTons[r._tg][r._ml]||0) + (r.tons||0);
-      });
-      // Apply to allCountries
-      lobData.allCountries.forEach(function(c){
-        if (_ptgCount[c.name] !== undefined) {
-          c.shipments = _ptgCount[c.name];
-          c.tons = _ptgTons[c.name] || 0;
-          if (c.monthData) {
-            filteredMonthIndices().forEach(function(i){
-              var m = months26[i];
-              if (!c.monthData[m]) c.monthData[m] = {shipments:0,tons:0,revenue:0,gp:0,teu:0};
-              c.monthData[m].shipments = _ptgMDCount[c.name][m] || 0;
-              c.monthData[m].tons      = _ptgMDTons[c.name][m]  || 0;
-            });
-          }
-        }
-      });
-    }
+    // No filter active — the server's SRR-based lobData.allCountries is
+    // already correctly scoped to this LOB and date range. Do NOT patch it
+    // with allDrillRows-derived counts here: allDrillRows._tg is computed
+    // via job-field fallback (not SRR-only), so overriding with it silently
+    // reintroduces the exact fallback behavior the tradelane page is meant
+    // to avoid, and was the actual root cause of the Others/IN-US/IN-Canada
+    // display corruption seen throughout today's debugging session.
 
     var LOB_KEY_TO_LABEL = {
       'AIR EXPORT':'Air Exp','AIR IMPORT':'Air Imp',
