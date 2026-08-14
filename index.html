@@ -1352,12 +1352,20 @@ var _tradelaneReqSeq = {};  // key -> latest issued sequence number
 // OLDER request can never overwrite the result of a NEWER one, no matter
 // which one's network round-trip finishes first.
 var _tradelaneReqSeq = {};
+var _tradelaneInFlightCb = {}; // key -> list of pending callbacks for an in-flight request
 function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
   var r = overrideDateFrom !== undefined
     ? { dateFrom: overrideDateFrom, dateTo: overrideDateTo }
     : getTradelaneDateRange();
   var dateFrom = r.dateFrom, dateTo = r.dateTo;
   var key = (dateFrom||'all') + '_' + (dateTo||'all');
+  // If a request for this exact key is already in flight, just queue this
+  // caller's callback onto it instead of firing a second overlapping request.
+  if (!force && _tradelaneInFlightCb[key]) {
+    if (callback) _tradelaneInFlightCb[key].push(callback);
+    return;
+  }
+  if (!force) _tradelaneInFlightCb[key] = callback ? [callback] : [];
   var qs = '/api/mongo-batch?action=tradelane'
     + (force ? '&force=1' : '')
     + (dateFrom ? '&dateFrom=' + encodeURIComponent(dateFrom) : '')
@@ -1377,9 +1385,20 @@ function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
           console.warn('Discarded stale tradelane response for key', key);
         }
       }
-      if (callback) callback();
+      if (!force) {
+        var _queued = _tradelaneInFlightCb[key] || [];
+        delete _tradelaneInFlightCb[key];
+        _queued.forEach(function(cb){ cb(); });
+      } else if (callback) { callback(); }
     })
-    .catch(function(e){ console.warn('Tradelane failed:',e.message); if(callback) callback(); });
+    .catch(function(e){
+      console.warn('Tradelane failed:',e.message);
+      if (!force) {
+        var _queuedErr = _tradelaneInFlightCb[key] || [];
+        delete _tradelaneInFlightCb[key];
+        _queuedErr.forEach(function(cb){ cb(); });
+      } else if (callback) { callback(); }
+    });
 }
 
 function _debouncedTradelaneFetch() {
