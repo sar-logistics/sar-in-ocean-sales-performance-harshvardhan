@@ -7203,6 +7203,19 @@ function openInsightDrill(drillType, name, drillMonth) {
   var FY_ALL = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26','Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
   var _iFromIdx = _iFrom ? FY_ALL.indexOf(_iFrom) : 0;
   var _iToIdx   = _iTo   ? FY_ALL.indexOf(_iTo)   : FY_ALL.length - 1;
+  // If a specific month/range cell was clicked (drillMonth), narrow the
+  // filter to exactly that instead of the page's whole selected range —
+  // applies to all insight drill types (tradelane, customer, agent).
+  if (drillMonth && drillMonth !== 'FY Total') {
+    if (drillMonth.startsWith('RANGE:')) {
+      var _drParts = drillMonth.split(':');
+      var _drFi = FY_ALL.indexOf(_drParts[1]), _drTi = FY_ALL.indexOf(_drParts[2]);
+      if (_drFi >= 0 && _drTi >= 0) { _iFromIdx = _drFi; _iToIdx = _drTi; }
+    } else {
+      var _dmIdx = FY_ALL.indexOf(drillMonth);
+      if (_dmIdx >= 0) { _iFromIdx = _dmIdx; _iToIdx = _dmIdx; }
+    }
+  }
 
   // RLS rep filter — compute ONCE outside loop
   var _rlsRepsNorm = _getRLSReps().map(function(n){ return normalizeName(n); });
