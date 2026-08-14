@@ -1344,6 +1344,102 @@ function getTradelaneDateRange() {
 }
 function getTradelaneCacheKey() { var r = getTradelaneDateRange(); return (r.dateFrom||'all')+'_'+(r.dateTo||'all'); }
 
+// ── Client-side tradelane aggregate — computed directly from allDrillRows ──
+// Once allDrillRows is loaded, every date-range switch on the tradelane page
+// uses this instead of a server round-trip. allDrillRows._tg is SRR-sourced
+// (fixed today) so this produces the exact same numbers as the server, with
+// zero network latency.
+function _tlEffectiveRevenue(r) {
+  var isAir = r.lob === 'AIR EXPORT' || r.lob === 'AIR IMPORT';
+  var locked = isAir ? !!r.financialLock : !!r.operationLock;
+  return locked ? (r.billedRevenue || r.r || 0) : (r.provRevenue || r.r || 0);
+}
+function computeTradelaneAggregateFromDrillRows(dateFrom, dateTo) {
+  if (!allDrillRows || !allDrillRows.length) return null;
+  var FY_MONTHS_LIST = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26','Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
+  var activeMonthSet = null;
+  if (dateFrom && dateTo) {
+    var fi = FY_MONTHS_LIST.indexOf(dateFrom), ti = FY_MONTHS_LIST.indexOf(dateTo);
+    if (fi >= 0 && ti >= 0) { activeMonthSet = {}; FY_MONTHS_LIST.slice(fi, ti+1).forEach(function(m){ activeMonthSet[m] = true; }); }
+  }
+  var LOB_OF = { 'AIR EXPORT':'Air','AIR IMPORT':'Air','SEA EXPORT':'Ocean','SEA IMPORT':'Ocean','ISOTANK EXPORT':'ISO Tank','ISOTANK IMPORT':'ISO Tank' };
+  var countryMap = {};
+  var countryMapByLob = { 'Air':{}, 'Ocean':{}, 'ISO Tank':{} };
+
+  function addTo(map, key, r, rev) {
+    if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0, monthData:{} };
+    var e = map[key];
+    e.shipments++;
+    e.revenue += rev; e.gp += r.g||0; e.tons += r.tons||0; e.teu += r.t||0;
+    var cargoType = String(r.cargoType||'').toUpperCase().trim();
+    var isAir = r.lob==='AIR EXPORT'||r.lob==='AIR IMPORT';
+    var isIso = r.lob==='ISOTANK EXPORT'||r.lob==='ISOTANK IMPORT';
+    var fclTeu = (!isAir && !isIso && (cargoType==='FCL'||cargoType==='LIQUID (CONT)')) ? (r.t||0) : 0;
+    var tankTeu = (!isAir && isIso) ? (r.t||0) : 0;
+    var lclVol = (!isAir && cargoType==='LCL') ? (r.volume||0) : 0;
+    e.fclTeu += fclTeu; e.tankTeu += tankTeu; e.lcl += lclVol;
+    var m = r._ml;
+    if (m) {
+      if (!e.monthData[m]) e.monthData[m] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
+      var md = e.monthData[m];
+      md.shipments++; md.revenue += rev; md.gp += r.g||0; md.tons += r.tons||0; md.teu += r.t||0;
+      md.fclTeu += fclTeu; md.tankTeu += tankTeu; md.lcl += lclVol;
+    }
+  }
+
+  for (var i = 0; i < allDrillRows.length; i++) {
+    var r = allDrillRows[i];
+    var lob = LOB_OF[r.lob];
+    if (!lob) continue; // not a tradelane-relevant LOB (excludes GENERAL/ROAD already absent)
+    if (activeMonthSet && !activeMonthSet[r._ml]) continue;
+    var tg = r._tg || 'Others';
+    var rev = _tlEffectiveRevenue(r);
+    addTo(countryMap, tg, r, rev);
+    addTo(countryMapByLob[lob], tg, r, rev);
+  }
+
+  function buildStats(cmap) {
+    var rows = Object.keys(cmap).map(function(name){
+      var d = cmap[name];
+      var monthData = {};
+      Object.keys(d.monthData).forEach(function(m){
+        var md = d.monthData[m];
+        monthData[m] = {
+          shipments: md.shipments,
+          revenue: Math.round(md.revenue), gp: Math.round(md.gp),
+          gpPct: md.revenue > 0 ? Math.round((md.gp/md.revenue)*1000)/10 : 0,
+          tons: Math.round(md.tons*100)/100, teu: Math.round(md.teu*100)/100,
+          fclTeu: Math.round(md.fclTeu*100)/100, tankTeu: Math.round(md.tankTeu*100)/100, lcl: Math.round(md.lcl*100)/100,
+        };
+      });
+      return {
+        name: name, shipments: d.shipments, revenue: Math.round(d.revenue), gp: Math.round(d.gp),
+        tons: Math.round(d.tons*100)/100, teu: Math.round(d.teu*100)/100,
+        fclTeu: Math.round(d.fclTeu*100)/100, tankTeu: Math.round(d.tankTeu*100)/100, lcl: Math.round(d.lcl*100)/100,
+        gpPct: d.revenue > 0 ? Math.round((d.gp/d.revenue)*1000)/10 : 0,
+        monthData: monthData,
+      };
+    });
+    function top10(arr, key){ return arr.slice().sort(function(a,b){return b[key]-a[key];}).slice(0,10); }
+    return {
+      topByShipments: top10(rows,'shipments'), topByRevenue: top10(rows,'revenue'), topByGP: top10(rows,'gp'),
+      topByTons: top10(rows.filter(function(r){return r.tons>0;}),'tons'),
+      topByTEU: top10(rows.filter(function(r){return r.teu>0;}),'teu'),
+      topByGPPct: top10(rows.filter(function(r){return r.shipments>=2;}),'gpPct'),
+      totalCountries: rows.length,
+      allCountries: rows.slice().sort(function(a,b){return b.gp-a.gp;}),
+    };
+  }
+
+  var top = buildStats(countryMap);
+  return Object.assign({
+    success: true,
+    lobs: { 'Air': buildStats(countryMapByLob['Air']), 'Ocean': buildStats(countryMapByLob['Ocean']), 'ISO Tank': buildStats(countryMapByLob['ISO Tank']) },
+    _clientComputed: true,
+  }, top);
+}
+
+
 var _tradelaneReqSeq = {};  // key -> latest issued sequence number
 // ── Tradelane data fetching — deliberately simple. ─────────────────────────
 // No multi-key client cache, no format-heuristics, no cross-range fallback.
@@ -1360,6 +1456,21 @@ function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
     : getTradelaneDateRange();
   var dateFrom = r.dateFrom, dateTo = r.dateTo;
   var key = (dateFrom||'all') + '_' + (dateTo||'all');
+  // Instant path: if allDrillRows is already loaded, compute the entire
+  // aggregate client-side — zero network round-trip. allDrillRows._tg is
+  // SRR-sourced (matches the server exactly), so this is safe and, since
+  // it's pure JS on already-loaded data, effectively instant. force=1 is
+  // an explicit user request for the freshest server data, so it always
+  // goes over the network regardless.
+  if (!force && allDrillRows && allDrillRows.length > 0) {
+    var clientResult = computeTradelaneAggregateFromDrillRows(dateFrom, dateTo);
+    if (clientResult) {
+      clientResult._cacheKey = key;
+      tradelaneData = clientResult; tradelaneDataReady = true;
+      if (callback) callback();
+      return;
+    }
+  }
   // Instant path: show in-memory cache (if present) immediately, then
   // always refresh in the background — same stale-while-revalidate idea
   // as sales performance's makeFetcher, but scoped per date-range key.
