@@ -380,20 +380,9 @@ function _showDashboardBody() {
     var latestKey = 'Apr-26_' + curMonBoot;
     var ac = lsGet('agents_' + latestKey) || lsGet('agents_' + defKey);
     if (ac && ac.success) { agentData = ac; agentDataReady = true; _agentCache[latestKey] = ac; }
-    // Load tradelane from localStorage (default range only)
-    var tc = null;
-    var nowTL = new Date();
-    var MONTL = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    var curMonTL = MONTL[nowTL.getMonth()] + '-' + String(nowTL.getFullYear()).slice(2);
-    var tlLatestKey = 'Apr-26_' + curMonTL;
-    tc = lsGet('tradelane_' + tlLatestKey);
-    if (!tc) tc = lsGet('tradelane_' + (state.dateFrom||'Apr-26') + '_' + (state.dateTo||curMonTL));
-    if (tc && tc.success) {
-      tc._cacheKey = tlLatestKey;
-      tc._isStale = true; // mark stale so patch runs when allDrillRows loads
-      _tradelaneCache[tlLatestKey] = tc;
-      tradelaneData = tc; tradelaneDataReady = true;
-    }
+    // Tradelane data is no longer bootstrapped from localStorage — it was
+    // a frequent source of stale/wrong data flashing before the real fetch
+    // corrected it. The tradelane page always fetches fresh now.
     var cusc = lsGet('customers_' + latestKey) || lsGet('customers_' + defKey);
     if (cusc && cusc.success) { customerData = cusc; customerDataReady = true; _customerCache[latestKey] = cusc; }
     // drillrows not stored in localStorage (too large) — loaded via ping response
@@ -491,21 +480,9 @@ function _showDashboardBody() {
         }
       }, 700);
       setTimeout(function(){
-        if (!_tradelaneCache[key]) {
-          fetch('/api/mongo-batch?action=tradelane&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
-            .then(function(r){return r.json();}).then(function(d){ if(d.success){d._cacheKey=key;_tradelaneCache[key]=d;tradelaneData=d;tradelaneDataReady=true;
-              try{
-                var _tlSave = JSON.parse(JSON.stringify(d));
-                ['Air','Ocean','ISO Tank'].forEach(function(lob){
-                  if(_tlSave.lobs&&_tlSave.lobs[lob]&&_tlSave.lobs[lob].allCountries){
-                    _tlSave.lobs[lob].allCountries.forEach(function(c){
-                      delete c.shipmentNos; delete c.weekData; delete c.salesReps; delete c.countries;
-                    });
-                  }
-                });
-                // Tradelane not stored in localStorage (too large, date-specific) — memory cache only
-              }catch(e){} } }).catch(function(){});
-        }
+        // Route through the single safe fetch function — never write to
+        // tradelaneData from a separate ungoverned fetch call again.
+        if (!tradelaneDataReady) { fetchTradelaneData(function(){ render(); }); }
       }, 1100);
       setTimeout(function(){ fetchFinanceData(null);  }, 1500);
       setTimeout(function(){ fetchOpData(null);       }, 1900);
