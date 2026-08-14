@@ -1937,7 +1937,10 @@ async function computeTradelaneAggregate(db) {
         let country = "", tradelane = "";
         if (cfg.fromPort) {
           const info = portToInfo(raw);
-          country = info.country; tradelane = info.tradelane;
+          country = info.country;
+          // Same fallback as the drill-rows SRR builder: if the ISO port
+          // code lookup misses, try matching by city name before giving up.
+          tradelane = info.tradelane || cityToTradelane(raw);
         } else {
           country = raw;
           const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
