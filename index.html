@@ -6922,67 +6922,6 @@ function loadDrillData(callback){
     });
 }
 
-function _patchTradelaneCacheWithDrillCounts() {
-  if (!allDrillRows || !allDrillRows.length) return;
-
-  var LOB_TO_TL = {
-    'AIR EXPORT':'Air','AIR IMPORT':'Air',
-    'SEA EXPORT':'Ocean','SEA IMPORT':'Ocean',
-    'ISOTANK EXPORT':'ISO Tank','ISOTANK IMPORT':'ISO Tank'
-  };
-
-  // Build per-LOB, per-tg, per-month shipment counts from allDrillRows
-  // (tons patched live in tradelanePivotTable)
-  var _tgMonthCounts = {}; // lobLabel -> tg -> month -> count
-  allDrillRows.forEach(function(r) {
-    if (!r._tg || !r._ml) return;
-    var lobLabel = LOB_TO_TL[r.lob] || '';
-    if (!lobLabel) return;
-    if (!_tgMonthCounts[lobLabel]) _tgMonthCounts[lobLabel] = {};
-    if (!_tgMonthCounts[lobLabel][r._tg]) _tgMonthCounts[lobLabel][r._tg] = {};
-    var mc = _tgMonthCounts[lobLabel][r._tg];
-    mc[r._ml] = (mc[r._ml] || 0) + 1;
-  });
-
-  // Helper: patch a single tradelane data object
-  function patchTlData(tlData) {
-    if (!tlData) return;
-    ['Air','Ocean','ISO Tank'].forEach(function(lobLabel) {
-      var lobData = tlData.lobs && tlData.lobs[lobLabel];
-      if (!lobData || !lobData.allCountries) return;
-      var tgMonths = _tgMonthCounts[lobLabel] || {};
-
-      lobData.allCountries.forEach(function(c) {
-        var monthMap = tgMonths[c.name] || {};
-        // Patch total shipments only (tons patched live in tradelanePivotTable)
-        var totalShip = Object.values(monthMap).reduce(function(s,v){return s+(v||0);},0);
-        if (totalShip > 0) c.shipments = totalShip;
-        if (c.monthData) {
-          Object.keys(c.monthData).forEach(function(m) {
-            c.monthData[m].shipments = monthMap[m] || 0;
-          });
-          Object.keys(monthMap).forEach(function(m) {
-            if (!c.monthData[m]) {
-              c.monthData[m] = { shipments: monthMap[m]||0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
-            }
-          });
-        }
-      });
-    });
-  }
-
-  // Patch live tradelaneData first (direct reference — always in sync)
-  patchTlData(tradelaneData);
-
-  // Patch all cached entries too
-  Object.keys(_tradelaneCache).forEach(function(cacheKey) {
-    patchTlData(_tradelaneCache[cacheKey]);
-  });
-
-  // Invalidate pivot cache so table re-renders with patched data
-  _tradelanePivotCache = {};
-  _tlGrandDrillCache = {};
-}
 
 // Mapping lookup built once from repsRaw — used for entity filtering
 var _drillMapping = null;
