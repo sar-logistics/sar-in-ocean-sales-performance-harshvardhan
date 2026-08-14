@@ -1850,21 +1850,45 @@ async function getTradelaneAggregate(db, force, dateFrom, dateTo, cacheKey) {
   const entry = tradelaneCacheMap[fullKey];
   let full;
   if (!force && entry && (Date.now() - entry.time) < SALES_CACHE_TTL_MS) {
+    // Fastest path: still warm in THIS container's memory.
     full = entry.data;
   } else if (!force && tradelaneInFlight[fullKey]) {
     full = await tradelaneInFlight[fullKey];
   } else {
-    const p = computeTradelaneAggregate(db).then((result) => {
-      // Never cache (or use) a result where any SRR source failed to load —
-      // a partial SRR map falsely dumps real shipments into "Others".
-      if (!result.srrFetchErrors) {
-        tradelaneCacheMap[fullKey] = { data: result, time: Date.now() };
-      }
-      delete tradelaneInFlight[fullKey];
-      return result;
-    }).catch((e) => { delete tradelaneInFlight[fullKey]; throw e; });
-    if (!force) tradelaneInFlight[fullKey] = p;
-    full = await p;
+    // In-memory cache missed — likely a cold container. Before paying the
+    // full Mongo-scan cost, check a persisted copy in the database: a
+    // single small document read is far faster than re-scanning every
+    // job/SRR collection, and survives cold starts across containers.
+    let persisted = null;
+    if (!force) {
+      try {
+        const doc = await db.collection("_cache_tradelane_full").findOne({ _id: "current" });
+        if (doc && doc.deployTs === DEPLOY_TS && (Date.now() - doc.time) < SALES_CACHE_TTL_MS) {
+          persisted = doc.data;
+        }
+      } catch (e) { /* collection may not exist yet — fall through to recompute */ }
+    }
+    if (persisted) {
+      full = persisted;
+      tradelaneCacheMap[fullKey] = { data: full, time: Date.now() }; // warm this container too
+    } else {
+      const p = computeTradelaneAggregate(db).then((result) => {
+        // Never cache (or use) a result where any SRR source failed to load —
+        // a partial SRR map falsely dumps real shipments into "Others".
+        if (!result.srrFetchErrors) {
+          tradelaneCacheMap[fullKey] = { data: result, time: Date.now() };
+          db.collection("_cache_tradelane_full").updateOne(
+            { _id: "current" },
+            { $set: { data: result, time: Date.now(), deployTs: DEPLOY_TS } },
+            { upsert: true }
+          ).catch((e) => console.error("Failed to persist tradelane cache:", e && e.message));
+        }
+        delete tradelaneInFlight[fullKey];
+        return result;
+      }).catch((e) => { delete tradelaneInFlight[fullKey]; throw e; });
+      if (!force) tradelaneInFlight[fullKey] = p;
+      full = await p;
+    }
   }
   return deriveTradelaneRange(full, dateFrom, dateTo);
 }
