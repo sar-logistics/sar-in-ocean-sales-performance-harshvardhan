@@ -2742,6 +2742,14 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "srrProbe") {
+      if (req.query.counts === "1") {
+        const counts = {};
+        for (const c of JOB_COLLECTIONS) {
+          try { counts[c] = await db.collection(c).countDocuments({}); }
+          catch (e) { counts[c] = "error: " + e.message; }
+        }
+        return res.status(200).json({ success: true, counts });
+      }
       const _probeSno = req.query.sno ? String(req.query.sno).trim() : null;
       if (_probeSno) {
         const _srrColls = ["srr_sea_export","srr_sea_import","srr_air_export","srr_air_import"];
