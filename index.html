@@ -1368,7 +1368,14 @@ function getTradelaneDateRange() {
 function getTradelaneCacheKey() { var r = getTradelaneDateRange(); return (r.dateFrom||'all')+'_'+(r.dateTo||'all'); }
 
 var _tradelaneReqSeq = {};  // key -> latest issued sequence number
-function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo, _prefetchOnly) {
+// ── Tradelane data fetching — deliberately simple. ─────────────────────────
+// No multi-key client cache, no format-heuristics, no cross-range fallback.
+// A sequence-number guard is the only protection needed: it ensures that if
+// two requests for the same key are ever in flight, the response from the
+// OLDER request can never overwrite the result of a NEWER one, no matter
+// which one's network round-trip finishes first.
+var _tradelaneReqSeq = {};
+function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
   var r = overrideDateFrom !== undefined
     ? { dateFrom: overrideDateFrom, dateTo: overrideDateTo }
     : getTradelaneDateRange();
@@ -1378,38 +1385,18 @@ function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo, _
     + (force ? '&force=1' : '')
     + (dateFrom ? '&dateFrom=' + encodeURIComponent(dateFrom) : '')
     + (dateTo   ? '&dateTo='   + encodeURIComponent(dateTo)   : '');
-  if (!force) {
-    if (_tradelaneCache[key]) {
-      // Validate cached data has correct tradelane format
-      var _cachedLob = _tradelaneCache[key].lobs && _tradelaneCache[key].lobs['Ocean'];
-      var _firstCountry = _cachedLob && _cachedLob.allCountries && _cachedLob.allCountries[0];
-      var _isOldFormat = _firstCountry && _firstCountry.name && !_firstCountry.name.includes('–');
-      if (!_isOldFormat) {
-        if (!_prefetchOnly) { tradelaneData = _tradelaneCache[key]; tradelaneDataReady = true; }
-        if (callback) callback(); return;
-      }
-      // Old format detected — delete and re-fetch
-      delete _tradelaneCache[key];
-    }
-    // No localStorage — data too large, in-memory only
-  }
-  // Sequence-number guard: if a NEWER request for this same key is issued
-  // (e.g. debounce fires again before this one returns), the older, slower
-  // response must never be allowed to overwrite the newer one on arrival.
   var _mySeq = (_tradelaneReqSeq[key] || 0) + 1;
   _tradelaneReqSeq[key] = _mySeq;
   fetch(qs).then(function(r){ return r.json(); })
     .then(function(data){
       if (data.success) {
-        var _isStaleResponse = _mySeq !== _tradelaneReqSeq[key];
-        if (!_isStaleResponse) {
-          data._cacheKey=key; _tradelaneCache[key]=data;
-          // Only update the live tradelaneData if this fetch matches the CURRENT active range
-          // (prevents background prefetch for other ranges from overwriting what's on screen)
-          var _curRange = getTradelaneDateRange();
-          var _curKey = (_curRange.dateFrom||'all') + '_' + (_curRange.dateTo||'all');
-          if (!_prefetchOnly || key === _curKey) { tradelaneData=data; tradelaneDataReady=true; }
-        } else {
+        var _curRange = getTradelaneDateRange();
+        var _curKey = (_curRange.dateFrom||'all') + '_' + (_curRange.dateTo||'all');
+        var _isStale = _mySeq !== _tradelaneReqSeq[key];
+        if (!_isStale && key === _curKey) {
+          data._cacheKey = key;
+          tradelaneData = data; tradelaneDataReady = true;
+        } else if (_isStale) {
           console.warn('Discarded stale tradelane response for key', key);
         }
       }
@@ -1419,36 +1406,15 @@ function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo, _
 }
 
 function _debouncedTradelaneFetch() {
-  var _k = getTradelaneCacheKey();
-  if (_tradelaneCache[_k]) { tradelaneData=_tradelaneCache[_k]; tradelaneDataReady=true; render(); return; }
-  // Yearly view: if specific range not cached, try full 'all_all' cache as fallback
-  if (state.reportView === 'Yearly' && _tradelaneCache['all_all']) {
-    tradelaneData=_tradelaneCache['all_all']; tradelaneDataReady=true; render(); return;
-  }
   render(); clearTimeout(_tradelaneFetchTimer);
   _tradelaneFetchTimer = setTimeout(function(){ tradelaneDataReady=false; fetchTradelaneData(function(){ render(); }); }, 300);
 }
 
 function prefetchTradelaneRanges() {
-  if (_tradelanePrefetchDone) return;
-  _tradelanePrefetchDone = true;
-  var allM = months26; if (!allM || !allM.length) return;
-  // Priority: full year first (Yearly view), then shorter ranges
-  var queue = [
-    {dateFrom:allM[0], dateTo:allM[allM.length-1]},  // full year — Yearly view instant
-    {dateFrom:'', dateTo:''},                          // all data
-  ];
-  [12,6,3].forEach(function(n){
-    if(allM.length>=n) queue.push({dateFrom:allM[allM.length-n],dateTo:allM[allM.length-1]});
-  });
-  var idx=0;
-  function next(){
-    if(idx>=queue.length) return;
-    var r=queue[idx++]; var key=(r.dateFrom||'all')+'_'+(r.dateTo||'all');
-    if(_tradelaneCache[key]){ next(); return; } // already cached — skip immediately
-    fetchTradelaneData(function(){ setTimeout(next,200); }, false, r.dateFrom, r.dateTo, true);
-  }
-  setTimeout(next, 500); // start sooner — right after initial data loads
+  // Disabled — background prefetching for other date ranges was the root
+  // cause of the tradelane page randomly flipping to a different range's
+  // data. Every view now always fetches fresh for exactly what's on screen.
+  return;
 }
 var fetchOrgData = makeFetcher('org', 'org', function(d){ orgData = d; orgDataReady = true; });
 
