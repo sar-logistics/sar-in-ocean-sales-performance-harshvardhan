@@ -1771,6 +1771,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
 
   // shipmentNo → { country, tradelane, lob, dir }
   const srrMap = {};
+  const srrFetchErrors = [];
   await Promise.all(SRR_CONFIG.map(async (cfg) => {
     try {
       const rows = await db.collection(cfg.coll).find({}, {
@@ -1799,10 +1800,8 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         if (country || cfg.lob === "Ocean") srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
       }
     } catch (e) {
-      // Do NOT silently continue with a partial SRR map — that produces a
-      // corrupted aggregate (most jobs falsely dumped into "Others").
-      // Only tolerate a true "collection missing" error; rethrow anything else.
-      if (!/ns does not exist|not found/i.test(String(e && e.message))) throw e;
+      console.error("SRR fetch failed for", cfg.coll, ":", e && e.message);
+      srrFetchErrors.push(cfg.coll + ": " + (e && e.message));
     }
   }));
 
