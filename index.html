@@ -6880,24 +6880,11 @@ function loadDrillData(callback){
           render();
         }
       }
-      // Bundle tradelane data from ping — store in cache keyed as 'all' so Yearly/all-data views are instant
-      if (data.tradelane && data.tradelane.lobs) {
-        var _tlKey = 'all_all';
-        data.tradelane._cacheKey = _tlKey;
-        _tradelaneCache[_tlKey] = data.tradelane;
-        // Also cache under full year range key
-        var _allM = months26;
-        if (_allM && _allM.length) {
-          var _yrKey = _allM[0] + '_' + _allM[_allM.length-1];
-          _tradelaneCache[_yrKey] = data.tradelane;
-        }
-        // If on tradelane page and data not loaded yet, use it immediately
-        if (state.page === 'tradelane' && !tradelaneDataReady) {
-          tradelaneData = data.tradelane; tradelaneDataReady = true;
-        }
-        // tradelane cached in-memory only (all_all too large for storage)
-        _patchTradelaneCacheWithDrillCounts();
-      }
+      // Tradelane data is intentionally NOT bundled from ping anymore.
+      // It was a second, ungoverned write path to tradelaneData — for a
+      // different (full-year) range than whatever the user had selected —
+      // and could silently hijack the display mid-session. The tradelane
+      // page always fetches exactly what it needs via fetchTradelaneData now.
       _drillDataLoading = false;
       _drillLoadAttempted = true;
       _drillDataCallbacks.forEach(function(cb){ cb(); });
