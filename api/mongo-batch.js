@@ -1764,33 +1764,11 @@ function countryNameToTradelane(name) {
 }
 
 const tradelaneInFlight = {}; // key -> in-flight Promise, dedupes concurrent identical requests
-async function getTradelaneAggregate(db, force, dateFrom, dateTo, cacheKey) {
-  const key = (cacheKey || "all") + "|" + DEPLOY_TS;
-  const entry = tradelaneCacheMap[key];
-  if (!force && entry && (Date.now() - entry.time) < SALES_CACHE_TTL_MS) {
-    return { ...entry.data, cached: true };
-  }
-  // If a computation for this exact key is already running, await THAT
-  // instead of starting a second concurrent one — this is what let a
-  // transient partial failure in one request silently poison the shared
-  // cache while a correct concurrent request was also in flight.
-  if (!force && tradelaneInFlight[key]) {
-    return await tradelaneInFlight[key];
-  }
-  const p = computeTradelaneAggregate(db, dateFrom, dateTo).then((result) => {
-    // Never cache (or use) a result where any SRR source failed to load —
-    // a partial SRR map falsely dumps real shipments into "Others".
-    if (!result.srrFetchErrors) {
-      tradelaneCacheMap[key] = { data: result, time: Date.now() };
-    }
-    delete tradelaneInFlight[key];
-    return result;
-  }).catch((e) => { delete tradelaneInFlight[key]; throw e; });
-  if (!force) tradelaneInFlight[key] = p;
-  return await p;
-}
-
-async function computeTradelaneAggregate(db, dateFrom, dateTo) {
+function deriveTradelaneRange(full, dateFrom, dateTo) {
+  // Narrows an already-computed FULL fiscal-year tradelane aggregate down to a
+  // specific date range, purely from its per-country monthData — no Mongo
+  // query involved, so this is effectively instant regardless of which range
+  // is requested.
   const FY_MONTHS_LIST = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
     "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
     "Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26",
@@ -1801,6 +1779,100 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
     const ti = FY_MONTHS_LIST.indexOf(dateTo);
     if (fi >= 0 && ti >= 0) activeMonthSet = new Set(FY_MONTHS_LIST.slice(fi, ti + 1));
   }
+
+  function narrowRows(rows) {
+    const narrowed = [];
+    for (const row of (rows || [])) {
+      let shipments = 0, revenue = 0, gp = 0, tons = 0, teu = 0, fclTeu = 0, tankTeu = 0, lcl = 0;
+      const monthData = {};
+      const srcMonthData = row.monthData || {};
+      const monthsToUse = activeMonthSet ? [...activeMonthSet] : Object.keys(srcMonthData);
+      for (const m of monthsToUse) {
+        const md = srcMonthData[m];
+        if (!md) continue;
+        monthData[m] = md;
+        shipments += md.shipments || 0;
+        revenue   += md.revenue   || 0;
+        gp        += md.gp        || 0;
+        tons      += md.tons      || 0;
+        teu       += md.teu       || 0;
+        fclTeu    += md.fclTeu    || 0;
+        tankTeu   += md.tankTeu   || 0;
+        lcl       += md.lcl       || 0;
+      }
+      if (shipments <= 0) continue; // no activity in this range — drop the row
+      narrowed.push({
+        ...row,
+        shipments, revenue, gp, tons, teu, fclTeu, tankTeu, lcl,
+        gpPct: revenue > 0 ? Math.round((gp / revenue) * 1000) / 10 : 0,
+        monthData,
+      });
+    }
+    return narrowed;
+  }
+
+  function narrowStats(stats) {
+    const rows = narrowRows(stats && stats.allCountries);
+    function top10(arr, key) { return [...arr].sort((a,b)=>b[key]-a[key]).slice(0,10); }
+    return {
+      topByShipments:  top10(rows, "shipments"),
+      topByRevenue:    top10(rows, "revenue"),
+      topByGP:         top10(rows, "gp"),
+      topByTons:       top10(rows.filter(r=>r.tons>0), "tons"),
+      topByTEU:        top10(rows.filter(r=>r.teu>0), "teu"),
+      topByGPPct:      top10(rows.filter(r=>r.shipments>=2), "gpPct"),
+      totalCountries:  rows.length,
+      allCountries:    [...rows].sort((a,b)=>b.gp-a.gp),
+    };
+  }
+
+  return {
+    success: true,
+    lobs: {
+      "Air":      narrowStats(full.lobs && full.lobs["Air"]),
+      "Ocean":    narrowStats(full.lobs && full.lobs["Ocean"]),
+      "ISO Tank": narrowStats(full.lobs && full.lobs["ISO Tank"]),
+    },
+    ...narrowStats(full),
+    pushedAt: full.pushedAt,
+    srrFetchErrors: full.srrFetchErrors,
+  };
+}
+
+async function getTradelaneAggregate(db, force, dateFrom, dateTo, cacheKey) {
+  // The expensive Mongo scan always computes the FULL fiscal-year result,
+  // cached under one single key — never per requested date range. Any
+  // specific dateFrom/dateTo is then derived from the cached full result
+  // by summing already-computed monthData, which is pure JS and instant.
+  // This is what makes switching between date ranges fast, matching how
+  // the sales performance page behaves.
+  const fullKey = "FULL|" + DEPLOY_TS;
+  const entry = tradelaneCacheMap[fullKey];
+  let full;
+  if (!force && entry && (Date.now() - entry.time) < SALES_CACHE_TTL_MS) {
+    full = entry.data;
+  } else if (!force && tradelaneInFlight[fullKey]) {
+    full = await tradelaneInFlight[fullKey];
+  } else {
+    const p = computeTradelaneAggregate(db).then((result) => {
+      // Never cache (or use) a result where any SRR source failed to load —
+      // a partial SRR map falsely dumps real shipments into "Others".
+      if (!result.srrFetchErrors) {
+        tradelaneCacheMap[fullKey] = { data: result, time: Date.now() };
+      }
+      delete tradelaneInFlight[fullKey];
+      return result;
+    }).catch((e) => { delete tradelaneInFlight[fullKey]; throw e; });
+    if (!force) tradelaneInFlight[fullKey] = p;
+    full = await p;
+  }
+  return deriveTradelaneRange(full, dateFrom, dateTo);
+}
+
+async function computeTradelaneAggregate(db) {
+  // Always scans the ENTIRE fiscal year — no date filtering here at all.
+  // deriveTradelaneRange() below narrows to a specific range afterwards,
+  // from the resulting monthData, without touching Mongo again.
 
   // ── Step 1: Build SRR lookup maps: shipmentNo → { country, tradelane } ───────
   // Sea Export: Discharge Country (direct field — use TRADELANE_MAP to get tradelane)
@@ -1886,16 +1958,6 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
     const jobs = await db.collection(cfg.coll).find({}, { projection }).toArray();
 
     for (const job of jobs) {
-      // Date filter
-      if (activeMonthSet) {
-        const _tCls = { direction: cfg.dir === "Export" ? "EXPORT" : "IMPORT" };
-        const rawDate = getDateValueFor(job, _tCls);
-        if (!rawDate) continue;
-        const dObj = parseSheetDate(rawDate);
-        if (!dObj) continue;
-        const ml = MONTH_NAMES[dObj.getMonth()] + "-" + String(dObj.getFullYear()).slice(2);
-        if (!activeMonthSet.has(ml)) continue;
-      }
 
       const sno = String(job["Shipment No"] || "").trim();
       const srrEntry = srrMap[sno];
