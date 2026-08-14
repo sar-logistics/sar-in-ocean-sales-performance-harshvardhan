@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-14T-ocean-v145-date-parity-1786693884";
+const DEPLOY_TS = "2026-08-14T-ocean-v146-lean-response-1786694159";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1801,8 +1801,14 @@ function deriveTradelaneRange(full, dateFrom, dateTo) {
         lcl       += md.lcl       || 0;
       }
       if (shipments <= 0) continue; // no activity in this range — drop the row
+      // Deliberately exclude shipmentNos (can be thousands of entries per
+      // country) and the unfiltered full-year weekData — neither is used
+      // by the client for display, and including them was bloating every
+      // single response, adding noticeable serialization/transfer lag on
+      // every date-range switch.
+      const { shipmentNos, weekData, ...leanRow } = row;
       narrowed.push({
-        ...row,
+        ...leanRow,
         shipments, revenue, gp, tons, teu, fclTeu, tankTeu, lcl,
         gpPct: revenue > 0 ? Math.round((gp / revenue) * 1000) / 10 : 0,
         monthData,
