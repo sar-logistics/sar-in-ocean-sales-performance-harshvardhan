@@ -3270,8 +3270,8 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
     +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:180px;">Customer</th>'
     +sortBtn('shipments','Ships',true)
     +(isAir ? sortBtn('tons','Tons',true) : sortBtn('teu','TEUs',true))
-    +sortBtn('revenue','Revenue',true)
     +sortBtn('gp','GP',true)
+    +sortBtn('revenue','Revenue',true)
     +sortBtn('gpPct','GP%',true)
     +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;">LOB(s)</th>'
     +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:140px;">Sales</th>'
@@ -3303,8 +3303,8 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
         ? '<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+(c.tons>=1000?(c.tons/1000).toFixed(1)+'k':c.tons.toFixed(1))+'</td>'
         : '<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+c.teu.toFixed(1)+'</td>'
       )
-      +'<td data-act="insightDrill" data-drill-type="customer" data-drill-name="'+esc(c.name)+'" style="padding:7px 10px;font-size:11.5px;color:#1D5FCC;text-align:right;font-family:\'DM Mono\',monospace;cursor:pointer;text-decoration:underline dotted;">'+fmtCur(c.revenue)+'</td>'
       +'<td data-act="insightDrill" data-drill-type="customer" data-drill-name="'+esc(c.name)+'" style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpColor+';text-align:right;font-family:\'DM Mono\',monospace;cursor:pointer;text-decoration:underline dotted;">'+fmtCur(c.gp)+'</td>'
+      +'<td data-act="insightDrill" data-drill-type="customer" data-drill-name="'+esc(c.name)+'" style="padding:7px 10px;font-size:11.5px;color:#1D5FCC;text-align:right;font-family:\'DM Mono\',monospace;cursor:pointer;text-decoration:underline dotted;">'+fmtCur(c.revenue)+'</td>'
       +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpPctColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+c.gpPct+'%</td>'
       +'<td style="padding:7px 10px;">'+lobsHtml+'</td>'
       +'<td style="padding:7px 10px;font-size:10.5px;color:#64748B;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+filteredReps.join(', ')+'">'+repsText+'</td>'
@@ -3570,8 +3570,8 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
     +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:180px;">Agent</th>'
     +sortBtn('shipments','Ships',true)
     +(isAir ? sortBtn('tons','Tons',true) : sortBtn('teu','TEUs',true))
-    +sortBtn('revenue','Revenue',true)
     +sortBtn('gp','GP',true)
+    +sortBtn('revenue','Revenue',true)
     +sortBtn('gpPct','GP%',true)
     +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;">LOB(s)</th>'
     +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:140px;">Sales</th>'
