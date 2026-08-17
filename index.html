@@ -5800,14 +5800,14 @@ function tableRows(){
       if (_hasOceanLob) rows.push(metric('LCL (Ocean in CBM)', 1, 'cbm',  '#9AA4B2', lcl, sum(lcl), false));
     }
 
-    rows.push(metric('GP', 0, 'cur', '#374151', dispGp, sum(dispGp), 'gp'));
+    rows.push(metric('GP', 0, 'cur', '#059669', dispGp, sum(dispGp), 'gp'));
 
     if (gpOpen) {
       rows.push(metric('Actual Profit',      1, 'cur', '#1D5FCC', dispGpActual, sum(dispGpActual), false));
       rows.push(metric('Provisional Profit', 1, 'cur', '#10875A', dispGpProv,   sum(dispGpProv),   false));
     }
 
-    rows.push(metric('Revenue', 0, 'cur', '#0D7C6B', dispRev || dispGp.map(function(){return 0;}), sum(dispRev||[]), 'rev'));
+    rows.push(metric('Revenue', 0, 'cur', '#2563EB', dispRev || dispGp.map(function(){return 0;}), sum(dispRev||[]), 'rev'));
     if (revOpen) {
       rows.push(metric('Billed Revenue',      1, 'cur', '#1D5FCC', dispRevBilled || dispGp.map(function(){return 0;}), sum(dispRevBilled||[]), false));
       rows.push(metric('Provisional Revenue', 1, 'cur', '#475569', dispRevProv   || dispGp.map(function(){return 0;}), sum(dispRevProv||[]),   false));
