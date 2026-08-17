@@ -780,6 +780,9 @@ function computeFilteredRepsRaw(){
             tons:    filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob]._week&&ld[lob]._week[wk]&&ld[lob]._week[wk].tons)    ||0); },0),
             teu:     filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob]._week&&ld[lob]._week[wk]&&ld[lob]._week[wk].teu)     ||0); },0),
             lcl:     filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob]._week&&ld[lob]._week[wk]&&ld[lob]._week[wk].lcl)     ||0); },0),
+            rev:       filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob]._week&&ld[lob]._week[wk]&&ld[lob]._week[wk].rev)      ||0); },0),
+            revBilled: filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob]._week&&ld[lob]._week[wk]&&ld[lob]._week[wk].revBilled)||0); },0),
+            revProv:   filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob]._week&&ld[lob]._week[wk]&&ld[lob]._week[wk].revProv)  ||0); },0),
           };
         });
         filtered.weekData = filteredWeekData;
