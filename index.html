@@ -3639,6 +3639,23 @@ function tradelanePage(){
   }
 
   if (!tradelaneDataReady) {
+    // Same fix as the cache-key-mismatch case above: if allDrillRows is
+    // already loaded, compute directly and synchronously, in-line, and
+    // fall through to render the real content below — do NOT call
+    // fetchTradelaneData with a callback that recursively calls render(),
+    // since that recursion's correct output gets clobbered when this
+    // (now-stale) outer call falls through to returning the spinner
+    // afterward.
+    if (allDrillRows && allDrillRows.length > 0) {
+      var _r1 = getTradelaneDateRange();
+      var _recomputed1 = computeTradelaneAggregateFromDrillRows(_r1.dateFrom, _r1.dateTo);
+      if (_recomputed1) {
+        _recomputed1._cacheKey = (_r1.dateFrom||'all') + '_' + (_r1.dateTo||'all');
+        tradelaneData = _recomputed1; tradelaneDataReady = true;
+      }
+    }
+  }
+  if (!tradelaneDataReady) {
     if (!tradelaneDataLoading) {
       tradelaneDataLoading = true;
       fetchTradelaneData(function(){ tradelaneDataLoading = false; render(); prefetchTradelaneRanges(); });
