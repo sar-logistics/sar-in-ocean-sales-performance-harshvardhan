@@ -6551,9 +6551,9 @@ function leaderboard(){
   var rows = sorted.map(function(r, i){
     var avatarBg = 'oklch(0.6 0.12 '+r.hue+')';
     var ini = r.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
-    var achColor = r.achPct>=100?'#0A7E53':r.achPct>=50?'#1D5FCC':'#C0392B';
+    var achColor = r.achPct>=75?'#15875A':'#DC2626'; // aligned with main table's 75% threshold
     var barW = Math.min(100, r.achPct);
-    var barColor = r.achPct>=100?'#0A7E53':r.achPct>=50?'#1D5FCC':'#E08A2B';
+    var barColor = r.achPct>=75?'#15875A':'#DC2626'; // aligned with main table's 75% threshold
     var isTop3 = i < 3;
     var rankBadge = isTop3
       ? '<div style="width:24px;height:24px;border-radius:50%;background:'+medalColors[i]+';color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.18);">'+(i+1)+'</div>'
