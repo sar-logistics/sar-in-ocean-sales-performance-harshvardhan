@@ -7461,6 +7461,10 @@ function openDrill(entity, metric, col, valueFmt){
   fetch('/api/mongo-batch'+qs, { priority:'high' })
     .then(function(r){ return r.json(); })
     .then(function(data){
+      // The user may have closed the drill drawer (state.drill = null) while
+      // this fallback fetch was still in flight — guard against writing to
+      // a now-null object, which was throwing an unhandled TypeError.
+      if (!state.drill) { if (!allDrillRows) loadDrillData(null); return; }
       if (!data.success) { state.drill.loading=false; state.drill.error=data.error||'Failed.'; render(); return; }
       _drillResultCache[cacheKey] = data;
       state.drill.loading=false; state.drill.rows=data.rows; state.drill.count=data.count;
@@ -7472,7 +7476,10 @@ function openDrill(entity, metric, col, valueFmt){
       // Load allDrillRows in background so next drill click is instant
       if (!allDrillRows) loadDrillData(null);
     })
-    .catch(function(){ state.drill.loading=false; state.drill.error='Could not reach the server.'; render(); });
+    .catch(function(){
+      if (!state.drill) return;
+      state.drill.loading=false; state.drill.error='Could not reach the server.'; render();
+    });
 }
 
 
