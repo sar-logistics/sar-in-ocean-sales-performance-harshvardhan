@@ -3644,7 +3644,12 @@ function tradelanePage(){
   }
 
   if (!tradelaneDataReady) {
-    if (!tradelaneDataLoading) {
+    // If the Refresh button's own forced fetch is already in flight, don't
+    // let this page's normal (non-forced) fetch race ahead of it — since
+    // the non-forced path resolves instantly from allDrillRows, it would
+    // otherwise win the race and the slower forced response gets treated
+    // as stale and discarded, leaving the page in an inconsistent state.
+    if (!tradelaneDataLoading && !window._forceRefreshInProgress) {
       tradelaneDataLoading = true;
       fetchTradelaneData(function(){ tradelaneDataLoading = false; render(); prefetchTradelaneRanges(); });
     }
@@ -7948,6 +7953,7 @@ document.addEventListener('click', function(ev){
     showRefreshOverlay();
 
     function finishRefresh(){
+      window._forceRefreshInProgress = false;
       if(btn) btn.disabled = false;
       if(icon){ icon.style.animation = ''; }
       hideRefreshOverlay();
@@ -7975,6 +7981,7 @@ document.addEventListener('click', function(ev){
     _agentCache = {}; _agentPrefetchDone = false;
     _tradelaneCache = {}; _tradelanePrefetchDone = false;
 
+    window._forceRefreshInProgress = true;
     fetchLiveData(done, true);
     pending++; fetchCustomerData(done, true);
     pending++; fetchAgentData(done, true);
