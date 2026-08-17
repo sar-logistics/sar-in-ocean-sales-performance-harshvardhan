@@ -3745,22 +3745,34 @@ function tradelanePage(){
       if (!_activeMonsSet[r._ml]) return;
       var tg = r._tg || '';
       if (!tg) return;
-      if (!_tgMap[tg]) _tgMap[tg] = { name:tg, shipments:0, gp:0, revenue:0, tons:0, teu:0, lobs:[], salesReps:[], monthData:{} };
+      if (!_tgMap[tg]) _tgMap[tg] = { name:tg, shipments:0, gp:0, revenue:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0, lobs:[], salesReps:[], monthData:{} };
       var e = _tgMap[tg];
       e.shipments++;
       var rev = effectiveRevenueTL(r);
+      var _ct = String(r.cargoType||'').toUpperCase().trim();
+      var _isAirR = r.lob==='AIR EXPORT'||r.lob==='AIR IMPORT';
+      var _isIsoR = r.lob==='ISOTANK EXPORT'||r.lob==='ISOTANK IMPORT';
+      var _fclTeu = (!_isAirR && !_isIsoR && (_ct==='FCL'||_ct==='LIQUID (CONT)')) ? (r.t||0) : 0;
+      var _tankTeu = (!_isAirR && _isIsoR) ? (r.t||0) : 0;
+      var _lclVol = (!_isAirR && _ct==='LCL') ? (r.volume||0) : 0;
       e.gp      += r.g || 0;
       e.revenue += rev;
       e.tons    += r.tons || 0;
       e.teu     += r.t   || 0;
+      e.fclTeu  += _fclTeu;
+      e.tankTeu += _tankTeu;
+      e.lcl     += _lclVol;
       // Build monthData for pivot table monthly columns
       var ml = r._ml;
-      if (!e.monthData[ml]) e.monthData[ml] = { shipments:0, gp:0, revenue:0, tons:0, teu:0 };
+      if (!e.monthData[ml]) e.monthData[ml] = { shipments:0, gp:0, revenue:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
       e.monthData[ml].shipments++;
       e.monthData[ml].gp      += r.g || 0;
       e.monthData[ml].revenue += rev;
       e.monthData[ml].tons    += r.tons || 0;
       e.monthData[ml].teu     += r.t   || 0;
+      e.monthData[ml].fclTeu  += _fclTeu;
+      e.monthData[ml].tankTeu += _tankTeu;
+      e.monthData[ml].lcl     += _lclVol;
     });
 
     var _filtered = Object.values(_tgMap).map(function(e){
