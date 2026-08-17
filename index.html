@@ -1459,18 +1459,24 @@ var _tradelaneReqSeq = {};
 var _tradelaneInFlightCb = {}; // key -> list of pending callbacks for an in-flight request
 var _tradelaneMemCache = {}; // key -> aggregate data, in-memory only (not localStorage — payloads too large)
 function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
+  // Single, simple rule — no competing paths, nothing to race:
+  //   1. If allDrillRows is loaded, ALWAYS compute from it, client-side,
+  //      instantly. This is the only source of truth for Tradelane once
+  //      allDrillRows exists — force=1 does NOT trigger a separate server
+  //      fetch anymore. "Refresh" for Tradelane means allDrillRows itself
+  //      needs to be reloaded fresh (handled by the Refresh button calling
+  //      reloadAllDrillRows() below), not a second, independent fetch that
+  //      can race against this one.
+  //   2. If allDrillRows is NOT loaded yet (very first load only), fall
+  //      back to a one-time server fetch so the page isn't blank while
+  //      allDrillRows loads in the background.
   var r = overrideDateFrom !== undefined
     ? { dateFrom: overrideDateFrom, dateTo: overrideDateTo }
     : getTradelaneDateRange();
   var dateFrom = r.dateFrom, dateTo = r.dateTo;
   var key = (dateFrom||'all') + '_' + (dateTo||'all');
-  // Instant path: if allDrillRows is already loaded, compute the entire
-  // aggregate client-side — zero network round-trip. allDrillRows._tg is
-  // SRR-sourced (matches the server exactly), so this is safe and, since
-  // it's pure JS on already-loaded data, effectively instant. force=1 is
-  // an explicit user request for the freshest server data, so it always
-  // goes over the network regardless.
-  if (!force && allDrillRows && allDrillRows.length > 0) {
+
+  if (allDrillRows && allDrillRows.length > 0) {
     var clientResult = computeTradelaneAggregateFromDrillRows(dateFrom, dateTo);
     if (clientResult) {
       clientResult._cacheKey = key;
@@ -1479,66 +1485,47 @@ function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
       return;
     }
   }
-  // Instant path: show in-memory cache (if present) immediately, then
-  // always refresh in the background — same stale-while-revalidate idea
-  // as sales performance's makeFetcher, but scoped per date-range key.
-  // In-memory, NOT localStorage: a single range's payload can be 1MB+,
-  // which blows past localStorage's ~5-10MB total quota after just a
-  // couple of ranges and silently fails every write from then on.
-  if (!force) {
-    var _cached = _tradelaneMemCache[key];
-    if (_cached && _cached.success) {
-      var _curRange0 = getTradelaneDateRange();
-      var _curKey0 = (_curRange0.dateFrom||'all') + '_' + (_curRange0.dateTo||'all');
-      if (key === _curKey0) {
-        tradelaneData = _cached; tradelaneDataReady = true;
-        if (callback) callback();
-      }
-    }
-  }
-  // If a request for this exact key is already in flight, just queue this
-  // caller's callback onto it instead of firing a second overlapping request.
-  if (!force && _tradelaneInFlightCb[key]) {
+
+  // Fallback path — only reachable before allDrillRows has ever loaded.
+  if (_tradelaneInFlightCb[key]) {
     if (callback) _tradelaneInFlightCb[key].push(callback);
     return;
   }
-  if (!force) _tradelaneInFlightCb[key] = callback ? [callback] : [];
+  _tradelaneInFlightCb[key] = callback ? [callback] : [];
   var qs = '/api/mongo-batch?action=tradelane'
-    + (force ? '&force=1' : '')
     + (dateFrom ? '&dateFrom=' + encodeURIComponent(dateFrom) : '')
     + (dateTo   ? '&dateTo='   + encodeURIComponent(dateTo)   : '');
-  var _mySeq = (_tradelaneReqSeq[key] || 0) + 1;
-  _tradelaneReqSeq[key] = _mySeq;
   fetch(qs).then(function(r){ return r.json(); })
     .then(function(data){
       if (data.success) {
         var _curRange = getTradelaneDateRange();
         var _curKey = (_curRange.dateFrom||'all') + '_' + (_curRange.dateTo||'all');
-        var _isStale = _mySeq !== _tradelaneReqSeq[key];
-        if (!_isStale && key === _curKey) {
+        if (key === _curKey) {
           data._cacheKey = key;
           tradelaneData = data; tradelaneDataReady = true;
-        } else if (_isStale) {
-          console.warn('Discarded stale tradelane response for key', key);
         }
-        // Keep this range in memory for instant re-display on next visit
-        // within the same session. No size ceiling to worry about here.
-        _tradelaneMemCache[key] = data;
       }
-      if (!force) {
-        var _queued = _tradelaneInFlightCb[key] || [];
-        delete _tradelaneInFlightCb[key];
-        _queued.forEach(function(cb){ cb(); });
-      } else if (callback) { callback(); }
+      var _queued = _tradelaneInFlightCb[key] || [];
+      delete _tradelaneInFlightCb[key];
+      _queued.forEach(function(cb){ cb(); });
     })
     .catch(function(e){
       console.warn('Tradelane failed:',e.message);
-      if (!force) {
-        var _queuedErr = _tradelaneInFlightCb[key] || [];
-        delete _tradelaneInFlightCb[key];
-        _queuedErr.forEach(function(cb){ cb(); });
-      } else if (callback) { callback(); }
+      var _queuedErr = _tradelaneInFlightCb[key] || [];
+      delete _tradelaneInFlightCb[key];
+      _queuedErr.forEach(function(cb){ cb(); });
     });
+}
+
+// Forces allDrillRows to reload fresh from the server — this is what
+// "Refresh" means for Tradelane (and Customer/Agent, which also read from
+// allDrillRows). There is no separate Tradelane-specific forced fetch to
+// race against this one anymore.
+function reloadAllDrillRows(callback) {
+  allDrillRows = null;
+  _drillDataLoading = false;
+  _drillLoadAttempted = false;
+  loadDrillData(callback);
 }
 
 function _debouncedTradelaneFetch() {
@@ -3644,12 +3631,7 @@ function tradelanePage(){
   }
 
   if (!tradelaneDataReady) {
-    // If the Refresh button's own forced fetch is already in flight, don't
-    // let this page's normal (non-forced) fetch race ahead of it — since
-    // the non-forced path resolves instantly from allDrillRows, it would
-    // otherwise win the race and the slower forced response gets treated
-    // as stale and discarded, leaving the page in an inconsistent state.
-    if (!tradelaneDataLoading && !window._forceRefreshInProgress) {
+    if (!tradelaneDataLoading) {
       tradelaneDataLoading = true;
       fetchTradelaneData(function(){ tradelaneDataLoading = false; render(); prefetchTradelaneRanges(); });
     }
@@ -7953,7 +7935,6 @@ document.addEventListener('click', function(ev){
     showRefreshOverlay();
 
     function finishRefresh(){
-      window._forceRefreshInProgress = false;
       if(btn) btn.disabled = false;
       if(icon){ icon.style.animation = ''; }
       hideRefreshOverlay();
@@ -7981,11 +7962,12 @@ document.addEventListener('click', function(ev){
     _agentCache = {}; _agentPrefetchDone = false;
     _tradelaneCache = {}; _tradelanePrefetchDone = false;
 
-    window._forceRefreshInProgress = true;
     fetchLiveData(done, true);
     pending++; fetchCustomerData(done, true);
     pending++; fetchAgentData(done, true);
-    pending++; fetchTradelaneData(done, true);
+    // Tradelane has no separate forced fetch anymore — it always reads
+    // from allDrillRows, which is reloaded fresh right below.
+    pending++; reloadAllDrillRows(done);
     pending++; fetchFinanceData(done, true);
     pending++; fetchOpData(done, true);
     pending++; fetchOrgData(done, true);
