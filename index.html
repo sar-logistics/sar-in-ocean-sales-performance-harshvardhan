@@ -3614,16 +3614,24 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
 /* ====================== TRADELANE INSIGHTS ====================== */
 function tradelanePage(){
   // If the cached tradelaneData's range no longer matches what's currently
-  // selected, just re-fetch for the correct range directly below — no need
-  // for an intermediate _tradelaneCache lookup (that object is never
-  // populated anymore since today's simplification, so this branch always
-  // fell through to resetting tradelaneDataReady unnecessarily, causing
-  // charts/tables to flash empty on every navigation with a different key
-  // even though allDrillRows already had everything needed to answer
-  // instantly).
+  // selected, recompute it DIRECTLY and SYNCHRONOUSLY right here — do NOT
+  // reset tradelaneDataReady and go through fetchTradelaneData's callback,
+  // because when allDrillRows is already loaded that callback calls
+  // render() recursively within this same call stack. The recursive call
+  // correctly rebuilds the DOM, but then control returns here and this
+  // (now-stale) outer call continues on to its own spinner/content return,
+  // which the OUTER render() then uses to overwrite what the inner call
+  // just correctly rendered. Recomputing in-line avoids any re-entrancy.
   var _tlCurrentKey = getTradelaneCacheKey();
   if (tradelaneDataReady && tradelaneData && tradelaneData._cacheKey && tradelaneData._cacheKey !== _tlCurrentKey) {
-    tradelaneDataReady = false;
+    if (allDrillRows && allDrillRows.length > 0) {
+      var _r0 = getTradelaneDateRange();
+      var _recomputed = computeTradelaneAggregateFromDrillRows(_r0.dateFrom, _r0.dateTo);
+      if (_recomputed) { _recomputed._cacheKey = _tlCurrentKey; tradelaneData = _recomputed; }
+      else { tradelaneDataReady = false; }
+    } else {
+      tradelaneDataReady = false;
+    }
   }
   // Show spinner if data is stale (localStorage) and allDrillRows not loaded yet
   if (tradelaneDataReady && tradelaneData && tradelaneData._isStale && !allDrillRows) {
