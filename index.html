@@ -1461,15 +1461,16 @@ var _tradelaneMemCache = {}; // key -> aggregate data, in-memory only (not local
 function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
   // Single, simple rule — no competing paths, nothing to race:
   //   1. If allDrillRows is loaded, ALWAYS compute from it, client-side,
-  //      instantly. This is the only source of truth for Tradelane once
-  //      allDrillRows exists — force=1 does NOT trigger a separate server
-  //      fetch anymore. "Refresh" for Tradelane means allDrillRows itself
-  //      needs to be reloaded fresh (handled by the Refresh button calling
-  //      reloadAllDrillRows() below), not a second, independent fetch that
-  //      can race against this one.
-  //   2. If allDrillRows is NOT loaded yet (very first load only), fall
-  //      back to a one-time server fetch so the page isn't blank while
-  //      allDrillRows loads in the background.
+  //      instantly.
+  //   2. If allDrillRows is NOT loaded yet (very first load only), JOIN
+  //      the shared allDrillRows preload (loadDrillData) instead of firing
+  //      a second, separate server request for a Tradelane-specific
+  //      aggregate. allDrillRows is already being preloaded in the
+  //      background from app init for every other page (Sales/Customer/
+  //      Agent) — starting a competing request here just duplicates that
+  //      same network round-trip and makes the first Tradelane visit
+  //      slower than it needs to be. Once the shared preload resolves,
+  //      compute instantly from it, same as path 1.
   var r = overrideDateFrom !== undefined
     ? { dateFrom: overrideDateFrom, dateTo: overrideDateTo }
     : getTradelaneDateRange();
@@ -1486,35 +1487,17 @@ function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
     }
   }
 
-  // Fallback path — only reachable before allDrillRows has ever loaded.
-  if (_tradelaneInFlightCb[key]) {
-    if (callback) _tradelaneInFlightCb[key].push(callback);
-    return;
-  }
-  _tradelaneInFlightCb[key] = callback ? [callback] : [];
-  var qs = '/api/mongo-batch?action=tradelane'
-    + (dateFrom ? '&dateFrom=' + encodeURIComponent(dateFrom) : '')
-    + (dateTo   ? '&dateTo='   + encodeURIComponent(dateTo)   : '');
-  fetch(qs).then(function(r){ return r.json(); })
-    .then(function(data){
-      if (data.success) {
-        var _curRange = getTradelaneDateRange();
-        var _curKey = (_curRange.dateFrom||'all') + '_' + (_curRange.dateTo||'all');
-        if (key === _curKey) {
-          data._cacheKey = key;
-          tradelaneData = data; tradelaneDataReady = true;
-        }
+  loadDrillData(function(){
+    if (allDrillRows && allDrillRows.length > 0) {
+      var _r2 = getTradelaneDateRange();
+      var _clientResult2 = computeTradelaneAggregateFromDrillRows(_r2.dateFrom, _r2.dateTo);
+      if (_clientResult2) {
+        _clientResult2._cacheKey = (_r2.dateFrom||'all') + '_' + (_r2.dateTo||'all');
+        tradelaneData = _clientResult2; tradelaneDataReady = true;
       }
-      var _queued = _tradelaneInFlightCb[key] || [];
-      delete _tradelaneInFlightCb[key];
-      _queued.forEach(function(cb){ cb(); });
-    })
-    .catch(function(e){
-      console.warn('Tradelane failed:',e.message);
-      var _queuedErr = _tradelaneInFlightCb[key] || [];
-      delete _tradelaneInFlightCb[key];
-      _queuedErr.forEach(function(cb){ cb(); });
-    });
+    }
+    if (callback) callback();
+  });
 }
 
 // Forces allDrillRows to reload fresh from the server — this is what
