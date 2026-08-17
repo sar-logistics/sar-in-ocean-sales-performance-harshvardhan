@@ -3779,38 +3779,16 @@ function tradelanePage(){
       topByTEU:       top10tl(_filtered.filter(function(c){return (c.teu||0)>0;}),'teu'),
       topByGPPct:     top10tl(_filtered.filter(function(c){return c.shipments>=2;}),'gpPct'),
     };
-  } else if (!_needsDrill) {
-    // No filter active — the server's SRR-based lobData.allCountries is
-    // already correctly scoped to this LOB and date range. Do NOT patch it
-    // with allDrillRows-derived counts here: allDrillRows._tg is computed
-    // via job-field fallback (not SRR-only), so overriding with it silently
-    // reintroduces the exact fallback behavior the tradelane page is meant
-    // to avoid, and was the actual root cause of the Others/IN-US/IN-Canada
-    // display corruption seen throughout today's debugging session.
-
-    var LOB_KEY_TO_LABEL = {
-      'AIR EXPORT':'Air Exp','AIR IMPORT':'Air Imp',
-      'SEA EXPORT':'Sea Exp','SEA IMPORT':'Sea Imp',
-      'ISOTANK EXPORT':'ISO Exp','ISOTANK IMPORT':'ISO Imp'
-    };
-    var _lfFiltered = lobData.allCountries || [];
-    if (_lfFiltered.length > 0 && filterLobs.length > 0) {
-      _lfFiltered = _lfFiltered.filter(function(c){
-        return filterLobs.some(function(fk){ var n=LOB_KEY_TO_LABEL[fk]||''; return n && (c.lobs||[]).indexOf(n)>-1; });
-      });
-    }
-    function top10tl2(arr,key){ return arr.slice().sort(function(a,b){return b[key]-a[key];}).slice(0,10); }
-    lobData = Object.assign({}, lobData, {
-      allCountries:   _lfFiltered,
-      totalCountries: _lfFiltered.length,
-      topByShipments: top10tl2(_lfFiltered,'shipments'),
-      topByRevenue:   top10tl2(_lfFiltered,'revenue'),
-      topByGP:        top10tl2(_lfFiltered,'gp'),
-      topByTons:      top10tl2(_lfFiltered.filter(function(c){return (c.tons||0)>0;}),'tons'),
-      topByTEU:       top10tl2(_lfFiltered.filter(function(c){return (c.teu||0)>0;}),'teu'),
-      topByGPPct:     top10tl2(_lfFiltered.filter(function(c){return c.shipments>=2;}),'gpPct'),
-    });
   }
+  // (Removed: a leftover re-filter block from before today's client-side
+  // rewrite. It checked each country's .lobs array against LOB labels — a
+  // field that only the OLD server-computed data structure ever had.
+  // computeTradelaneAggregateFromDrillRows never sets .lobs per country
+  // since it already builds separate, correctly-filtered data per LOB
+  // directly. Every country was silently failing that check and getting
+  // wiped to an empty array right before the chart/table were built —
+  // this was the actual, final root cause of every "chart shows empty
+  // despite correct tradelaneData" symptom throughout today.)
 
   function effectiveRevenueTL(r) {
     var isAir = r.lob === 'AIR EXPORT' || r.lob === 'AIR IMPORT';
