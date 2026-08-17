@@ -6983,50 +6983,47 @@ function dedupDrillRows(rows) {
   return deduped;
 }
 
+function _handleDrillDataSuccess(data){
+  if (data.sales && data.sales.allDrillRows && data.sales.allDrillRows.length > 0) {
+    allDrillRows = dedupDrillRows(data.sales.allDrillRows); _patchTgOnDrillRows(allDrillRows);
+    _custLobRepMapCache = {}; _agentLobRepMapCache = {}; // clear cached maps — data changed
+    if (state.page === 'tradelane' && tradelaneData && tradelaneData._isStale) {
+      tradelaneData._isStale = false;
+      _tradelanePivotCache = {}; _tlGrandDrillCache = {};
+    }
+  }
+  _drillDataLoading = false;
+  _drillLoadAttempted = true;
+  _drillDataCallbacks.forEach(function(cb){ cb(); });
+  _drillDataCallbacks = [];
+  render();
+}
+function _handleDrillDataFailure(){
+  _drillDataLoading = false;
+  _drillLoadAttempted = true;
+  _drillDataCallbacks.forEach(function(cb){ cb(); });
+  _drillDataCallbacks = [];
+}
 function loadDrillData(callback){
   if (allDrillRows && allDrillRows.length > 0) { if(callback) callback(); return; }
   if (_drillDataLoading) { if(callback) _drillDataCallbacks.push(callback); return; }
   _drillDataLoading = true;
   if(callback) _drillDataCallbacks.push(callback);
-  // Fetch drill rows via dedicated sales action (ping no longer bundles allDrillRows)
+  // This is a heavy request (joins every job + SRR collection into ~39k
+  // rows), so on a cold serverless container it can occasionally exceed
+  // the execution time limit and return a transient 500. One automatic
+  // retry covers this without the user ever noticing.
   fetch('/api/mongo-batch?action=ping&drill=1', { priority: 'high' })
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      if (data.sales && data.sales.allDrillRows && data.sales.allDrillRows.length > 0) {
-        allDrillRows = dedupDrillRows(data.sales.allDrillRows); _patchTgOnDrillRows(allDrillRows);
-        _custLobRepMapCache = {}; _agentLobRepMapCache = {}; // clear cached maps — data changed
-        // _patchTradelaneCacheWithDrillCounts() removed — it mutated the live
-        // tradelaneData in place using UNFILTERED full-dataset counts, silently
-        // overwriting the correctly date-scoped server data. This was the real
-        // root cause of the tradelane page randomly flipping to wrong numbers.
-        // Re-render tradelane page if it was showing stale cached data
-        if (state.page === 'tradelane' && tradelaneData && tradelaneData._isStale) {
-          tradelaneData._isStale = false;
-          _tradelanePivotCache = {}; _tlGrandDrillCache = {};
-          render();
-        }
-      }
-      // Tradelane data is intentionally NOT bundled from ping anymore.
-      // It was a second, ungoverned write path to tradelaneData — for a
-      // different (full-year) range than whatever the user had selected —
-      // and could silently hijack the display mid-session. The tradelane
-      // page always fetches exactly what it needs via fetchTradelaneData now.
-      _drillDataLoading = false;
-      _drillLoadAttempted = true;
-      _drillDataCallbacks.forEach(function(cb){ cb(); });
-      _drillDataCallbacks = [];
-      // Re-render unconditionally, whichever page is currently showing —
-      // agents/tradelane/customers/pendency all read from allDrillRows,
-      // and only customers/tradelane were explicitly listed here before.
-      // Agent Insights had no trigger at all, showing an incomplete
-      // table/chart until the user manually refreshed the whole page.
-      render();
-    })
+    .then(function(r){ if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(_handleDrillDataSuccess)
     .catch(function(){
-      _drillDataLoading = false;
-      _drillLoadAttempted = true;
-      _drillDataCallbacks.forEach(function(cb){ cb(); });
-      _drillDataCallbacks = [];
+      console.warn('Drill data load failed, retrying once...');
+      setTimeout(function(){
+        fetch('/api/mongo-batch?action=ping&drill=1', { priority: 'high' })
+          .then(function(r){ if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+          .then(_handleDrillDataSuccess)
+          .catch(_handleDrillDataFailure);
+      }, 1500);
     });
 }
 
