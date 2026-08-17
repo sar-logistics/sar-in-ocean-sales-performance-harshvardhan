@@ -7022,8 +7022,12 @@ function loadDrillData(callback){
       _drillLoadAttempted = true;
       _drillDataCallbacks.forEach(function(cb){ cb(); });
       _drillDataCallbacks = [];
-      if (state.page === 'customers') render();
-      if (state.page === 'tradelane' && tradelaneDataReady) render();
+      // Re-render unconditionally, whichever page is currently showing —
+      // agents/tradelane/customers/pendency all read from allDrillRows,
+      // and only customers/tradelane were explicitly listed here before.
+      // Agent Insights had no trigger at all, showing an incomplete
+      // table/chart until the user manually refreshed the whole page.
+      render();
     })
     .catch(function(){
       _drillDataLoading = false;
