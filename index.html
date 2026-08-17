@@ -1482,6 +1482,11 @@ function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
     if (clientResult) {
       clientResult._cacheKey = key;
       tradelaneData = clientResult; tradelaneDataReady = true;
+      // Cache this fresh, correctly-computed result for instant paint on
+      // the NEXT hard refresh — the client-computed result is small
+      // (~180KB typical, no shipmentNos/weekData bloat), well within
+      // localStorage's quota, unlike the old full server response.
+      try { lsSet('tl_v3_'+key, clientResult); } catch(e){}
       if (callback) callback();
       return;
     }
@@ -3610,6 +3615,23 @@ function tradelanePage(){
       _computed._cacheKey = (_r.dateFrom||'all') + '_' + (_r.dateTo||'all');
       tradelaneData = _computed;
       tradelaneDataReady = true;
+    }
+  } else if (!tradelaneDataReady) {
+    // allDrillRows hasn't loaded yet (e.g. right after a hard refresh) —
+    // paint instantly from a small, locally-cached copy of the last known
+    // result instead of a spinner, while the real allDrillRows preload
+    // still runs in the background below. As soon as it resolves, the
+    // "if (allDrillRows...)" branch above takes over on the next call and
+    // silently replaces this with the correct, fresh computation.
+    var _r2 = getTradelaneDateRange();
+    var _key2 = (_r2.dateFrom||'all') + '_' + (_r2.dateTo||'all');
+    var _cached2 = lsGet('tl_v3_'+_key2);
+    if (_cached2 && _cached2.success) {
+      tradelaneData = _cached2;
+      tradelaneDataReady = true;
+    }
+    if (!_drillDataLoading && !allDrillRows) {
+      loadDrillData(function(){ render(); });
     }
   }
 
