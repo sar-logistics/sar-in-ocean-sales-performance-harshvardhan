@@ -3626,10 +3626,17 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
 
 /* ====================== TRADELANE INSIGHTS ====================== */
 function tradelanePage(){
+  // If the cached tradelaneData's range no longer matches what's currently
+  // selected, just re-fetch for the correct range directly below — no need
+  // for an intermediate _tradelaneCache lookup (that object is never
+  // populated anymore since today's simplification, so this branch always
+  // fell through to resetting tradelaneDataReady unnecessarily, causing
+  // charts/tables to flash empty on every navigation with a different key
+  // even though allDrillRows already had everything needed to answer
+  // instantly).
   var _tlCurrentKey = getTradelaneCacheKey();
   if (tradelaneDataReady && tradelaneData && tradelaneData._cacheKey && tradelaneData._cacheKey !== _tlCurrentKey) {
-    if (_tradelaneCache[_tlCurrentKey]) { tradelaneData=_tradelaneCache[_tlCurrentKey]; _tradelanePivotCache={}; }
-    else { tradelaneDataReady=false; tradelaneDataLoading=false; }
+    tradelaneDataReady = false;
   }
   // Show spinner if data is stale (localStorage) and allDrillRows not loaded yet
   if (tradelaneDataReady && tradelaneData && tradelaneData._isStale && !allDrillRows) {
