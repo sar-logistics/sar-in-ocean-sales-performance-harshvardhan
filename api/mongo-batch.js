@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-14T-ocean-v149-agent-cache-fix-1786940443";
+const DEPLOY_TS = "2026-08-14T-ocean-v150-general-gp-fix-1786953092";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1029,33 +1029,42 @@ async function computeSalesAggregate(db) {
         continue;
       }
 
-      // Skip GENERAL/Road/Clearance for mapped reps — not Ocean LOBs, excluded from drill
-      if (cls.kind === 'GENERAL' || cls.kind === 'ROAD' || cls.kind === 'CLEARANCE') continue;
+      // Road/Clearance: skip entirely (empty collections, not modeled).
+      // General: unlike before, do NOT skip entirely — it still needs its
+      // own per-LOB bucket (repLobData['GENERAL']) so an explicit LOB
+      // filter for General has real data to show. It's kept OUT of the
+      // default repMonthData/repWeekData totals below (via _isGeneralRow),
+      // preserving "hidden unless the LOB filter explicitly selects it".
+      if (cls.kind === 'ROAD' || cls.kind === 'CLEARANCE') continue;
+      const _isGeneralRow = cls.kind === 'GENERAL';
 
       const repKey = mapped.displayName + "||" + mapped.zone;
 
-      if (!repMonthData[repKey]) repMonthData[repKey] = {};
-      if (!repMonthData[repKey][monthLabel]) repMonthData[repKey][monthLabel] = { gp: 0, gpProv: 0, gpActual: 0, ship: 0, tons: 0, teu: 0, lcl: 0, rev: 0, revBilled: 0, revProv: 0 };
-      repMonthData[repKey][monthLabel].gp   += gp;
-      repMonthData[repKey][monthLabel].gpProv   += gpProv;
-      repMonthData[repKey][monthLabel].gpActual += gpActual;
-      repMonthData[repKey][monthLabel].ship += 1;
-      repMonthData[repKey][monthLabel].tons += tons;
-      repMonthData[repKey][monthLabel].teu  += teu;
-      repMonthData[repKey][monthLabel].lcl  += lcl;
-      repMonthData[repKey][monthLabel].rev       += rev;
-      repMonthData[repKey][monthLabel].revBilled += revBilledAmt;
-      repMonthData[repKey][monthLabel].revProv   += revProvAmt;
-      // Weekly accumulation — keyed by true ISO week (Mon-Sun), e.g. "2026-W14"
-      if (rowDate) {
-        const wk = isoWeekInfo(rowDate).key;
-        if (!repWeekData[repKey]) repWeekData[repKey] = {};
-        if (!repWeekData[repKey][wk]) repWeekData[repKey][wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0, rev:0, revBilled:0, revProv:0 };
-        repWeekData[repKey][wk].gp += gp; repWeekData[repKey][wk].gpProv += gpProv; repWeekData[repKey][wk].gpActual += gpActual; repWeekData[repKey][wk].ship += 1;
-        repWeekData[repKey][wk].tons += tons; repWeekData[repKey][wk].teu += teu; repWeekData[repKey][wk].lcl += lcl;
-        repWeekData[repKey][wk].rev += rev; repWeekData[repKey][wk].revBilled += revBilledAmt; repWeekData[repKey][wk].revProv += revProvAmt;
+      if (!_isGeneralRow) {
+        if (!repMonthData[repKey]) repMonthData[repKey] = {};
+        if (!repMonthData[repKey][monthLabel]) repMonthData[repKey][monthLabel] = { gp: 0, gpProv: 0, gpActual: 0, ship: 0, tons: 0, teu: 0, lcl: 0, rev: 0, revBilled: 0, revProv: 0 };
+        repMonthData[repKey][monthLabel].gp   += gp;
+        repMonthData[repKey][monthLabel].gpProv   += gpProv;
+        repMonthData[repKey][monthLabel].gpActual += gpActual;
+        repMonthData[repKey][monthLabel].ship += 1;
+        repMonthData[repKey][monthLabel].tons += tons;
+        repMonthData[repKey][monthLabel].teu  += teu;
+        repMonthData[repKey][monthLabel].lcl  += lcl;
+        repMonthData[repKey][monthLabel].rev       += rev;
+        repMonthData[repKey][monthLabel].revBilled += revBilledAmt;
+        repMonthData[repKey][monthLabel].revProv   += revProvAmt;
+        // Weekly accumulation — keyed by true ISO week (Mon-Sun), e.g. "2026-W14"
+        if (rowDate) {
+          const wk = isoWeekInfo(rowDate).key;
+          if (!repWeekData[repKey]) repWeekData[repKey] = {};
+          if (!repWeekData[repKey][wk]) repWeekData[repKey][wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0, rev:0, revBilled:0, revProv:0 };
+          repWeekData[repKey][wk].gp += gp; repWeekData[repKey][wk].gpProv += gpProv; repWeekData[repKey][wk].gpActual += gpActual; repWeekData[repKey][wk].ship += 1;
+          repWeekData[repKey][wk].tons += tons; repWeekData[repKey][wk].teu += teu; repWeekData[repKey][wk].lcl += lcl;
+          repWeekData[repKey][wk].rev += rev; repWeekData[repKey][wk].revBilled += revBilledAmt; repWeekData[repKey][wk].revProv += revProvAmt;
+        }
       }
-      // LOB accumulation (monthly + weekly)
+      // LOB accumulation (monthly + weekly) — runs for General too, giving
+      // it its own 'GENERAL' lobKey bucket for explicit-filter consumption.
       {
         const lobKey = cls.kind + (cls.direction ? " " + cls.direction : "");
         if (!repLobData[repKey]) repLobData[repKey] = {};
