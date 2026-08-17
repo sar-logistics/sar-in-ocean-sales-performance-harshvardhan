@@ -2758,18 +2758,6 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "srrProbe") {
-      if (req.query.checkMapping === "1") {
-        const collNames = ["mapping_sales_targets","mapping_zone_targets","ocean_mapping_sales_targets","ocean_mapping_zone_targets"];
-        const results = {};
-        for (const cn of collNames) {
-          try {
-            const rows = await db.collection(cn).find({}).toArray();
-            const match = rows.find(r => String(r["Sales Rep Name"]||"").includes("Deen Dayal"));
-            results[cn] = { totalRows: rows.length, matchedRow: match || null };
-          } catch (e) { results[cn] = { error: e.message }; }
-        }
-        return res.status(200).json({ success: true, results });
-      }
       if (req.query.sampleGeneral === "1") {
         const doc = await db.collection("jobs_general").findOne({});
         return res.status(200).json({ success: true, sample: doc ? Object.keys(doc) : null, doc });
