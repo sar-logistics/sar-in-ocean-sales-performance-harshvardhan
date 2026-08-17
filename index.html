@@ -6325,7 +6325,7 @@ function drawer(){
     // Sticky total row — all numeric columns summed
     var totalRowBg = '#EEF3FC';
     var totalRow = '<tr style="background:'+totalRowBg+';border-top:2.5px solid #0D2B5E;">'
-      + COLS.map(function(c, i){
+      + _activeDrillCols.map(function(c, i){
           var isSticky = c.sticky !== undefined;
           var isLastSticky = c.k === 'lob';
           var stickyStyle = isSticky
