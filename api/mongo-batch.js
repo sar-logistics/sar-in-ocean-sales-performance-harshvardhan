@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-14T-ocean-v148-general-opt-in-1786709207";
+const DEPLOY_TS = "2026-08-14T-ocean-v149-agent-cache-fix-1786940443";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2169,7 +2169,12 @@ async function computeTradelaneAggregate(db) {
 }
 
 async function getAgentAggregate(db, force, dateFrom, dateTo, cacheKey) {
-  const key = cacheKey || 'all';
+  // Tie the cache key to DEPLOY_TS so a stale response computed by an
+  // older version of computeAgentAggregate (e.g. from before a field like
+  // allAgents existed) can never be served after a new deployment — this
+  // was the root cause of Agent Insights' table body coming up empty
+  // while its header stats (read from a different, unaffected path) loaded.
+  const key = (cacheKey || 'all') + '|' + DEPLOY_TS;
   const entry = agentCacheMap[key];
   if (!force && entry && (Date.now() - entry.time) < SALES_CACHE_TTL_MS) {
     return { ...entry.data, cached: true };
