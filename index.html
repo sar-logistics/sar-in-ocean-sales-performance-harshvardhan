@@ -4247,7 +4247,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     // Revenue row
     var r2 = '<tr style="'+trS+'">'
       + mTd('Revenue', 0, false)
-      + gtTd(fmtV(data.revenue), '#334155', false)
+      + gtTd(fmtV(data.revenue), '#2563EB', false)
       + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_fyAgg(monthData||{}, g); return fyTd(agg.revenue>0?fmtV(agg.revenue):'--',null,false,false,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; return mCellDrill(md?fmtV(md.revenue):'--', null, false, name, m); }).join(''))
       +'</tr>';
 
@@ -4270,7 +4270,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
         }).join(''))
       +'</tr>';
 
-    return r1 + subRows + r2 + r3 + r4;
+    return r1 + subRows + r3 + r2 + r4;
   }
 
   var tbody = '<tbody>'
