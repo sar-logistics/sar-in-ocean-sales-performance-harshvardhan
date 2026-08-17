@@ -3613,52 +3613,28 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
 
 /* ====================== TRADELANE INSIGHTS ====================== */
 function tradelanePage(){
-  // If the cached tradelaneData's range no longer matches what's currently
-  // selected, recompute it DIRECTLY and SYNCHRONOUSLY right here — do NOT
-  // reset tradelaneDataReady and go through fetchTradelaneData's callback,
-  // because when allDrillRows is already loaded that callback calls
-  // render() recursively within this same call stack. The recursive call
-  // correctly rebuilds the DOM, but then control returns here and this
-  // (now-stale) outer call continues on to its own spinner/content return,
-  // which the OUTER render() then uses to overwrite what the inner call
-  // just correctly rendered. Recomputing in-line avoids any re-entrancy.
-  var _tlCurrentKey = getTradelaneCacheKey();
-  if (tradelaneDataReady && tradelaneData && tradelaneData._cacheKey && tradelaneData._cacheKey !== _tlCurrentKey) {
-    if (allDrillRows && allDrillRows.length > 0) {
-      var _r0 = getTradelaneDateRange();
-      var _recomputed = computeTradelaneAggregateFromDrillRows(_r0.dateFrom, _r0.dateTo);
-      if (_recomputed) { _recomputed._cacheKey = _tlCurrentKey; tradelaneData = _recomputed; }
-      else { tradelaneDataReady = false; }
-    } else {
-      tradelaneDataReady = false;
+  // ALWAYS recompute fresh from allDrillRows, every single call, no caching,
+  // no conditional branches, no early returns to get wrong. This eliminates
+  // the entire class of stale-render bugs (re-entrancy, missed re-render
+  // triggers, mismatched cache keys) that came from trying to be clever
+  // about WHEN to recompute. The computation itself is cheap (pure in-memory
+  // filtering over already-loaded data), so recomputing every render has no
+  // meaningful performance cost.
+  if (allDrillRows && allDrillRows.length > 0) {
+    var _r = getTradelaneDateRange();
+    var _computed = computeTradelaneAggregateFromDrillRows(_r.dateFrom, _r.dateTo);
+    if (_computed) {
+      _computed._cacheKey = (_r.dateFrom||'all') + '_' + (_r.dateTo||'all');
+      tradelaneData = _computed;
+      tradelaneDataReady = true;
     }
-  }
-  // Show spinner if data is stale (localStorage) and allDrillRows not loaded yet
-  if (tradelaneDataReady && tradelaneData && tradelaneData._isStale && !allDrillRows) {
-    return '<div style="display:flex;align-items:center;justify-content:center;padding:80px 0;">'      +'<div style="display:flex;flex-direction:column;align-items:center;gap:14px;">'        +'<div class="login-spinner" style="width:24px;height:24px;border-width:3px;"></div>'        +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading tradelane insights…</div>'      +'</div>'    +'</div>';
   }
 
-  if (!tradelaneDataReady) {
-    // Same fix as the cache-key-mismatch case above: if allDrillRows is
-    // already loaded, compute directly and synchronously, in-line, and
-    // fall through to render the real content below — do NOT call
-    // fetchTradelaneData with a callback that recursively calls render(),
-    // since that recursion's correct output gets clobbered when this
-    // (now-stale) outer call falls through to returning the spinner
-    // afterward.
-    if (allDrillRows && allDrillRows.length > 0) {
-      var _r1 = getTradelaneDateRange();
-      var _recomputed1 = computeTradelaneAggregateFromDrillRows(_r1.dateFrom, _r1.dateTo);
-      if (_recomputed1) {
-        _recomputed1._cacheKey = (_r1.dateFrom||'all') + '_' + (_r1.dateTo||'all');
-        tradelaneData = _recomputed1; tradelaneDataReady = true;
-      }
-    }
-  }
+  // Only reachable before allDrillRows has ever loaded (very first paint).
   if (!tradelaneDataReady) {
     if (!tradelaneDataLoading) {
       tradelaneDataLoading = true;
-      fetchTradelaneData(function(){ tradelaneDataLoading = false; render(); prefetchTradelaneRanges(); });
+      fetchTradelaneData(function(){ tradelaneDataLoading = false; render(); });
     }
     return '<div style="display:flex;align-items:center;justify-content:center;padding:80px 0;">'
       +'<div style="display:flex;flex-direction:column;align-items:center;gap:14px;">'
