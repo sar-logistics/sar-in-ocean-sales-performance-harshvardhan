@@ -6542,21 +6542,22 @@ function leaderboard(){
   var sorted = salesRepsOnly.map(function(r){
     var gpTotal   = sum(idxs.map(function(i){ return r.gp[i]||0; }));
     var shipTotal = sum(idxs.map(function(i){ return r.ship[i]||0; }));
+    var revTotal  = sum(idxs.map(function(i){ return (r.rev&&r.rev[i])||0; }));
+    var teuTotal  = sum(idxs.map(function(i){ return (r.teu&&r.teu[i])||0; }));
+    var tonsTotal = sum(idxs.map(function(i){ return (r.tons&&r.tons[i])||0; }));
     var tgtTotal  = r.tgt * idxs.length;
     var achPct    = tgtTotal > 0 ? Math.round(gpTotal / tgtTotal * 100) : 0;
-    return { name:r.name, hue:r.hue, gpTotal:gpTotal, shipTotal:shipTotal,
-      tgtTotal:tgtTotal, achPct:achPct, gp:r.gp, tgt:r.tgt };
+    return { name:r.name, hue:r.hue, gpTotal:gpTotal, shipTotal:shipTotal, revTotal:revTotal,
+      teuTotal:teuTotal, tonsTotal:tonsTotal, tgtTotal:tgtTotal, achPct:achPct, gp:r.gp, tgt:r.tgt };
   }).sort(function(a,b){ return b.gpTotal - a.gpTotal; });
 
   var medalColors = ['#D4A017','#94A3B8','#C2793A']; // gold / silver / bronze accents for rank 1/2/3
 
-  // Rankings table — rank, rep, total sales, target, achievement only
+  // Rankings table — rank, rep, GP, revenue, TEUs, tons, target, achievement
   var rows = sorted.map(function(r, i){
     var avatarBg = 'oklch(0.6 0.12 '+r.hue+')';
     var ini = r.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
     var achColor = r.achPct>=75?'#15875A':'#DC2626'; // aligned with main table's 75% threshold
-    var barW = Math.min(100, r.achPct);
-    var barColor = r.achPct>=75?'#15875A':'#DC2626'; // aligned with main table's 75% threshold
     var isTop3 = i < 3;
     var rankBadge = isTop3
       ? '<div style="width:24px;height:24px;border-radius:50%;background:'+medalColors[i]+';color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.18);">'+(i+1)+'</div>'
@@ -6572,18 +6573,19 @@ function leaderboard(){
           +'<span style="font-size:13px;font-weight:700;color:#0D2B5E;white-space:nowrap;">'+r.name+'</span>'
         +'</div>'
       +'</td>'
-      // Total Sales (GP)
-      +'<td style="padding:10px 14px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:#0D2B5E;white-space:nowrap;">'+fmtCur(r.gpTotal)+'</td>'
+      // Total GP
+      +'<td style="padding:10px 14px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:#059669;white-space:nowrap;">'+fmtCur(r.gpTotal)+'</td>'
+      // Revenue
+      +'<td style="padding:10px 14px;text-align:right;font-family:\'DM Mono\',monospace;font-size:12.5px;font-weight:600;color:#2563EB;white-space:nowrap;">'+fmtCur(r.revTotal)+'</td>'
+      // TEUs
+      +'<td style="padding:10px 14px;text-align:right;font-family:\'DM Mono\',monospace;font-size:12.5px;font-weight:600;color:#5B8DEF;white-space:nowrap;">'+(r.teuTotal>0?r.teuTotal.toFixed(2):'—')+'</td>'
+      // Tons
+      +'<td style="padding:10px 14px;text-align:right;font-family:\'DM Mono\',monospace;font-size:12.5px;font-weight:600;color:#5B8DEF;white-space:nowrap;">'+(r.tonsTotal>0?r.tonsTotal.toFixed(2):'—')+'</td>'
       // Target
       +'<td style="padding:10px 14px;text-align:right;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:600;color:#9AAFC8;white-space:nowrap;">'+(r.tgtTotal>0?fmtCur(r.tgtTotal):'—')+'</td>'
-      // Achievement bar
-      +'<td style="padding:10px 16px;min-width:160px;">'
-        +'<div style="display:flex;align-items:center;gap:9px;">'
-          +'<div style="flex:1;height:6px;background:#EAF0F8;border-radius:99px;overflow:hidden;">'
-            +'<div style="height:100%;width:'+barW+'%;background:'+barColor+';border-radius:99px;"></div>'
-          +'</div>'
-          +'<span style="font-size:11.5px;font-weight:800;color:'+achColor+';width:42px;text-align:right;white-space:nowrap;">'+(r.tgtTotal>0?r.achPct+'%':'—')+'</span>'
-        +'</div>'
+      // Achievement % — plain text, no bar
+      +'<td style="padding:10px 16px;text-align:right;">'
+        +'<span style="font-size:12.5px;font-weight:800;color:'+achColor+';white-space:nowrap;">'+(r.tgtTotal>0?r.achPct+'%':'—')+'</span>'
       +'</td>'
     +'</tr>';
   }).join('');
@@ -6614,9 +6616,12 @@ function leaderboard(){
           +'<tr>'
             +'<th style="padding:9px 14px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:left;width:42px;">#</th>'
             +'<th style="padding:9px 12px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:left;">Sales Rep</th>'
-            +'<th style="padding:9px 14px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:right;">Total Sales</th>'
+            +'<th style="padding:9px 14px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:right;">Total GP</th>'
+            +'<th style="padding:9px 14px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:right;">Revenue</th>'
+            +'<th style="padding:9px 14px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:right;">TEUs</th>'
+            +'<th style="padding:9px 14px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:right;">Tons</th>'
             +'<th style="padding:9px 14px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:right;">Target</th>'
-            +'<th style="padding:9px 16px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:left;min-width:160px;">Achievement</th>'
+            +'<th style="padding:9px 16px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:right;">Achievement %</th>'
           +'</tr>'
         +'</thead>'
         +'<tbody>'+rows+'</tbody>'
@@ -6624,7 +6629,6 @@ function leaderboard(){
     +'</div>'
   +'</div>';
 }
-
 
 function feedbackModal(){
   if(!state.feedbackOpen) return '';
