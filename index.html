@@ -5539,7 +5539,7 @@ function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, col
     }
     else if(type==='int'){ if(v){val=v.toLocaleString('en-US');}else{val='\u2014';isDash=true;} }
     else if(type==='cur'){ val=fmtCur(v); }
-    else if(type==='pct'){ val=v+'%'; color=v>=100?'#15875A':'#D64545'; }
+    else if(type==='pct'){ val=v+'%'; color=v>=75?'#15875A':'#DC2626'; } // aligned with the 75% threshold used everywhere else — was hardcoded to 100%, silently overriding the correct color passed in for every monthly/FY percentage cell
     else if(type==='tons'){ if(v){val=v.toFixed(2);}else{val='\u2014';isDash=true;} }
     else if(type==='teu'){ if(v){val=v.toFixed(2);}else{val='\u2014';isDash=true;} }
     else if(type==='cbm'){ if(v){val=v.toFixed(2);}else{val='\u2014';isDash=true;} }
