@@ -471,11 +471,19 @@ function _showDashboardBody() {
       }, 300);
       setTimeout(function(){
         if (!_agentCache[key]) {
-          var lsa = lsGet('agents_'+key);
+          // Use the SAME 'agents_v2_' key as fetchAgentData — the old
+          // 'agents_'+key entries were saved with allAgents DELETED
+          // (not trimmed) per LOB, permanently breaking the table view.
+          // Reading that old key here (independent of fetchAgentData's
+          // own fix) was the actual root cause: this background prefetch
+          // runs on every login, found the old broken entry, used it
+          // immediately, and returned before ever fetching fresh data.
+          var _bgLsKey = 'agents_v2_'+key;
+          var lsa = lsGet(_bgLsKey);
           if (lsa && lsa.success) { _agentCache[key]=lsa; agentData=lsa; agentDataReady=true; return; }
           fetch('/api/mongo-batch?action=agents&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
             .then(function(r){return r.json();}).then(function(d){ if(d.success){_agentCache[key]=d;agentData=d;agentDataReady=true;
-              try{var _as=Object.assign({},d);if(_as.allAgents)_as.allAgents=_as.allAgents.slice(0,30);if(_as.lobs){var _al={};Object.keys(_as.lobs).forEach(function(l){var _ll=Object.assign({},_as.lobs[l]);if(_ll.allAgents)delete _ll.allAgents;_al[l]=_ll;});_as.lobs=_al;}lsSet(lsKey,_as);}catch(e){}
+              try{var _as=Object.assign({},d);if(_as.allAgents)_as.allAgents=_as.allAgents.slice(0,30);if(_as.lobs){var _al={};Object.keys(_as.lobs).forEach(function(l){var _ll=Object.assign({},_as.lobs[l]);if(_ll.allAgents)_ll.allAgents=_ll.allAgents.slice(0,30);_al[l]=_ll;});_as.lobs=_al;}lsSet(_bgLsKey,_as);}catch(e){}
               render();} }).catch(function(){});
         }
       }, 700);
