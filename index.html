@@ -2699,12 +2699,14 @@ function topbar(){
 
           var lobOpen = state.filterLobDropOpen;
           var repOpen = state.filterRepDropOpen;
-          // Only Tradelane hides the LOB checklist — it has no concept of General
-          // (no export/import direction) and uses its own Air/Ocean/ISO Tank
-          // tabs for LOB selection anyway. Customer/Agent Insights DO benefit
-          // from this checklist specifically to surface General as an opt-in
-          // filter option, since their own tabs don't include it.
-          var _isInsightPage = ['tradelane'].indexOf(state.page) >= 0;
+          // General is scoped to Sales Performance only. Customer/Agent Insights
+          // use their own Air/Ocean/ISO Tank tabs (a separate mechanism from
+          // this checklist) to determine which LOBs to include, so General
+          // showing up here wouldn't actually integrate with their real
+          // computation — and bundling it into every tab there would triple-
+          // count its numbers across Air/Ocean/ISO Tank. Keeping this simple:
+          // hidden on all three insight pages, same as before.
+          var _isInsightPage = ['customers','agents','tradelane'].indexOf(state.page) >= 0;
 
           var lobSection = _isInsightPage ? '' : sectionHeader('LOBs', state.filterLobs.length, lobOpen, 'toggleFilterLobDrop')
             + (lobOpen ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'
