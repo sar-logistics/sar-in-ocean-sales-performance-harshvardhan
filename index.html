@@ -6339,11 +6339,11 @@ function drawer(){
             var clr = isSigned ? (sum >= 0 ? '#15875A' : '#DC2626') : (c.color || '#0D2B5E');
             var fw  = (c.k === 'actualProfit' || c.k === 'gp') ? '800' : '700';
             var fs  = (c.k === 'actualProfit' || c.k === 'gp') ? '13' : '12';
-            return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:'+fs+'px;font-weight:'+fw+';color:'+clr+';text-align:right;">'+fmtCur(sum)+'</td>';
+            return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:'+fs+'px;font-weight:'+fw+';color:'+clr+';text-align:right;white-space:nowrap;">'+fmtCur(sum)+'</td>';
           }
           if (c.t === 'num' && sum !== undefined) {
             var numStr = Number.isInteger(sum) ? sum.toLocaleString() : sum.toFixed(2);
-            return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#0D2B5E;text-align:right;">'+numStr+'</td>';
+            return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#0D2B5E;text-align:right;white-space:nowrap;">'+numStr+'</td>';
           }
           return '<td style="padding:10px 10px;"></td>';
         }).join('')
