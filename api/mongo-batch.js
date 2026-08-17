@@ -1234,7 +1234,7 @@ const customerCacheMap = {}; // key → { data, time }
 const CUSTOMER_INSIGHTS_COLLECTIONS = ["jobs_air_export", "jobs_air_import"];
 
 async function getCustomerAggregate(db, force, dateFrom, dateTo, cacheKey) {
-  const key = cacheKey || 'all';
+  const key = (cacheKey || 'all') + '|' + DEPLOY_TS; // tied to deploy version — same fix as agentCacheMap, prevents a stale response surviving new deployments
   const entry = customerCacheMap[key];
   if (!force && entry && (Date.now() - entry.time) < SALES_CACHE_TTL_MS) {
     return { ...entry.data, cached: true };
