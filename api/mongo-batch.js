@@ -2759,17 +2759,16 @@ module.exports = async function handler(req, res) {
 
     if (action === "srrProbe") {
       if (req.query.checkMapping === "1") {
-        let mappingRows = await db.collection("mapping_sales_zones").find({}).toArray();
-        if (!mappingRows || mappingRows.length === 0) {
-          mappingRows = await db.collection("mapping_sales_targets").find({}).toArray();
+        const collNames = ["mapping_sales_targets","mapping_zone_targets","ocean_mapping_sales_targets","ocean_mapping_zone_targets"];
+        const results = {};
+        for (const cn of collNames) {
+          try {
+            const rows = await db.collection(cn).find({}).toArray();
+            const match = rows.find(r => String(r["Sales Rep Name"]||"").includes("Deen Dayal"));
+            results[cn] = { totalRows: rows.length, matchedRow: match || null };
+          } catch (e) { results[cn] = { error: e.message }; }
         }
-        const match = mappingRows.find(r => String(r["Sales Rep Name"]||"").includes("Deen Dayal"));
-        return res.status(200).json({
-          success: true,
-          totalRows: mappingRows.length,
-          matchedRow: match || null,
-          allKeysInFirstRow: mappingRows[0] ? Object.keys(mappingRows[0]) : [],
-        });
+        return res.status(200).json({ success: true, results });
       }
       if (req.query.sampleGeneral === "1") {
         const doc = await db.collection("jobs_general").findOne({});
