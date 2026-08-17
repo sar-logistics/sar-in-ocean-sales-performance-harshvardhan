@@ -1256,7 +1256,7 @@ function fetchAgentData(callback, force) {
   var r = getAgentDateRange();
   var dateFrom = r.dateFrom, dateTo = r.dateTo;
   var key   = (dateFrom||'all') + '_' + (dateTo||'all');
-  var lsKey = 'agents_' + key;
+  var lsKey = 'agents_v2_' + key; // v2: previous cache format stripped allAgents per-LOB entirely, breaking the table view whenever served from localStorage
   var qs = '/api/mongo-batch?action=agents'
     + (force ? '&force=1' : '')
     + (dateFrom ? '&dateFrom=' + encodeURIComponent(dateFrom) : '')
@@ -1282,7 +1282,7 @@ function fetchAgentData(callback, force) {
   fetch(qs).then(function(r){ return r.json(); })
     .then(function(data){
       if (data.success) { _agentCache[key]=data; agentData=data; agentDataReady=true;
-        try{var _as2=Object.assign({},data);if(_as2.allAgents)_as2.allAgents=_as2.allAgents.slice(0,30);if(_as2.lobs){var _al2={};Object.keys(_as2.lobs).forEach(function(l){var _ll=Object.assign({},_as2.lobs[l]);if(_ll.allAgents)delete _ll.allAgents;_al2[l]=_ll;});_as2.lobs=_al2;}lsSet(lsKey,_as2);}catch(e){} }
+        try{var _as2=Object.assign({},data);if(_as2.allAgents)_as2.allAgents=_as2.allAgents.slice(0,30);if(_as2.lobs){var _al2={};Object.keys(_as2.lobs).forEach(function(l){var _ll=Object.assign({},_as2.lobs[l]);if(_ll.allAgents)_ll.allAgents=_ll.allAgents.slice(0,30);_al2[l]=_ll;});_as2.lobs=_al2;}lsSet(lsKey,_as2);}catch(e){} }
       if (callback) callback();
     })
     .catch(function(e){ console.warn('Agent data failed:', e.message); if (callback) callback(); });
