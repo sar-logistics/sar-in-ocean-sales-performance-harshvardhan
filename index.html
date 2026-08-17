@@ -3988,7 +3988,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
       var _gtActiveMonsSet = {};
       activeMons.forEach(function(m){ _gtActiveMonsSet[m] = true; });
       allDrillRows.forEach(function(r){
-        if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
+        if (!_lobPassesFilter(r.lob, filterLobs)) return;
         if (effectiveReps && effectiveReps.length > 0 && effectiveReps.indexOf(r._sp) === -1) return;
         if (!_gtActiveMonsSet[r._ml]) return;
         var _eRev = effectiveRevenue(r);
@@ -4044,7 +4044,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     var _tgMDTons = {};
     allDrillRows.forEach(function(r){
       if (!r._tg) { return; }
-      if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
+      if (!_lobPassesFilter(r.lob, filterLobs)) return;
       if (effectiveReps && effectiveReps.length > 0 && effectiveReps.indexOf(r._sp) === -1) return;
       var inActive = _fyGroups ? !!_tgFyMonsSet[r._ml] : !!_tgActiveMonsSet[r._ml];
       if (!inActive) return;
@@ -7670,9 +7670,7 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
     }
 
     // Apply global LOB filter — pendency now respects LOB filter (General added as option)
-    if (state.filterLobs && state.filterLobs.length > 0) {
-      if (state.filterLobs.indexOf(r.lob) === -1) continue;
-    }
+    if (!_lobPassesFilter(r.lob, state.filterLobs)) continue;
 
     // Lock status filter
     var isDone = isOL ? r.olDone : r.flDone;
