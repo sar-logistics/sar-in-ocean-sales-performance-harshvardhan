@@ -4146,9 +4146,10 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
       +'<div style="display:flex;align-items:center;">'+avatar+'<span style="font-size:12px;font-weight:700;color:'+(!isGrand?'#1D5FCC':'#15233B')+';">'+esc(name)+'</span></div>'
     +'</td>';
 
-    function mTd(label, indent, clickable, clickAct, clickVal) {
+    function mTd(label, indent, clickable, clickAct, clickVal, labelColor) {
       var actAttr = clickable ? ' data-act="'+clickAct+'" data-name="'+esc(clickVal)+'" style="cursor:pointer;"' : '';
-      return '<td'+(clickable?' data-act="'+clickAct+'" data-name="'+esc(clickVal)+'"':'')+' style="position:sticky;left:160px;z-index:2;background:'+bg+';padding:7px 10px;font-size:11.5px;'+(indent?'color:#94A3B8;font-style:italic;':'font-weight:600;color:#334155;')+'padding-left:'+(10+indent*16)+'px;border-right:1px solid '+BORDER+';min-width:130px;'+(clickable?'cursor:pointer;':'')+'">'+esc(label)+'</td>';
+      var labelColorStyle = labelColor ? ('color:'+labelColor+';font-weight:600;') : (indent?'color:#94A3B8;font-style:italic;':'font-weight:600;color:#334155;');
+      return '<td'+(clickable?' data-act="'+clickAct+'" data-name="'+esc(clickVal)+'"':'')+' style="position:sticky;left:160px;z-index:2;background:'+bg+';padding:7px 10px;font-size:11.5px;'+labelColorStyle+'padding-left:'+(10+indent*16)+'px;border-right:1px solid '+BORDER+';min-width:130px;'+(clickable?'cursor:pointer;':'')+'">'+esc(label)+'</td>';
     }
     function mTdSub(label) {
       return '<td style="position:sticky;left:160px;z-index:2;background:'+subBg+';padding:6px 10px 6px 26px;font-size:11px;color:#94A3B8;font-style:italic;border-right:1px solid '+BORDER+';min-width:130px;">'+esc(label)+'</td>';
@@ -4246,14 +4247,14 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
 
     // Revenue row
     var r2 = '<tr style="'+trS+'">'
-      + mTd('Revenue', 0, false)
+      + mTd('Revenue', 0, false, null, null, '#2563EB')
       + gtTd(fmtV(data.revenue), '#2563EB', false)
       + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_fyAgg(monthData||{}, g); return fyTd(agg.revenue>0?fmtV(agg.revenue):'--',null,false,false,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; return mCellDrill(md?fmtV(md.revenue):'--', null, false, name, m); }).join(''))
       +'</tr>';
 
     // GP row
     var r3 = '<tr style="'+trS+'">'
-      + mTd('GP', 0, false)
+      + mTd('GP', 0, false, null, null, '#059669')
       + gtTd(fmtV(data.gp), gpColor, false)
       + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_fyAgg(monthData||{}, g); var c=agg.gp>=0?'#059669':'#DC2626'; return fyTd(fmtV(agg.gp),c,false,false,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; var c=md&&md.gp>=0?'#059669':'#DC2626'; return mCellDrill(md?fmtV(md.gp):'--', c, false, name, m); }).join(''))
       +'</tr>';
@@ -5813,7 +5814,7 @@ function tableRows(){
       rows.push(metric('Provisional Revenue', 1, 'cur', '#475569', dispRevProv   || dispGp.map(function(){return 0;}), sum(dispRevProv||[]),   false));
     }
 
-    rows.push(metric('Target',        0, 'cur', '#2563EB', tgtArr,  sum(tgtArr), false));
+    rows.push(metric('Target',        0, 'cur', '#0D2B5E', tgtArr,  sum(tgtArr), false));
     var achRowColor = achFy >= 75 ? '#15875A' : '#DC2626';
     rows.push(metric('Achievement %', 0, 'pct', achRowColor, achArr, achFy, false));
   });
