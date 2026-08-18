@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-18T-ocean-v160-pendency-norep-crosssales-1787044045";
+const DEPLOY_TS = "2026-08-18T-ocean-v161-inzmap-real-zones-1787044697";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2469,7 +2469,10 @@ async function computeBothPendency(db) {
     for (const part of parts) {
       if (/^IN[A-Z]?\d+$/i.test(part)) {
         const code = part.toUpperCase();
-        if (!inzCodeZoneMap[code] || isFY26) inzCodeZoneMap[code] = zone;
+        // Only store real zones (not Unassigned) — prefer FY26 over FY27
+        if (zone && zone !== 'Unassigned') {
+          if (!inzCodeZoneMap[code] || isFY26) inzCodeZoneMap[code] = zone;
+        }
       }
     }
 
@@ -2478,7 +2481,11 @@ async function computeBothPendency(db) {
     const normDis = normalizeName(display);
     for (const key of [normRaw, normDis]) {
       if (!key) continue;
-      if (!repZoneMap[key] || isFY26) {
+      // Prefer real zone over Unassigned — FY26 takes priority
+      const existingZone = repZoneMap[key];
+      const existingIsReal = existingZone && existingZone !== 'Unassigned';
+      const newIsReal = zone && zone !== 'Unassigned';
+      if (!existingZone || (isFY26 && newIsReal) || (!existingIsReal && newIsReal)) {
         repZoneMap[key]    = zone;
         repDisplayMap[key] = display;
       }
