@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-18T-ocean-v168-pendency-drill-date-1787047175";
+const DEPLOY_TS = "2026-08-18T-ocean-v169-identical-zone-lookup-1787048556";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -596,7 +596,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
                           : (_metaFY27 && _metaFY27.zone && _metaFY27.zone !== 'Unassigned') ? _metaFY27
                           : null;
         const _meta = (_metaRaw && _metaRaw.zone && _metaRaw.zone !== 'Unassigned') ? _metaRaw : (_metaBetter || _metaRaw);
-        // If still no zone, try INZ code from job's Sales Person field (e.g. "Satish Singh | INZ01")
+        // If still no zone, try INZ code from pipe-suffix in Sales Person field
         let _zone = _meta ? _meta.zone : null;
         let _dn   = _meta ? _meta.displayName : null;
         if (!_zone || _zone === 'Unassigned') {
@@ -604,11 +604,8 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           const _spParts = _spRaw.split("|").map(s => s.trim());
           for (const _part of _spParts.slice(1)) {
             const _code = _part.toUpperCase();
-            if (repsByZoneByFY["FY26"] && Object.keys(repsByZoneByFY["FY26"]).find(z => {
-              return repsByZoneByFY["FY26"][z] && z !== 'Unassigned' && z.toUpperCase().startsWith(_code);
-            })) {
-              // Find the full zone name for this INZ code
-              const _matchedZone = Object.keys(repsByZoneByFY["FY26"]).find(z => z !== 'Unassigned' && z.toUpperCase().startsWith(_code));
+            if (/^IN[A-Z]?\d+$/.test(_code) && repLookupByFY["FY26"]) {
+              const _matchedZone = Object.keys(repLookupByFY["FY26"]).find(z => z !== 'Unassigned' && z.toUpperCase().startsWith(_code));
               if (_matchedZone) { _zone = _matchedZone; break; }
             }
           }
@@ -2574,15 +2571,12 @@ async function computeBothPendency(db) {
             }
           }
         }
-        // Last resort: match INZ code from job field against known zone names
-        // Handles reps not in mapping sheet but with pipe-suffix in Sales Person field
+        // Last resort: match INZ code from pipe-suffix against inzCodeZoneMap keys
         if (!zone) {
           for (const part of nameParts.slice(1)) {
             const trimmed = part.toUpperCase();
-            if (/^IN[A-Z]?\d+$/.test(trimmed)) {
-              // Scan inzCodeZoneMap for a key that starts with this INZ code
-              const matchedZone = Object.values(inzCodeZoneMap).find(z => z && z !== 'Unassigned' && z.toUpperCase().startsWith(trimmed));
-              if (matchedZone) { zone = matchedZone; break; }
+            if (/^IN[A-Z]?\d+$/.test(trimmed) && inzCodeZoneMap[trimmed] && inzCodeZoneMap[trimmed] !== 'Unassigned') {
+              zone = inzCodeZoneMap[trimmed]; break;
             }
           }
         }
