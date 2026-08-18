@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-18T-ocean-v154-repkey-zone-fix-1787029622";
+const DEPLOY_TS = "2026-08-18T-ocean-v155-branch-lobdata-fix-1787031441";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2695,10 +2695,14 @@ module.exports = async function handler(req, res) {
       salesStripped = { ...salesResult, repsRaw: salesResult.repsRaw.map(r => {
         const c = { ...r }; delete c.weekData;
         if (c.lobData) {
-          const airOnly = {};
-          if (c.lobData['AIR EXPORT']) airOnly['AIR EXPORT'] = c.lobData['AIR EXPORT'];
-          if (c.lobData['AIR IMPORT']) airOnly['AIR IMPORT'] = c.lobData['AIR IMPORT'];
-          c.lobData = airOnly;
+          if (c.isBranch) {
+            // Branch/Cross Sales reps: keep ALL LOBs — needed for LOB filter to show correct revenue
+          } else {
+            const airOnly = {};
+            if (c.lobData['AIR EXPORT']) airOnly['AIR EXPORT'] = c.lobData['AIR EXPORT'];
+            if (c.lobData['AIR IMPORT']) airOnly['AIR IMPORT'] = c.lobData['AIR IMPORT'];
+            c.lobData = airOnly;
+          }
         }
         return c;
       })};
