@@ -2997,7 +2997,7 @@ function adminPage(){
   }
 
   function addCard(roleLabel){
-    return '<div data-act="addUserOpen" data-role="'+esc(roleLabel)+'" style="background:#FFFFFF;border:1.5px dashed #D1D9E6;border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;color:#9AAFC8;font-size:12px;font-weight:600;min-height:88px;transition:border-color 0.15s,color 0.15s;" onmouseenter="this.style.borderColor=\'#6488D6\';this.style.color=\'#6488D6\'" onmouseleave="this.style.borderColor=\'#D1D9E6\';this.style.color=\'#9AAFC8\'">'+
+    return '<div class="admin-add-card" data-act="addUserOpen" data-role="'+esc(roleLabel)+'" style="background:#FFFFFF;border:1.5px dashed #D1D9E6;border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;color:#9AAFC8;font-size:12px;font-weight:600;min-height:88px;transition:border-color 0.15s,color 0.15s;" onmouseenter="this.style.borderColor=\'#6488D6\';this.style.color=\'#6488D6\'" onmouseleave="this.style.borderColor=\'#D1D9E6\';this.style.color=\'#9AAFC8\'">'+
       '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" pointer-events="none"><path d="M12 5v14M5 12h14"/></svg>'+
       '+ Add'+
     '</div>';
@@ -8048,15 +8048,21 @@ function filterAgentFilterOptions(inputEl){
 function _adminSearchHandler(inp) {
   var query = inp.value.toLowerCase();
   state.adminSearch = inp.value;
-  // Filter cards
+  // Show/hide user cards
   document.querySelectorAll('.admin-user-card').forEach(function(card){
     var text = (card.getAttribute('data-search') || '').toLowerCase();
     card.style.display = query === '' || text.indexOf(query) > -1 ? '' : 'none';
   });
-  // Hide sections where all cards are hidden
+  // Hide/show Add buttons based on search
+  document.querySelectorAll('.admin-add-card').forEach(function(card){
+    card.style.display = query === '' ? '' : 'none';
+  });
+  // Hide entire sections where no user cards match
   document.querySelectorAll('.admin-role-section').forEach(function(section){
-    var visibleCards = section.querySelectorAll('.admin-user-card:not([style*="display: none"]):not([style*="display:none"])');
-    section.style.display = visibleCards.length === 0 && query !== '' ? 'none' : '';
+    var cards = section.querySelectorAll('.admin-user-card');
+    var visible = 0;
+    cards.forEach(function(c){ if(c.style.display !== 'none') visible++; });
+    section.style.display = (cards.length > 0 && visible === 0 && query !== '') ? 'none' : '';
   });
 }
 function filterCustFilterOptions(inputEl){
