@@ -2973,7 +2973,7 @@ function adminPage(){
     var rc = ROLE_COLORS[(u.role||'').toLowerCase()]||'#6B7280';
     var ac = avatarColor(u.name);
     var _searchText = ((u.name||'') + ' ' + (u.email||'') + ' ' + (u.role||'') + ' ' + (u.zone||'')).toLowerCase();
-    return '<div class="admin-user-card" data-search="'+esc(_searchText)+'" style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:12px;padding:16px;display:flex;align-items:center;gap:12px;min-width:0;">'+
+    return '<div class="admin-user-card" data-search="'+esc(_searchText)+'" style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:12px;padding:16px;display:flex;align-items:center;gap:12px;">'+
       '<div style="width:40px;height:40px;border-radius:50%;background:'+ac+';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;">'+esc(ini)+'</div>'+
       '<div style="flex:1;min-width:0;">'+
         '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'+
