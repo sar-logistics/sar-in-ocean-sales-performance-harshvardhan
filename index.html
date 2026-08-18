@@ -3265,9 +3265,9 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
 
   function sortBtn(col, label, alignRight) {
     var active = sortCol === col;
-    var arrow = active ? (sortDir === -1 ? ' \u25bc' : ' \u25b2') : '';
+    var arrow = active ? (sortDir === -1 ? ' ▼' : ' ▲') : ' ↕';
     var align = alignRight ? 'right' : 'left';
-    return '<th data-act="custSort" data-col="'+col+'" style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:'+(active?brandC:'#9AAFC8')+';text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none;text-align:'+align+';">'+label+arrow+'</th>';
+    return '<th data-act="custSort" data-col="'+col+'" style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:'+(active?brandC:'#9AAFC8')+';text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none;text-align:'+align+';" title="Click to sort by '+label+'">'+label+arrow+'</th>';
   }
 
   var thead = '<thead><tr style="border-bottom:2px solid #E3EAF3;background:#F8FAFD;position:sticky;top:0;z-index:2;">'
@@ -3317,9 +3317,39 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
   });
   tbody += '</tbody>';
 
+  // Grand Total frozen row — sums across ALL customer rows
+  var _allCRows = (lobData.allCustomers || []);
+  var gt = _allCRows.reduce(function(acc, c) {
+    acc.shipments += (c.shipments || 0);
+    acc.tons      += (c.tons      || 0);
+    acc.teu       += (c.teu       || 0);
+    acc.revenue   += (c.revenue   || 0);
+    acc.gp        += (c.gp        || 0);
+    return acc;
+  }, { shipments: 0, tons: 0, teu: 0, revenue: 0, gp: 0 });
+  var gtGpPct = gt.revenue > 0 ? (gt.gp / gt.revenue * 100).toFixed(1) : '0.0';
+  var gtGpColor = gt.gp >= 0 ? '#059669' : '#DC2626';
+  var gtGpPctColor = parseFloat(gtGpPct) >= 15 ? '#059669' : parseFloat(gtGpPct) >= 5 ? '#D97706' : '#DC2626';
+  var tfoot = '<tfoot>'
+    +'<tr style="border-top:2px solid #E3EAF3;background:#EEF4FF;position:sticky;bottom:0;z-index:2;">'
+    +'<td style="padding:8px 10px;font-size:10px;font-weight:700;color:#9AAFC8;text-align:center;">–</td>'
+    +'<td style="padding:8px 10px;font-size:11.5px;font-weight:800;color:#15233B;letter-spacing:0.04em;">GRAND TOTAL</td>'
+    +'<td style="padding:8px 10px;font-size:11.5px;font-weight:700;color:#1D5FCC;text-align:right;font-family:\'DM Mono\',monospace;">'+Math.round(gt.shipments).toLocaleString('en-US')+'</td>'
+    +(isAir
+      ? '<td style="padding:8px 10px;font-size:11.5px;font-weight:700;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+(gt.tons>=1000?(gt.tons/1000).toFixed(1)+'k':gt.tons.toFixed(1))+'</td>'
+      : '<td style="padding:8px 10px;font-size:11.5px;font-weight:700;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+gt.teu.toFixed(1)+'</td>'
+    )
+    +'<td style="padding:8px 10px;font-size:11.5px;font-weight:700;color:#1D5FCC;text-align:right;font-family:\'DM Mono\',monospace;">'+fmtCur(gt.revenue)+'</td>'
+    +'<td style="padding:8px 10px;font-size:11.5px;font-weight:700;color:'+gtGpColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+fmtCur(gt.gp)+'</td>'
+    +'<td style="padding:8px 10px;font-size:11.5px;font-weight:700;color:'+gtGpPctColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+gtGpPct+'%</td>'
+    +'<td style="padding:8px 10px;"></td>'
+    +'<td style="padding:8px 10px;"></td>'
+    +'</tr>'
+    +'</tfoot>';
+
   return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
     +'<div style="overflow-x:auto;max-height:calc(100vh - 155px);overflow-y:auto;">'
-    +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+'</table>'
+    +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+tfoot+'</table>'
     +'</div>'
   +'</div>';
 }
@@ -3616,9 +3646,39 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
   });
   tbody += '</tbody>';
 
+  // Grand Total frozen row — sums across ALL customer rows
+  var _allCRows = (lobData.allCustomers || []);
+  var gt = _allCRows.reduce(function(acc, c) {
+    acc.shipments += (c.shipments || 0);
+    acc.tons      += (c.tons      || 0);
+    acc.teu       += (c.teu       || 0);
+    acc.revenue   += (c.revenue   || 0);
+    acc.gp        += (c.gp        || 0);
+    return acc;
+  }, { shipments: 0, tons: 0, teu: 0, revenue: 0, gp: 0 });
+  var gtGpPct = gt.revenue > 0 ? (gt.gp / gt.revenue * 100).toFixed(1) : '0.0';
+  var gtGpColor = gt.gp >= 0 ? '#059669' : '#DC2626';
+  var gtGpPctColor = parseFloat(gtGpPct) >= 15 ? '#059669' : parseFloat(gtGpPct) >= 5 ? '#D97706' : '#DC2626';
+  var tfoot = '<tfoot>'
+    +'<tr style="border-top:2px solid #E3EAF3;background:#EEF4FF;position:sticky;bottom:0;z-index:2;">'
+    +'<td style="padding:8px 10px;font-size:10px;font-weight:700;color:#9AAFC8;text-align:center;">–</td>'
+    +'<td style="padding:8px 10px;font-size:11.5px;font-weight:800;color:#15233B;letter-spacing:0.04em;">GRAND TOTAL</td>'
+    +'<td style="padding:8px 10px;font-size:11.5px;font-weight:700;color:#1D5FCC;text-align:right;font-family:\'DM Mono\',monospace;">'+Math.round(gt.shipments).toLocaleString('en-US')+'</td>'
+    +(isAir
+      ? '<td style="padding:8px 10px;font-size:11.5px;font-weight:700;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+(gt.tons>=1000?(gt.tons/1000).toFixed(1)+'k':gt.tons.toFixed(1))+'</td>'
+      : '<td style="padding:8px 10px;font-size:11.5px;font-weight:700;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+gt.teu.toFixed(1)+'</td>'
+    )
+    +'<td style="padding:8px 10px;font-size:11.5px;font-weight:700;color:#1D5FCC;text-align:right;font-family:\'DM Mono\',monospace;">'+fmtCur(gt.revenue)+'</td>'
+    +'<td style="padding:8px 10px;font-size:11.5px;font-weight:700;color:'+gtGpColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+fmtCur(gt.gp)+'</td>'
+    +'<td style="padding:8px 10px;font-size:11.5px;font-weight:700;color:'+gtGpPctColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+gtGpPct+'%</td>'
+    +'<td style="padding:8px 10px;"></td>'
+    +'<td style="padding:8px 10px;"></td>'
+    +'</tr>'
+    +'</tfoot>';
+
   return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
     +'<div style="overflow-x:auto;max-height:calc(100vh - 155px);overflow-y:auto;">'
-    +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+'</table>'
+    +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+tfoot+'</table>'
     +'</div>'
   +'</div>';
 }
