@@ -3306,16 +3306,12 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
     +custFilterTh('rep','Sales Rep','140px')
     +'</tr></thead>';
 
-  // Apply checklist filters — [] or full selection = show all; ['__none__'] = show nothing
-  var _nameFilterActive = _custNameFilter.length > 0;
-  var _repFilterActive  = _custRepFilter.length > 0;
-  if (_nameFilterActive) {
-    if (_custNameFilter.indexOf('__none__') > -1) rows = [];
-    else rows = rows.filter(function(c){ return _custNameFilter.indexOf(c.name||'') > -1; });
+  // Apply checklist filters — [] = show all (no filter); non-empty = show only matching
+  if (_custNameFilter.length > 0) {
+    rows = rows.filter(function(c){ return _custNameFilter.indexOf(c.name||'') > -1; });
   }
-  if (_repFilterActive) {
-    if (_custRepFilter.indexOf('__none__') > -1) rows = [];
-    else rows = rows.filter(function(c){ return (c.salesReps||[]).some(function(r){ return _custRepFilter.indexOf(r) > -1; }); });
+  if (_custRepFilter.length > 0) {
+    rows = rows.filter(function(c){ return (c.salesReps||[]).some(function(r){ return _custRepFilter.indexOf(r) > -1; }); });
   }
 
   var tbody = '<tbody>';
@@ -3390,8 +3386,8 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
     var _popVals = _isName ? _uniqueNames : _uniqueReps;
     var _popSearch = _isName ? _custNameSearch : _custRepSearch;
     var _popActive = _isName ? _custNameFilter : _custRepFilter;
-    var _draft = (state.custFilterDraft && state.custFilterDraft[_custOpenFilter]) || _popActive;
-    var _allSelected = _draft.length === 0 || (_draft.length === _popVals.length && _draft.indexOf('__none__') === -1);
+    var _draft = (state.custFilterDraft && state.custFilterDraft[_custOpenFilter]) || _popVals.slice();
+    var _allSelected = _draft.length >= _popVals.length;
     var _popFiltered = _popVals.filter(function(v){ return !_popSearch || v.toLowerCase().indexOf(_popSearch) > -1; });
     var _popLabel = _isName ? 'Customer' : 'Sales Rep';
     var _anchor = state.custFilterAnchor || {top:120, left:320};
@@ -3734,8 +3730,8 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
     var _popVals = _isName ? _uniqueNames : _uniqueReps;
     var _popSearch = _isName ? _custNameSearch : _custRepSearch;
     var _popActive = _isName ? _custNameFilter : _custRepFilter;
-    var _draft = (state.custFilterDraft && state.custFilterDraft[_custOpenFilter]) || _popActive;
-    var _allSelected = _draft.length === 0 || (_draft.length === _popVals.length && _draft.indexOf('__none__') === -1);
+    var _draft = (state.custFilterDraft && state.custFilterDraft[_custOpenFilter]) || _popVals.slice();
+    var _allSelected = _draft.length >= _popVals.length;
     var _popFiltered = _popVals.filter(function(v){ return !_popSearch || v.toLowerCase().indexOf(_popSearch) > -1; });
     var _popLabel = _isName ? 'Customer' : 'Sales Rep';
     var _anchor = state.custFilterAnchor || {top:120, left:320};
@@ -8318,7 +8314,12 @@ document.addEventListener('click', function(ev){
       var _rect = el.closest('th') ? el.closest('th').getBoundingClientRect() : el.getBoundingClientRect();
       state.custFilterAnchor = { top: _rect.bottom + 4, left: Math.min(_rect.left, window.innerWidth - 280) };
       state.custFilterDraft = {};
-      state.custFilterDraft[col] = col==='name' ? (state.custNameFilter.slice()) : (state.custRepFilter.slice());
+      // If no filter active ([] = all), initialize draft with ALL values so unchecking works correctly
+      var _allVals = col==='name'
+        ? Array.from(new Set((customerData && customerData.lobs && customerData.lobs[state.customerLob||'Ocean'] && customerData.lobs[state.customerLob||'Ocean'].allCustomers || customerData && customerData.allCustomers || []).map(function(c){ return c.name||''; }))).filter(Boolean)
+        : Array.from(new Set((customerData && customerData.lobs && customerData.lobs[state.customerLob||'Ocean'] && customerData.lobs[state.customerLob||'Ocean'].allCustomers || customerData && customerData.allCustomers || []).reduce(function(a,c){ (c.salesReps||[]).forEach(function(r){ if(r) a.push(r); }); return a; }, []))).filter(Boolean);
+      var _curFilter = col==='name' ? state.custNameFilter : state.custRepFilter;
+      state.custFilterDraft[col] = _curFilter.length > 0 ? _curFilter.slice() : _allVals.slice();
     }
     _customerPivotCache = {};
     render();
@@ -8340,7 +8341,11 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation();
     var col = el.getAttribute('data-col');
     if(!state.custFilterDraft) state.custFilterDraft = {};
-    state.custFilterDraft[col] = [];
+    // Select all = populate draft with all values
+    var _allVals3 = col==='name'
+      ? Array.from(new Set((customerData && customerData.lobs && customerData.lobs[state.customerLob||'Ocean'] && customerData.lobs[state.customerLob||'Ocean'].allCustomers || customerData && customerData.allCustomers || []).map(function(c){ return c.name||''; }))).filter(Boolean)
+      : Array.from(new Set((customerData && customerData.lobs && customerData.lobs[state.customerLob||'Ocean'] && customerData.lobs[state.customerLob||'Ocean'].allCustomers || customerData && customerData.allCustomers || []).reduce(function(a,c){ (c.salesReps||[]).forEach(function(r){ if(r) a.push(r); }); return a; }, []))).filter(Boolean);
+    state.custFilterDraft[col] = _allVals3.slice();
     _customerPivotCache = {};
     render();
   }
@@ -8348,7 +8353,7 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation();
     var col = el.getAttribute('data-col');
     if(!state.custFilterDraft) state.custFilterDraft = {};
-    state.custFilterDraft[col] = ['__none__'];
+    state.custFilterDraft[col] = [];
     _customerPivotCache = {};
     render();
   }
@@ -8356,8 +8361,13 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation();
     var col = el.getAttribute('data-col');
     var draft = (state.custFilterDraft && state.custFilterDraft[col]) || [];
-    if(col==='name') state.custNameFilter = draft.indexOf('__none__') > -1 ? ['__none__'] : draft;
-    else state.custRepFilter = draft.indexOf('__none__') > -1 ? ['__none__'] : draft;
+    // Get all possible values to check if "all selected"
+    var _allVals2 = col==='name'
+      ? Array.from(new Set((customerData && customerData.lobs && customerData.lobs[state.customerLob||'Ocean'] && customerData.lobs[state.customerLob||'Ocean'].allCustomers || customerData && customerData.allCustomers || []).map(function(c){ return c.name||''; }))).filter(Boolean)
+      : Array.from(new Set((customerData && customerData.lobs && customerData.lobs[state.customerLob||'Ocean'] && customerData.lobs[state.customerLob||'Ocean'].allCustomers || customerData && customerData.allCustomers || []).reduce(function(a,c){ (c.salesReps||[]).forEach(function(r){ if(r) a.push(r); }); return a; }, []))).filter(Boolean);
+    var _isAllSelected = draft.length === _allVals2.length || draft.length === 0;
+    if(col==='name') state.custNameFilter = _isAllSelected ? [] : draft;
+    else state.custRepFilter = _isAllSelected ? [] : draft;
     state.custOpenFilter = null;
     state.custNameSearch = '';
     state.custRepSearch  = '';
