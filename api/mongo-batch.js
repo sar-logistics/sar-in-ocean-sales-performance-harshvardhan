@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-14T-ocean-v150-general-gp-fix-1786953092";
+const DEPLOY_TS = "2026-08-18T-ocean-v151-zone-fallback-fix-1787027573";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
