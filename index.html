@@ -1601,7 +1601,7 @@ var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:f
   filterRepDropOpen: false,
   filterZoneDropOpen: false,
     filterRegionDropOpen: false,
-  filterLobs: [],   // empty = All LOBs (default — no filter active)
+  filterLobs: ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT'],   // default Ocean LOBs + Air cross-sales; empty = All LOBs
   filterReps: [],   // empty = All Reps; else array of selected rep names
   filterZones: [],   // empty = All Zones; else array of selected zone names
     filterRegions: []  // empty = All Regions; else array of selected region names
