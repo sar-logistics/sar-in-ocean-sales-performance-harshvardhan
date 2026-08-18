@@ -1601,7 +1601,9 @@ var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:f
   filterRepDropOpen: false,
   filterZoneDropOpen: false,
     filterRegionDropOpen: false,
-  filterLobs: ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT'],   // default Ocean LOBs + Air cross-sales; empty = All LOBs   // default Ocean LOBs + Air cross-sales; empty = All LOBs
+  filterLobs: ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT'],   // default Ocean LOBs + Air cross-sales; empty = All LOBs
+  custNameSearch: '',   // text filter for Customer Name column
+  custRepSearch:  '',   // text filter for Sales Rep column   // default Ocean LOBs + Air cross-sales; empty = All LOBs
   filterReps: [],   // empty = All Reps; else array of selected rep names
   filterZones: [],   // empty = All Zones; else array of selected zone names
     filterRegions: []  // empty = All Regions; else array of selected region names
@@ -3270,17 +3272,28 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
     return '<th data-act="custSort" data-col="'+col+'" style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:'+(active?brandC:'#9AAFC8')+';text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none;text-align:'+align+';" title="Click to sort by '+label+'">'+label+arrow+'</th>';
   }
 
+  var _custNameQ = (state.custNameSearch||'').toLowerCase().trim();
+  var _custRepQ  = (state.custRepSearch ||'').toLowerCase().trim();
+  var _searchInputStyle = 'width:100%;margin-top:5px;padding:3px 6px;font-size:11px;border:1px solid #D1D9E6;border-radius:5px;outline:none;color:#15233B;background:#fff;box-sizing:border-box;';
   var thead = '<thead><tr style="border-bottom:2px solid #E3EAF3;background:#F8FAFD;position:sticky;top:0;z-index:2;">'
     +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;width:36px;text-align:center;">#</th>'
-    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:180px;">Customer</th>'
+    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:180px;">Customer'
+      +'<input type="text" data-act="custNameSearch" placeholder="Search…" value="'+esc(_custNameQ)+'" style="'+_searchInputStyle+'" oninput="this.dispatchEvent(new CustomEvent(\'custNameSearch\',{bubbles:true,detail:this.value}))" onclick="event.stopPropagation()" />'
+    +'</th>'
     +sortBtn('shipments','Ships',true)
     +(isAir ? sortBtn('tons','Tons',true) : sortBtn('teu','TEUs',true))
     +sortBtn('revenue','Revenue',true)
     +sortBtn('gp','GP',true)
     +sortBtn('gpPct','GP%',true)
     +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;">LOB(s)</th>'
-    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:140px;">Sales</th>'
+    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:140px;">Sales Rep'
+      +'<input type="text" data-act="custRepSearch" placeholder="Search…" value="'+esc(_custRepQ)+'" style="'+_searchInputStyle+'" oninput="this.dispatchEvent(new CustomEvent(\'custRepSearch\',{bubbles:true,detail:this.value}))" onclick="event.stopPropagation()" />'
+    +'</th>'
     +'</tr></thead>';
+
+  // Apply search filters
+  if (_custNameQ) rows = rows.filter(function(c){ return (c.name||'').toLowerCase().indexOf(_custNameQ) > -1; });
+  if (_custRepQ)  rows = rows.filter(function(c){ return (c.salesReps||[]).some(function(r){ return (r||'').toLowerCase().indexOf(_custRepQ) > -1; }); });
 
   var tbody = '<tbody>';
   rows.forEach(function(c, i) {
@@ -7933,6 +7946,24 @@ function filterChecklist(inputEl){
 }
 
 document.addEventListener('change', function(ev){ var el=ev.target; if(el.getAttribute('data-act')==='rateCommit'){ var v=parseFloat(el.value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); } });
+document.addEventListener('custNameSearch', function(ev){
+  state.custNameSearch = ev.detail || '';
+  _customerPivotCache = {};
+  render();
+  requestAnimationFrame(function(){
+    var inp = document.querySelector('input[data-act="custNameSearch"]');
+    if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length); }
+  });
+});
+document.addEventListener('custRepSearch', function(ev){
+  state.custRepSearch = ev.detail || '';
+  _customerPivotCache = {};
+  render();
+  requestAnimationFrame(function(){
+    var inp = document.querySelector('input[data-act="custRepSearch"]');
+    if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length); }
+  });
+});
 document.addEventListener('click', function(ev){
   var el = ev.target.closest('[data-act]');
   if(!el) return;
@@ -8199,7 +8230,7 @@ document.addEventListener('click', function(ev){
   else if(act==='toggleToDrop'){ ev.stopPropagation(); state.toDropOpen=!state.toDropOpen; state.fromDropOpen=false; state.weeklyDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.getAttribute('data-val'); state.weeklyDropOpen=false; if(state.page==='tradelane'){ _tradelanePivotCache={}; fetchTradelaneData(function(){render();},false); } else render(); }
   else if(act==='toggleWeeklyDrop'){ ev.stopPropagation(); state.weeklyDropOpen=!state.weeklyDropOpen; state.fromDropOpen=false; state.toDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='setCustomerLob'){ ev.stopPropagation(); state.customerLob=el.getAttribute('data-val'); _customerPivotCache={}; render(); }
+  else if(act==='setCustomerLob'){ ev.stopPropagation(); state.customerLob=el.getAttribute('data-val'); state.custNameSearch=''; state.custRepSearch=''; _customerPivotCache={}; render(); }
   else if(act==='setCustView'){ ev.stopPropagation(); state.customerView=el.getAttribute('data-val'); _customerPivotCache={}; render(); }
   else if(act==='custSort'){
     ev.stopPropagation();
@@ -8209,6 +8240,7 @@ document.addEventListener('click', function(ev){
     _customerPivotCache = {};
     render();
   }
+
   else if(act==='setAgentLob'){ ev.stopPropagation(); state.agentLob=el.getAttribute('data-val'); _agentPivotCache={}; render(); }
   else if(act==='setAgentView'){ ev.stopPropagation(); state.agentView=el.getAttribute('data-val'); _agentPivotCache={}; render(); }
   else if(act==='agentSort'){
