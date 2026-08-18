@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-18T-ocean-v169-identical-zone-lookup-1787048556";
+const DEPLOY_TS = "2026-08-18T-ocean-v170-op-realzonenames-1787049034";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -604,8 +604,8 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           const _spParts = _spRaw.split("|").map(s => s.trim());
           for (const _part of _spParts.slice(1)) {
             const _code = _part.toUpperCase();
-            if (/^IN[A-Z]?\d+$/.test(_code) && repLookupByFY["FY26"]) {
-              const _matchedZone = Object.keys(repLookupByFY["FY26"]).find(z => z !== 'Unassigned' && z.toUpperCase().startsWith(_code));
+            if (/^IN[A-Z]?\d+$/.test(_code) && repsByZoneByFY["FY26"]) {
+              const _matchedZone = Object.keys(repsByZoneByFY["FY26"]).find(z => z !== 'Unassigned' && z.toUpperCase().startsWith(_code));
               if (_matchedZone) { _zone = _matchedZone; break; }
             }
           }
@@ -2506,6 +2506,10 @@ async function computeBothPendency(db) {
     }
   }
 
+  // Build set of real zone names — equivalent to Object.keys(repsByZoneByFY["FY26"])
+  // Used for INZ code → zone name matching (same as SP's repsByZoneByFY lookup)
+  const realZoneNames = Array.from(new Set(Object.values(repZoneMap).filter(z => z && z !== 'Unassigned')));
+
   // Direct lean query across all collections in parallel
   // Filter to FY date range at DB level — avoids pulling irrelevant rows
   // Single DB pass — track OL and FL simultaneously in same loop
@@ -2571,12 +2575,14 @@ async function computeBothPendency(db) {
             }
           }
         }
-        // Last resort: match INZ code from pipe-suffix against inzCodeZoneMap keys
+        // Last resort: match INZ code from pipe-suffix against real zone names
+        // Identical to SP's repsByZoneByFY["FY26"] zone name scan
         if (!zone) {
           for (const part of nameParts.slice(1)) {
             const trimmed = part.toUpperCase();
-            if (/^IN[A-Z]?\d+$/.test(trimmed) && inzCodeZoneMap[trimmed] && inzCodeZoneMap[trimmed] !== 'Unassigned') {
-              zone = inzCodeZoneMap[trimmed]; break;
+            if (/^IN[A-Z]?\d+$/.test(trimmed)) {
+              const matchedZone = realZoneNames.find(z => z.toUpperCase().startsWith(trimmed));
+              if (matchedZone) { zone = matchedZone; break; }
             }
           }
         }
