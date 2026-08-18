@@ -3327,7 +3327,9 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
       var n = normalizeName(r||'');
       var lobOk = !_custLobRepMapLoaded || (_cRepSet && _cRepSet[n] === true);
       var repOk = !frNorm || frNorm.indexOf(n) > -1;
-      return lobOk && repOk;
+      // Also show reps that match custRepFilter
+      var custRepOk = _custRepFilter.length === 0 || _custRepFilter.indexOf(r) > -1;
+      return (lobOk && repOk) || custRepOk;
     });
     var repsText = filteredReps.slice(0,3).join(', ') + (filteredReps.length > 3 ? ' +' + (filteredReps.length-3) : '');
     var bg = i%2===1 ? 'background:#FAFBFD;' : '';
