@@ -1602,8 +1602,12 @@ var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:f
   filterZoneDropOpen: false,
     filterRegionDropOpen: false,
   filterLobs: ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT'],   // default Ocean LOBs + Air cross-sales; empty = All LOBs
-  custNameSearch: '',   // text filter for Customer Name column
-  custRepSearch:  '',   // text filter for Sales Rep column   // default Ocean LOBs + Air cross-sales; empty = All LOBs
+  custOpenFilter:  null, // 'name' or 'rep'
+  custNameSearch: '',   // search query inside name filter popup
+  custRepSearch:  '',   // search query inside rep filter popup
+  custNameFilter: [],   // checked customer names ([]=all)
+  custRepFilter:  [],   // checked rep names ([]=all)
+  custFilterDraft: {}   // draft selections before Apply   // default Ocean LOBs + Air cross-sales; empty = All LOBs
   filterReps: [],   // empty = All Reps; else array of selected rep names
   filterZones: [],   // empty = All Zones; else array of selected zone names
     filterRegions: []  // empty = All Regions; else array of selected region names
@@ -3272,28 +3276,47 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
     return '<th data-act="custSort" data-col="'+col+'" style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:'+(active?brandC:'#9AAFC8')+';text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none;text-align:'+align+';" title="Click to sort by '+label+'">'+label+arrow+'</th>';
   }
 
-  var _custNameQ = (state.custNameSearch||'').toLowerCase().trim();
-  var _custRepQ  = (state.custRepSearch ||'').toLowerCase().trim();
-  var _searchInputStyle = 'width:100%;margin-top:5px;padding:3px 6px;font-size:11px;border:1px solid #D1D9E6;border-radius:5px;outline:none;color:#15233B;background:#fff;box-sizing:border-box;';
+  var _custOpenFilter = state.custOpenFilter || null; // 'name' or 'rep'
+  var _custNameSearch = (state.custNameSearch||'').toLowerCase().trim();
+  var _custRepSearch  = (state.custRepSearch ||'').toLowerCase().trim();
+  var _custNameFilter = state.custNameFilter || []; // checked values
+  var _custRepFilter  = state.custRepFilter  || []; // checked values
+
+  // Unique values for filter checklists
+  var _allRows = (lobData.allCustomers || []);
+  var _uniqueNames = Array.from(new Set(_allRows.map(function(c){ return c.name||''; }))).sort();
+  var _uniqueReps  = Array.from(new Set(_allRows.reduce(function(acc,c){ (c.salesReps||[]).forEach(function(r){ if(r) acc.push(r); }); return acc; }, []))).sort();
+
+  function custFilterTh(col, label, minWidth) {
+    var hasFilter = col==='name' ? _custNameFilter.length>0 && _custNameFilter.length<_uniqueNames.length
+                                 : _custRepFilter.length>0  && _custRepFilter.length<_uniqueReps.length;
+    var isOpen = _custOpenFilter === col;
+    var bg = hasFilter ? '#EEF3FC' : '#F8FAFD';
+    return '<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:'+(hasFilter?'#1E3A66':'#9AAFC8')+';text-transform:uppercase;text-align:left;min-width:'+(minWidth||'140px')+';background:'+bg+';border-bottom:2px solid #E3EAF3;position:sticky;top:0;z-index:2;">'      +'<span style="display:inline-flex;align-items:center;gap:4px;">'        +label        +'<span data-act="custToggleFilter" data-col="'+col+'" style="cursor:pointer;display:inline-flex;padding:2px;border-radius:3px;'+(hasFilter||isOpen?'background:#1D5FCC;':'')+'">'          +'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="'+(hasFilter||isOpen?'#FFFFFF':'#9AAFC8')+'" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'        +'</span>'      +'</span>'    +'</th>';  }
+
   var thead = '<thead><tr style="border-bottom:2px solid #E3EAF3;background:#F8FAFD;position:sticky;top:0;z-index:2;">'
-    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;width:36px;text-align:center;">#</th>'
-    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:180px;">Customer'
-      +'<input type="text" data-act="custNameSearch" placeholder="Search…" value="'+esc(_custNameQ)+'" style="'+_searchInputStyle+'" oninput="this.dispatchEvent(new CustomEvent(\'custNameSearch\',{bubbles:true,detail:this.value}))" onclick="event.stopPropagation()" />'
-    +'</th>'
+    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;width:36px;text-align:center;background:#F8FAFD;position:sticky;top:0;">#</th>'
+    +custFilterTh('name','Customer','180px')
     +sortBtn('shipments','Ships',true)
     +(isAir ? sortBtn('tons','Tons',true) : sortBtn('teu','TEUs',true))
     +sortBtn('revenue','Revenue',true)
     +sortBtn('gp','GP',true)
     +sortBtn('gpPct','GP%',true)
-    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;">LOB(s)</th>'
-    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:140px;">Sales Rep'
-      +'<input type="text" data-act="custRepSearch" placeholder="Search…" value="'+esc(_custRepQ)+'" style="'+_searchInputStyle+'" oninput="this.dispatchEvent(new CustomEvent(\'custRepSearch\',{bubbles:true,detail:this.value}))" onclick="event.stopPropagation()" />'
-    +'</th>'
+    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;background:#F8FAFD;position:sticky;top:0;">LOB(s)</th>'
+    +custFilterTh('rep','Sales Rep','140px')
     +'</tr></thead>';
 
-  // Apply search filters
-  if (_custNameQ) rows = rows.filter(function(c){ return (c.name||'').toLowerCase().indexOf(_custNameQ) > -1; });
-  if (_custRepQ)  rows = rows.filter(function(c){ return (c.salesReps||[]).some(function(r){ return (r||'').toLowerCase().indexOf(_custRepQ) > -1; }); });
+  // Apply checklist filters — [] or full selection = show all; ['__none__'] = show nothing
+  var _nameFilterActive = _custNameFilter.length > 0;
+  var _repFilterActive  = _custRepFilter.length > 0;
+  if (_nameFilterActive) {
+    if (_custNameFilter.indexOf('__none__') > -1) rows = [];
+    else rows = rows.filter(function(c){ return _custNameFilter.indexOf(c.name||'') > -1; });
+  }
+  if (_repFilterActive) {
+    if (_custRepFilter.indexOf('__none__') > -1) rows = [];
+    else rows = rows.filter(function(c){ return (c.salesReps||[]).some(function(r){ return _custRepFilter.indexOf(r) > -1; }); });
+  }
 
   var tbody = '<tbody>';
   rows.forEach(function(c, i) {
@@ -3360,10 +3383,24 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
     +'</tr>'
     +'</tfoot>';
 
-  return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
+  // Filter popup
+  var custFilterPopup = '';
+  if (_custOpenFilter) {
+    var _isName = _custOpenFilter === 'name';
+    var _popVals = _isName ? _uniqueNames : _uniqueReps;
+    var _popSearch = _isName ? _custNameSearch : _custRepSearch;
+    var _popActive = _isName ? _custNameFilter : _custRepFilter;
+    var _draft = (state.custFilterDraft && state.custFilterDraft[_custOpenFilter]) || _popActive;
+    var _allSelected = _draft.length === 0 || (_draft.length === _popVals.length && _draft.indexOf('__none__') === -1);
+    var _popFiltered = _popVals.filter(function(v){ return !_popSearch || v.toLowerCase().indexOf(_popSearch) > -1; });
+    var _popLabel = _isName ? 'Customer' : 'Sales Rep';
+    custFilterPopup = '<div id="cust-filter-popup" data-stop="1" style="position:fixed;top:120px;left:320px;z-index:9999;background:#FFFFFF;border:1.5px solid #D1DCF0;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18);padding:16px;width:260px;max-width:90vw;">'      +'<div style="font-size:13px;font-weight:800;color:#0D2B5E;margin-bottom:10px;">Filter: '+_popLabel+'</div>'      +'<div style="display:flex;align-items:center;gap:7px;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:5px 8px;margin-bottom:10px;">'        +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'        +'<input type="text" id="cust-filter-search" placeholder="Search…" autocomplete="off" value="'+esc(_popSearch)+'" data-col="'+_custOpenFilter+'" oninput="(function(el){var e=new CustomEvent(\'custFilterSearch\',{bubbles:true,detail:{col:el.dataset.col,val:el.value}});el.dispatchEvent(e);})(this)" style="border:none;background:transparent;outline:none;font-size:12px;color:#15233B;width:100%;"/>'      +'</div>'      +'<div style="display:flex;gap:8px;margin-bottom:10px;">'        +'<button data-act="custFilterSelectAll" data-col="'+_custOpenFilter+'" style="flex:1;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:6px;padding:5px;font-size:11px;font-weight:600;color:#374151;cursor:pointer;">Select All</button>'        +'<button data-act="custFilterClearAll" data-col="'+_custOpenFilter+'" style="flex:1;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:6px;padding:5px;font-size:11px;font-weight:600;color:#374151;cursor:pointer;">Clear All</button>'      +'</div>'      +'<div style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin-bottom:12px;">'        +_popFiltered.map(function(v){          var checked = _allSelected || _draft.indexOf(v) > -1;          var BRAND_A1 = '#1D5FCC';          return '<div data-act="custFilterToggleVal" data-col="'+_custOpenFilter+'" data-val="'+esc(v)+'" style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background=\'#F4F7FA\'" onmouseout="this.style.background=\'\'">'            +'<div style="width:15px;height:15px;border-radius:4px;border:1.5px solid '+(checked?BRAND_A1:'#C5D0E0')+';background:'+(checked?BRAND_A1:'#fff')+';flex-shrink:0;display:flex;align-items:center;justify-content:center;">'              +(checked?'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':'')            +'</div>'            +'<span style="font-size:12px;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(v||'(blank)')+'</span>'          +'</div>';        }).join('')      +'</div>'      +'<button data-act="custFilterApply" data-col="'+_custOpenFilter+'" style="width:100%;background:linear-gradient(135deg,#1D5FCC,#1A56B8);color:#fff;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:700;cursor:pointer;">Apply</button>'    +'</div>';  }
+
+  return '<div style="position:relative;background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
     +'<div style="overflow-x:auto;max-height:calc(100vh - 155px);overflow-y:auto;">'
     +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+tfoot+'</table>'
     +'</div>'
+    +custFilterPopup
   +'</div>';
 }
 
@@ -3689,10 +3726,24 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
     +'</tr>'
     +'</tfoot>';
 
-  return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
+  // Filter popup
+  var custFilterPopup = '';
+  if (_custOpenFilter) {
+    var _isName = _custOpenFilter === 'name';
+    var _popVals = _isName ? _uniqueNames : _uniqueReps;
+    var _popSearch = _isName ? _custNameSearch : _custRepSearch;
+    var _popActive = _isName ? _custNameFilter : _custRepFilter;
+    var _draft = (state.custFilterDraft && state.custFilterDraft[_custOpenFilter]) || _popActive;
+    var _allSelected = _draft.length === 0 || (_draft.length === _popVals.length && _draft.indexOf('__none__') === -1);
+    var _popFiltered = _popVals.filter(function(v){ return !_popSearch || v.toLowerCase().indexOf(_popSearch) > -1; });
+    var _popLabel = _isName ? 'Customer' : 'Sales Rep';
+    custFilterPopup = '<div id="cust-filter-popup" data-stop="1" style="position:fixed;top:120px;left:320px;z-index:9999;background:#FFFFFF;border:1.5px solid #D1DCF0;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18);padding:16px;width:260px;max-width:90vw;">'      +'<div style="font-size:13px;font-weight:800;color:#0D2B5E;margin-bottom:10px;">Filter: '+_popLabel+'</div>'      +'<div style="display:flex;align-items:center;gap:7px;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:5px 8px;margin-bottom:10px;">'        +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'        +'<input type="text" id="cust-filter-search" placeholder="Search…" autocomplete="off" value="'+esc(_popSearch)+'" data-col="'+_custOpenFilter+'" oninput="(function(el){var e=new CustomEvent(\'custFilterSearch\',{bubbles:true,detail:{col:el.dataset.col,val:el.value}});el.dispatchEvent(e);})(this)" style="border:none;background:transparent;outline:none;font-size:12px;color:#15233B;width:100%;"/>'      +'</div>'      +'<div style="display:flex;gap:8px;margin-bottom:10px;">'        +'<button data-act="custFilterSelectAll" data-col="'+_custOpenFilter+'" style="flex:1;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:6px;padding:5px;font-size:11px;font-weight:600;color:#374151;cursor:pointer;">Select All</button>'        +'<button data-act="custFilterClearAll" data-col="'+_custOpenFilter+'" style="flex:1;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:6px;padding:5px;font-size:11px;font-weight:600;color:#374151;cursor:pointer;">Clear All</button>'      +'</div>'      +'<div style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin-bottom:12px;">'        +_popFiltered.map(function(v){          var checked = _allSelected || _draft.indexOf(v) > -1;          var BRAND_A1 = '#1D5FCC';          return '<div data-act="custFilterToggleVal" data-col="'+_custOpenFilter+'" data-val="'+esc(v)+'" style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background=\'#F4F7FA\'" onmouseout="this.style.background=\'\'">'            +'<div style="width:15px;height:15px;border-radius:4px;border:1.5px solid '+(checked?BRAND_A1:'#C5D0E0')+';background:'+(checked?BRAND_A1:'#fff')+';flex-shrink:0;display:flex;align-items:center;justify-content:center;">'              +(checked?'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':'')            +'</div>'            +'<span style="font-size:12px;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(v||'(blank)')+'</span>'          +'</div>';        }).join('')      +'</div>'      +'<button data-act="custFilterApply" data-col="'+_custOpenFilter+'" style="width:100%;background:linear-gradient(135deg,#1D5FCC,#1A56B8);color:#fff;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:700;cursor:pointer;">Apply</button>'    +'</div>';  }
+
+  return '<div style="position:relative;background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
     +'<div style="overflow-x:auto;max-height:calc(100vh - 155px);overflow-y:auto;">'
     +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+tfoot+'</table>'
     +'</div>'
+    +custFilterPopup
   +'</div>';
 }
 
@@ -7946,25 +7997,28 @@ function filterChecklist(inputEl){
 }
 
 document.addEventListener('change', function(ev){ var el=ev.target; if(el.getAttribute('data-act')==='rateCommit'){ var v=parseFloat(el.value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); } });
-document.addEventListener('custNameSearch', function(ev){
-  state.custNameSearch = ev.detail || '';
+document.addEventListener('custFilterSearch', function(ev){
+  var col = ev.detail && ev.detail.col;
+  var val = (ev.detail && ev.detail.val) || '';
+  if(col==='name') state.custNameSearch = val;
+  else if(col==='rep') state.custRepSearch = val;
   _customerPivotCache = {};
   render();
   requestAnimationFrame(function(){
-    var inp = document.querySelector('input[data-act="custNameSearch"]');
-    if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length); }
-  });
-});
-document.addEventListener('custRepSearch', function(ev){
-  state.custRepSearch = ev.detail || '';
-  _customerPivotCache = {};
-  render();
-  requestAnimationFrame(function(){
-    var inp = document.querySelector('input[data-act="custRepSearch"]');
+    var inp = document.getElementById('cust-filter-search');
     if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length); }
   });
 });
 document.addEventListener('click', function(ev){
+  // Close cust filter popup on outside click
+  if(state.custOpenFilter && !ev.target.closest('#cust-filter-popup') && !ev.target.closest('[data-act="custToggleFilter"]')){
+    state.custOpenFilter = null;
+    state.custNameSearch = '';
+    state.custRepSearch  = '';
+    _customerPivotCache = {};
+    render();
+    return;
+  }
   var el = ev.target.closest('[data-act]');
   if(!el) return;
 
@@ -8230,13 +8284,66 @@ document.addEventListener('click', function(ev){
   else if(act==='toggleToDrop'){ ev.stopPropagation(); state.toDropOpen=!state.toDropOpen; state.fromDropOpen=false; state.weeklyDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.getAttribute('data-val'); state.weeklyDropOpen=false; if(state.page==='tradelane'){ _tradelanePivotCache={}; fetchTradelaneData(function(){render();},false); } else render(); }
   else if(act==='toggleWeeklyDrop'){ ev.stopPropagation(); state.weeklyDropOpen=!state.weeklyDropOpen; state.fromDropOpen=false; state.toDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='setCustomerLob'){ ev.stopPropagation(); state.customerLob=el.getAttribute('data-val'); state.custNameSearch=''; state.custRepSearch=''; _customerPivotCache={}; render(); }
+  else if(act==='setCustomerLob'){ ev.stopPropagation(); state.customerLob=el.getAttribute('data-val'); state.custOpenFilter=null; state.custNameSearch=''; state.custRepSearch=''; state.custNameFilter=[]; state.custRepFilter=[]; _customerPivotCache={}; render(); }
   else if(act==='setCustView'){ ev.stopPropagation(); state.customerView=el.getAttribute('data-val'); _customerPivotCache={}; render(); }
   else if(act==='custSort'){
     ev.stopPropagation();
     var col = el.getAttribute('data-col');
     if(state.custSortCol === col){ state.custSortDir = (state.custSortDir||(-1)) * -1; }
     else { state.custSortCol = col; state.custSortDir = -1; }
+    _customerPivotCache = {};
+    render();
+  }
+  else if(act==='custToggleFilter'){
+    ev.stopPropagation();
+    var col = el.getAttribute('data-col');
+    state.custOpenFilter = state.custOpenFilter === col ? null : col;
+    // Init draft to current filter
+    if(state.custOpenFilter) {
+      state.custFilterDraft = {};
+      state.custFilterDraft[col] = col==='name' ? (state.custNameFilter.slice()) : (state.custRepFilter.slice());
+    }
+    _customerPivotCache = {};
+    render();
+  }
+  else if(act==='custFilterToggleVal'){
+    ev.stopPropagation();
+    var col = el.getAttribute('data-col');
+    var val = el.getAttribute('data-val');
+    if(!state.custFilterDraft) state.custFilterDraft = {};
+    if(!state.custFilterDraft[col]) state.custFilterDraft[col] = [];
+    var draft = state.custFilterDraft[col];
+    var idx = draft.indexOf(val);
+    if(idx > -1) draft.splice(idx,1); else draft.push(val);
+    _customerPivotCache = {};
+    render();
+    requestAnimationFrame(function(){ var p=document.getElementById('cust-filter-popup'); if(p) p.scrollTop=p.scrollTop; });
+  }
+  else if(act==='custFilterSelectAll'){
+    ev.stopPropagation();
+    var col = el.getAttribute('data-col');
+    if(!state.custFilterDraft) state.custFilterDraft = {};
+    state.custFilterDraft[col] = [];
+    _customerPivotCache = {};
+    render();
+  }
+  else if(act==='custFilterClearAll'){
+    ev.stopPropagation();
+    var col = el.getAttribute('data-col');
+    if(!state.custFilterDraft) state.custFilterDraft = {};
+    state.custFilterDraft[col] = ['__none__'];
+    _customerPivotCache = {};
+    render();
+  }
+  else if(act==='custFilterApply'){
+    ev.stopPropagation();
+    var col = el.getAttribute('data-col');
+    var draft = (state.custFilterDraft && state.custFilterDraft[col]) || [];
+    if(col==='name') state.custNameFilter = draft.indexOf('__none__') > -1 ? ['__none__'] : draft;
+    else state.custRepFilter = draft.indexOf('__none__') > -1 ? ['__none__'] : draft;
+    state.custOpenFilter = null;
+    state.custNameSearch = '';
+    state.custRepSearch  = '';
     _customerPivotCache = {};
     render();
   }
