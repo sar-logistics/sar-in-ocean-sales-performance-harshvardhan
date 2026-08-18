@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-18T-ocean-v161-inzmap-real-zones-1787044697";
+const DEPLOY_TS = "2026-08-18T-ocean-v162-bust-opcache-1787045000";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2436,6 +2436,8 @@ async function getFinancePendency(db, force) {
 // Ensures both caches built in ONE single DB pass.
 // If a build is already in flight, waits for it instead of starting a second one.
 async function _ensurePendencyCache(db, force) {
+  // Bust cache if DEPLOY_TS changed
+  if (opCache && opCache.deployTs !== DEPLOY_TS) { opCache = null; opCacheTime = 0; financeCache = null; financeCacheTime = 0; }
   if (!force && _pendencyBuildPromise) return _pendencyBuildPromise;
   _pendencyBuildPromise = computeBothPendency(db).then(({ op, finance }) => {
     opCache = op;           opCacheTime = Date.now();
@@ -2646,6 +2648,8 @@ async function computeBothPendency(db) {
 
   const opResult  = buildResult(olMap);
   const finResult = buildResult(flMap);
+  opResult.deployTs  = DEPLOY_TS;
+  finResult.deployTs = DEPLOY_TS;
   // Attach drill rows to op only — client shares them for both OL and FL filtering
   opResult.allDrillJobRows = allDrillJobRows;
   return { op: opResult, finance: finResult };
