@@ -94,11 +94,18 @@ async function batchUpsertUsers(db, users) {
     return { inserted: 0, updated: 0, errors: ["No users provided"] };
   }
   const col     = db.collection("ocean_users");
-  const results = { inserted: 0, updated: 0, errors: [] };
+  const results = { inserted: 0, updated: 0, skipped: 0, errors: [] };
   for (const u of users) {
     const email = u.email?.toLowerCase().trim();
     if (!email || !u.name) { results.errors.push(`Skipped: ${JSON.stringify(u)}`); continue; }
     try {
+      // Check if user was explicitly deleted (isActive: false set by admin)
+      // If so, do NOT re-create them via sync
+      const existing = await col.findOne({ email }, { projection: { isActive: 1 } });
+      if (existing && existing.isActive === false) {
+        results.skipped++;
+        continue; // User was deleted by admin — do not restore
+      }
       const result = await col.updateOne(
         { email },
         {
@@ -116,7 +123,7 @@ async function batchUpsertUsers(db, users) {
 
 // ── ACTION: org (read-only org chart) ─────────────────────────────
 async function getOrgChart(db) {
-  const users = await db.collection("ocean_users").find({}).toArray();
+  const users = await db.collection("ocean_users").find({ isActive: { $ne: false } }).toArray();
 
   var people = users.map(function(u){
     return {
@@ -451,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-18T-ocean-v170-op-realzonenames-1787049034";
+const DEPLOY_TS = "2026-08-18T-ocean-v171-soft-delete-users-1787050141";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2382,7 +2389,7 @@ async function getUsageAnalytics(db, force) {
 }
 
 async function computeUsageAnalytics(db) {
-  const users = await db.collection("ocean_users").find({}).toArray();
+  const users = await db.collection("ocean_users").find({ isActive: { $ne: false } }).toArray();
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   // Count logins from login_events for accuracy (users.loginCount can be stale)
@@ -3174,7 +3181,11 @@ module.exports = async function handler(req, res) {
     if (action === "deleteUser") {
       const { email } = req.body || {};
       if (!email) return res.status(400).json({ error: "email required" });
-      await db.collection("ocean_users").deleteOne({ email: email.toLowerCase().trim() });
+      // Set isActive: false instead of deleting — prevents Apps Script sync from restoring the user
+      await db.collection("ocean_users").updateOne(
+        { email: email.toLowerCase().trim() },
+        { $set: { isActive: false, deletedAt: new Date() } }
+      );
       return res.status(200).json({ success: true });
     }
 
