@@ -2989,7 +2989,7 @@ function adminPage(){
     cards += canEdit ? addCard(roleName) : '';
     return '<div class="admin-role-section" style="margin-bottom:28px;">'+
       '<div style="font-size:10px;font-weight:700;letter-spacing:0.1em;color:#9AAFC8;text-transform:uppercase;margin-bottom:12px;">'+esc(roleName)+'</div>'+
-      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,300px));gap:12px;">'+cards+'</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;">'+cards+'</div>'+
     '</div>';
   }).join('');
 
