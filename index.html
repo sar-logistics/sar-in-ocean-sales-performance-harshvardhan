@@ -8141,6 +8141,8 @@ document.addEventListener('click', function(ev){
   if(act==='page'){
     ev.stopPropagation(); ev.preventDefault();
     state.page=el.getAttribute('data-val');
+    // Clear admin search when navigating away
+    if(state.adminSearch) { state.adminSearch = ''; }
     render();
 
     var _hasZoneFilter = (state.filterZones||[]).length > 0;
