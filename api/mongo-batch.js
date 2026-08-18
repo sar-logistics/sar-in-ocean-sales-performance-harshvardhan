@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-18T-ocean-v167-pendency-date-fallback-1787047081";
+const DEPLOY_TS = "2026-08-18T-ocean-v168-pendency-drill-date-1787047175";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -3085,7 +3085,8 @@ module.exports = async function handler(req, res) {
           {},
           { projection: { 'Sales Person':1, 'Job Owner':1, 'Financial Lock':1, 'Operation Lock':1,
             [dateField]:1, 'Job Date':1, 'Shipment No':1, 'Customer':1, 'Location':1,
-            'Carrier':1, 'Carrier Name':1, 'ETD Loading Port':1, 'ETA Discharge':1 } }
+            'Carrier':1, 'Carrier Name':1, 'ETD Loading Port':1, 'ETA Discharge':1,
+            'ETD First Leg of Origin':1, 'ETA Last Leg of Destination':1 } }
         ).toArray();
         for (const job of jobs) {
           const sp = normalizeName(job['Sales Person'] || '');
@@ -3093,7 +3094,11 @@ module.exports = async function handler(req, res) {
           if (entityType === 'rep'  && sp !== normRep) continue;
           if (entityType === 'zone' && (repZoneMap[sp]||'') !== repName) continue;
 
-          const rawDate = job[dateField] || job['Job Date'];
+          const rawDate = isExp
+            ? (job['ETD Loading Port'] || job['ETD First Leg of Origin'] || job['Job Date'])
+            : isImp
+              ? (job['ETA Discharge'] || job['ETA Last Leg of Destination'] || job['Job Date'])
+              : job['Job Date'];
           if (!rawDate) continue;
           const d = parseSheetDate(rawDate);
           if (!d) continue;
