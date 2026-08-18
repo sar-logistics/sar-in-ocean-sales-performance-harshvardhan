@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-18T-ocean-v163-no-raw-inz-zone-1787045222";
+const DEPLOY_TS = "2026-08-18T-ocean-v164-sp-inz-fallback-1787045799";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -596,8 +596,23 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
                           : (_metaFY27 && _metaFY27.zone && _metaFY27.zone !== 'Unassigned') ? _metaFY27
                           : null;
         const _meta = (_metaRaw && _metaRaw.zone && _metaRaw.zone !== 'Unassigned') ? _metaRaw : (_metaBetter || _metaRaw);
-        const _zone = _meta ? _meta.zone : null; // null = unmapped/cross sales
-        const _dn   = _meta ? _meta.displayName : null; // display name for rep matching
+        // If still no zone, try INZ code from job's Sales Person field (e.g. "Satish Singh | INZ01")
+        let _zone = _meta ? _meta.zone : null;
+        let _dn   = _meta ? _meta.displayName : null;
+        if (!_zone || _zone === 'Unassigned') {
+          const _spRaw = String(job["Sales Person"] || "").trim();
+          const _spParts = _spRaw.split("|").map(s => s.trim());
+          for (const _part of _spParts.slice(1)) {
+            const _code = _part.toUpperCase();
+            if (repsByZoneByFY["FY26"] && Object.keys(repsByZoneByFY["FY26"]).find(z => {
+              return repsByZoneByFY["FY26"][z] && z !== 'Unassigned' && z.toUpperCase().startsWith(_code);
+            })) {
+              // Find the full zone name for this INZ code
+              const _matchedZone = Object.keys(repsByZoneByFY["FY26"]).find(z => z !== 'Unassigned' && z.toUpperCase().startsWith(_code));
+              if (_matchedZone) { _zone = _matchedZone; break; }
+            }
+          }
+        }
 
         const { gp: rowGP, isProvisional } = pickGP(job, cls);
         const billedRevenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
