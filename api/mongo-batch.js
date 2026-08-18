@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-18T-ocean-v157-branch-lobdata-rev-1787031994";
+const DEPLOY_TS = "2026-08-18T-ocean-v158-air-tradelane-directional-1787033070";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -617,9 +617,9 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         if (cls.kind === "AIR") {
           const _portField = cls.direction === "EXPORT" ? "Discharge Port" : "Loading Port";
           const _portVal = String(job[_portField] || "").trim();
-          _tg = portToInfo(_portVal).tradelane;
-          // Fallback: try city name lookup when ISO2 code not found
-          if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
+          const _tlBase = portToInfo(_portVal).tradelane || (!_portVal ? "" : cityToTradelane(_portVal));
+          // Apply same IN– directional prefix as Sea/Isotank
+          _tg = _tlBase ? (cls.direction === "EXPORT" ? "IN – " + _tlBase : _tlBase + " – IN") : "Others";
         } else if (cls.kind === "SEA") {
           // SRR is the authoritative source for Sea tradelane — job sheet
           // fields (Discharge Country / Loading Port) are not reliable here.
