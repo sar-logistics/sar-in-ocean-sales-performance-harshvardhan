@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-18T-ocean-v164-sp-inz-fallback-1787045799";
+const DEPLOY_TS = "2026-08-18T-ocean-v165-op-inz-fallback-1787046361";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2559,12 +2559,23 @@ async function computeBothPendency(db) {
       } else {
         zone = repZoneMap[norm] || "";
         displayName = repDisplayMap[norm] || cleanName;
-        // Try INZ code lookup for zone — only use real zone names, never raw codes
+        // Try INZ code lookup from mapping sheet
         if (!zone) {
           for (const part of nameParts.slice(1)) {
             const trimmed = part.toUpperCase();
             if (inzCodeZoneMap[trimmed] && inzCodeZoneMap[trimmed] !== 'Unassigned') {
               zone = inzCodeZoneMap[trimmed]; break;
+            }
+          }
+        }
+        // Last resort: match INZ code against zone names in repsByZoneByFY
+        // Handles reps not in mapping sheet but with pipe-suffix in job Sales Person field
+        if (!zone) {
+          for (const part of nameParts.slice(1)) {
+            const trimmed = part.toUpperCase();
+            if (/^IN[A-Z]?\d+$/.test(trimmed)) {
+              const matchedZone = Object.keys(repsByZoneByFY["FY26"] || {}).find(z => z !== 'Unassigned' && z.toUpperCase().startsWith(trimmed));
+              if (matchedZone) { zone = matchedZone; break; }
             }
           }
         }
