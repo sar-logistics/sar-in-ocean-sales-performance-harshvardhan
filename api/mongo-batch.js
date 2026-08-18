@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-18T-ocean-v166-fix-scope-1787046525";
+const DEPLOY_TS = "2026-08-18T-ocean-v167-pendency-date-fallback-1787047081";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2530,7 +2530,8 @@ async function computeBothPendency(db) {
       {},
       { projection: { "Sales Person": 1, "Job Owner": 1, "Financial Lock": 1, "Operation Lock": 1,
         [dateField]: 1, "Job Date": 1, "Shipment No": 1, "Customer": 1, "Location": 1,
-        "Carrier": 1, "Carrier Name": 1, "ETD Loading Port": 1, "ETA Discharge": 1, "LOB": 1 } }
+        "Carrier": 1, "Carrier Name": 1, "ETD Loading Port": 1, "ETA Discharge": 1, "LOB": 1,
+        "ETD First Leg of Origin": 1, "ETA Last Leg of Destination": 1 } }
     ).toArray();
 
     for (const job of jobs) {
@@ -2540,7 +2541,12 @@ async function computeBothPendency(db) {
       const norm = rawName ? normalizeName(rawName) : "no rep assigned";
       const _noRep = !rawName;
 
-      const rawDate = job[dateField] || job["Job Date"];
+      // Use same fallback chain as SP's getDateValueFor
+      const rawDate = isExport
+        ? (job["ETD Loading Port"] || job["ETD First Leg of Origin"] || job["Job Date"])
+        : isImport
+          ? (job["ETA Discharge"] || job["ETA Last Leg of Destination"] || job["Job Date"])
+          : job["Job Date"];
       if (!rawDate) continue;
       const d = parseSheetDate(rawDate);
       if (!d) continue;
