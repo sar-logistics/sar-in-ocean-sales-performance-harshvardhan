@@ -8049,7 +8049,7 @@ function _adminSearchHandler(inp) {
   // Show/hide user cards
   document.querySelectorAll('.admin-user-card').forEach(function(card){
     var text = (card.getAttribute('data-search') || '').toLowerCase();
-    card.style.display = query === '' || text.indexOf(query) > -1 ? '' : 'none';
+    card.style.display = query === '' || text.indexOf(query) > -1 ? 'flex' : 'none';
   });
   // Hide/show Add buttons based on search
   document.querySelectorAll('.admin-add-card').forEach(function(card){
