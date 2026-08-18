@@ -7970,8 +7970,10 @@ function filterCustFilterOptions(inputEl){
   var list = document.getElementById('cust-filter-list');
   if (!list) return;
   list.querySelectorAll('.cust-filter-opt').forEach(function(opt){
-    var text = (opt.getAttribute('data-val') || opt.textContent || '').toLowerCase();
-    var match = query === '' || text.indexOf(query) > -1;
+    var raw = (opt.getAttribute('data-val') || opt.textContent || '').toLowerCase().trim();
+    var compact = raw.replace(/\s+/g, '');
+    var queryCompact = query.replace(/\s+/g, '');
+    var match = query === '' || raw.indexOf(query) > -1 || compact.indexOf(queryCompact) > -1;
     opt.style.display = match ? 'flex' : 'none';
   });
 }
