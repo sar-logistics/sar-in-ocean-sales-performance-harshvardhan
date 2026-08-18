@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-18T-ocean-v153-zone-fy-fallback-1787029235";
+const DEPLOY_TS = "2026-08-18T-ocean-v154-repkey-zone-fix-1787029622";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -943,8 +943,15 @@ async function computeSalesAggregate(db) {
       // Pick the mapping for this row's FY — fall back to the other FY if not found
       // Many reps only have FY26 mapping even if they have FY27 job data
       const rowFY = fyForMonthLabel(monthLabel);
-      const mapped = repLookupByFY[rowFY]?.[salesPerson]
+      const _mappedRaw = repLookupByFY[rowFY]?.[salesPerson]
                   || repLookupByFY[rowFY === 'FY27' ? 'FY26' : 'FY27']?.[salesPerson];
+      // If zone is Unassigned, prefer the FY with a real zone
+      const _mFY26 = repLookupByFY['FY26']?.[salesPerson];
+      const _mFY27 = repLookupByFY['FY27']?.[salesPerson];
+      const _mappedBetter = (_mFY26 && _mFY26.zone && _mFY26.zone !== 'Unassigned') ? _mFY26
+                          : (_mFY27 && _mFY27.zone && _mFY27.zone !== 'Unassigned') ? _mFY27
+                          : null;
+      const mapped = (_mappedRaw && _mappedRaw.zone && _mappedRaw.zone !== 'Unassigned') ? _mappedRaw : (_mappedBetter || _mappedRaw);
 
       const { gp, isProvisional } = pickGP(job, cls);
       const gpProv   = isProvisional ? gp : 0;
