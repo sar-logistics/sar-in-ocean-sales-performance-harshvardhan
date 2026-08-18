@@ -3007,7 +3007,7 @@ function adminPage(){
     var users = allUsers.filter(function(u){ return (u.role||'').toLowerCase() === roleName.toLowerCase(); });
     var cards = users.map(userCard).join('');
     cards += canEdit ? addCard(roleName) : '';
-    return '<div style="margin-bottom:28px;">'+
+    return '<div class="admin-role-section" style="margin-bottom:28px;">'+
       '<div style="font-size:10px;font-weight:700;letter-spacing:0.1em;color:#9AAFC8;text-transform:uppercase;margin-bottom:12px;">'+esc(roleName)+'</div>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;">'+cards+'</div>'+
     '</div>';
@@ -8048,10 +8048,15 @@ function filterAgentFilterOptions(inputEl){
 function _adminSearchHandler(inp) {
   var query = inp.value.toLowerCase();
   state.adminSearch = inp.value;
-  var cards = document.querySelectorAll('.admin-user-card');
-  cards.forEach(function(card){
+  // Filter cards
+  document.querySelectorAll('.admin-user-card').forEach(function(card){
     var text = (card.getAttribute('data-search') || '').toLowerCase();
     card.style.display = query === '' || text.indexOf(query) > -1 ? '' : 'none';
+  });
+  // Hide sections where all cards are hidden
+  document.querySelectorAll('.admin-role-section').forEach(function(section){
+    var visibleCards = section.querySelectorAll('.admin-user-card:not([style*="display: none"]):not([style*="display:none"])');
+    section.style.display = visibleCards.length === 0 && query !== '' ? 'none' : '';
   });
 }
 function filterCustFilterOptions(inputEl){
