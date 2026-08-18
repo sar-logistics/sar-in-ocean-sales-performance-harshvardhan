@@ -8331,11 +8331,17 @@ document.addEventListener('click', function(ev){
     if(!state.custFilterDraft) state.custFilterDraft = {};
     if(!state.custFilterDraft[col]) state.custFilterDraft[col] = [];
     var draft = state.custFilterDraft[col];
-    var idx = draft.indexOf(val);
-    if(idx > -1) draft.splice(idx,1); else draft.push(val);
-    _customerPivotCache = {};
-    render();
-    requestAnimationFrame(function(){ var p=document.getElementById('cust-filter-popup'); if(p) p.scrollTop=p.scrollTop; });
+    var didx = draft.indexOf(val);
+    if(didx > -1) draft.splice(didx,1); else draft.push(val);
+    // Update checkbox visually without re-rendering — keep search query intact
+    var checkbox = el.querySelector('div[style*="border-radius:4px"]');
+    var BRAND_A1 = '#1D5FCC';
+    var isNowChecked = draft.indexOf(val) > -1;
+    if(checkbox){
+      checkbox.style.background = isNowChecked ? BRAND_A1 : '#fff';
+      checkbox.style.borderColor = isNowChecked ? BRAND_A1 : '#C5D0E0';
+      checkbox.innerHTML = isNowChecked ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '';
+    }
   }
   else if(act==='custFilterSelectAll'){
     ev.stopPropagation();
