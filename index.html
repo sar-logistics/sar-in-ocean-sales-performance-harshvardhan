@@ -3349,8 +3349,8 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
   });
   tbody += '</tbody>';
 
-  // Grand Total frozen row — sums across ALL customer rows
-  var _allCRows = (lobData.allCustomers || []);
+  // Grand Total frozen row — sums across filtered rows only
+  var _allCRows = rows;
   var gt = _allCRows.reduce(function(acc, c) {
     acc.shipments += (c.shipments || 0);
     acc.tons      += (c.tons      || 0);
@@ -3693,8 +3693,8 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
   });
   tbody += '</tbody>';
 
-  // Grand Total frozen row — sums across ALL customer rows
-  var _allCRows = (lobData.allCustomers || []);
+  // Grand Total frozen row — sums across filtered rows only
+  var _allCRows = rows;
   var gt = _allCRows.reduce(function(acc, c) {
     acc.shipments += (c.shipments || 0);
     acc.tons      += (c.tons      || 0);
