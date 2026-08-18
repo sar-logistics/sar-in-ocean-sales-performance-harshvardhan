@@ -1603,6 +1603,13 @@ var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:f
     filterRegionDropOpen: false,
   filterLobs: ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT'],   // default Ocean LOBs + Air cross-sales; empty = All LOBs
   custOpenFilter:  null, // 'name' or 'rep'
+  agentOpenFilter:  null, // 'name' or 'rep'
+  agentNameSearch: '',
+  agentRepSearch:  '',
+  agentNameFilter: [],
+  agentRepFilter:  [],
+  agentFilterDraft: {},
+  agentFilterAnchor: null,
   custNameSearch: '',   // search query inside name filter popup
   custRepSearch:  '',   // search query inside rep filter popup
   custNameFilter: [],   // checked customer names ([]=all)
@@ -3642,24 +3649,54 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
 
   rows.sort(function(a,b){ return sortDir * (b[sortCol] - a[sortCol]); });
 
+  // Agent filter state
+  var _agentOpenFilter = state.agentOpenFilter || null;
+  var _agentNameSearch = (state.agentNameSearch||'').toLowerCase().trim();
+  var _agentRepSearch  = (state.agentRepSearch ||'').toLowerCase().trim();
+  var _agentNameFilter = state.agentNameFilter || [];
+  var _agentRepFilter  = state.agentRepFilter  || [];
+  var _allAgentRows = (lobData.allAgents || []);
+  var _uniqueAgentNames = Array.from(new Set(_allAgentRows.map(function(a){ return a.name||''; }))).filter(Boolean).sort();
+  var _uniqueAgentReps  = Array.from(new Set(_allAgentRows.reduce(function(acc,a){ (a.salesReps||[]).forEach(function(r){ if(r) acc.push(r); }); return acc; }, []))).filter(Boolean).sort();
+
   function sortBtn(col, label, alignRight) {
     var active = sortCol === col;
-    var arrow = active ? (sortDir === -1 ? ' \u25bc' : ' \u25b2') : '';
+    var arrow = active ? (sortDir === -1 ? ' \u25bc' : ' \u25b2') : ' \u2195';
     var align = alignRight ? 'right' : 'left';
-    return '<th data-act="agentSort" data-col="'+col+'" style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:'+(active?brandC:'#9AAFC8')+';text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none;text-align:'+align+';">'+label+arrow+'</th>';
+    return '<th data-act="agentSort" data-col="'+col+'" style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:'+(active?brandC:'#9AAFC8')+';text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none;text-align:'+align+';background:#F8FAFD;position:sticky;top:0;">'+label+arrow+'</th>';
+  }
+
+  function agentFilterTh(col, label, minWidth) {
+    var hasFilter = col==='name' ? _agentNameFilter.length>0 : _agentRepFilter.length>0;
+    var isOpen = _agentOpenFilter === col;
+    var bg = hasFilter ? '#EEF3FC' : '#F8FAFD';
+    return '<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:'+(hasFilter?'#1E3A66':'#9AAFC8')+';text-transform:uppercase;text-align:left;min-width:'+(minWidth||'140px')+';background:'+bg+';position:sticky;top:0;z-index:2;">'
+      +'<span style="display:inline-flex;align-items:center;gap:4px;">'
+      +label
+      +'<span data-act="agentToggleFilter" data-col="'+col+'" style="cursor:pointer;display:inline-flex;padding:2px;border-radius:3px;'+(hasFilter||isOpen?'background:#1D5FCC;':'')+'">'
+      +'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="'+(hasFilter||isOpen?'#FFFFFF':'#9AAFC8')+'" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+      +'</span>'
+      +'</span>'
+      +'</th>';
   }
 
   var thead = '<thead><tr style="border-bottom:2px solid #E3EAF3;background:#F8FAFD;position:sticky;top:0;z-index:2;">'
-    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;width:36px;text-align:center;">#</th>'
-    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:180px;">Agent</th>'
+    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;width:36px;text-align:center;background:#F8FAFD;position:sticky;top:0;">#</th>'
+    +agentFilterTh('name','Agent','180px')
     +sortBtn('shipments','Ships',true)
     +(isAir ? sortBtn('tons','Tons',true) : sortBtn('teu','TEUs',true))
     +sortBtn('revenue','Revenue',true)
     +sortBtn('gp','GP',true)
     +sortBtn('gpPct','GP%',true)
-    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;">LOB(s)</th>'
-    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:140px;">Sales</th>'
+    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;background:#F8FAFD;position:sticky;top:0;">LOB(s)</th>'
+    +agentFilterTh('rep','Sales Rep','140px')
     +'</tr></thead>';
+
+  // Apply agent filters
+  if (_agentNameFilter.length > 0)
+    rows = rows.filter(function(a){ return _agentNameFilter.indexOf(a.name||'') > -1; });
+  if (_agentRepFilter.length > 0)
+    rows = rows.filter(function(a){ return (a.salesReps||[]).some(function(r){ return _agentRepFilter.indexOf(r) > -1; }); });
 
   var tbody = '<tbody>';
   rows.forEach(function(a, i) {
@@ -3725,10 +3762,48 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
     +'</tr>'
     +'</tfoot>';
 
+  // Agent filter popup
+  var agentFilterPopup = '';
+  if (_agentOpenFilter) {
+    var _aIsName = _agentOpenFilter === 'name';
+    var _aPopVals = _aIsName ? _uniqueAgentNames : _uniqueAgentReps;
+    var _aPopSearch = _aIsName ? _agentNameSearch : _agentRepSearch;
+    var _aDraft = (state.agentFilterDraft && state.agentFilterDraft[_agentOpenFilter]) || _aPopVals.slice();
+    var _aAllSelected = _aDraft.length >= _aPopVals.length;
+    var _aPopFiltered = _aPopVals.filter(function(v){ return !_aPopSearch || v.toLowerCase().indexOf(_aPopSearch) > -1; });
+    var _aPopLabel = _aIsName ? 'Agent' : 'Sales Rep';
+    var _aAnchor = state.agentFilterAnchor || {top:120, left:320};
+    agentFilterPopup = '<div id="agent-filter-popup" data-stop="1" style="position:fixed;top:'+_aAnchor.top+'px;left:'+_aAnchor.left+'px;z-index:9999;background:#FFFFFF;border:1.5px solid #D1DCF0;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18);padding:16px;width:260px;max-width:90vw;">'
+      +'<div style="font-size:13px;font-weight:800;color:#0D2B5E;margin-bottom:10px;">Filter: '+_aPopLabel+'</div>'
+      +'<div style="display:flex;align-items:center;gap:7px;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:5px 8px;margin-bottom:10px;">'
+        +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+        +'<input type="text" id="agent-filter-search" placeholder="Search…" autocomplete="off" value="'+esc(_aPopSearch)+'" data-col="'+_agentOpenFilter+'" oninput="filterAgentFilterOptions(this)" style="border:none;background:transparent;outline:none;font-size:12px;color:#15233B;width:100%;"/>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;margin-bottom:10px;">'
+        +'<button data-act="agentFilterSelectAll" data-col="'+_agentOpenFilter+'" style="flex:1;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:6px;padding:5px;font-size:11px;font-weight:600;color:#374151;cursor:pointer;">Select All</button>'
+        +'<button data-act="agentFilterClearAll" data-col="'+_agentOpenFilter+'" style="flex:1;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:6px;padding:5px;font-size:11px;font-weight:600;color:#374151;cursor:pointer;">Clear All</button>'
+      +'</div>'
+      +'<div id="agent-filter-list" style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin-bottom:12px;">'
+        +_aPopFiltered.map(function(v){
+          var checked = _aAllSelected || _aDraft.indexOf(v) > -1;
+          var BRAND_A1 = '#1D5FCC';
+          return '<div data-act="agentFilterToggleVal" data-col="'+_agentOpenFilter+'" data-val="'+esc(v)+'" class="agent-filter-opt" style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background=\'#F4F7FA\'" onmouseout="this.style.background=\'\'">'
+            +'<div style="width:15px;height:15px;border-radius:4px;border:1.5px solid '+(checked?BRAND_A1:'#C5D0E0')+';background:'+(checked?BRAND_A1:'#fff')+';flex-shrink:0;display:flex;align-items:center;justify-content:center;">'
+              +(checked?'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':'')
+            +'</div>'
+            +'<span style="font-size:12px;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(v||'(blank)')+'</span>'
+          +'</div>';
+        }).join('')
+      +'</div>'
+      +'<button data-act="agentFilterApply" data-col="'+_agentOpenFilter+'" style="width:100%;background:linear-gradient(135deg,#1D5FCC,#1A56B8);color:#fff;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:700;cursor:pointer;">Apply</button>'
+    +'</div>';
+  }
+
   return '<div style="position:relative;background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
     +'<div style="overflow-x:auto;max-height:calc(100vh - 155px);overflow-y:auto;">'
     +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+tfoot+'</table>'
     +'</div>'
+    +agentFilterPopup
   +'</div>';
 }
 
@@ -7948,6 +8023,18 @@ function filterPDrillOptions(inputEl){
 }
 
 // Live-filters the option checklist inside an open drill column-filter popup
+function filterAgentFilterOptions(inputEl){
+  var query = inputEl.value.toLowerCase();
+  var list = document.getElementById('agent-filter-list');
+  if (!list) return;
+  list.querySelectorAll('.agent-filter-opt').forEach(function(opt){
+    var raw = (opt.getAttribute('data-val') || '').toLowerCase().trim();
+    var compact = raw.replace(/\s+/g, '');
+    var queryCompact = query.replace(/\s+/g, '');
+    var match = query === '' || raw.indexOf(query) > -1 || compact.indexOf(queryCompact) > -1;
+    opt.style.display = match ? 'flex' : 'none';
+  });
+}
 function filterCustFilterOptions(inputEl){
   var query = inputEl.value.toLowerCase();
   var list = document.getElementById('cust-filter-list');
@@ -8014,6 +8101,15 @@ document.addEventListener('click', function(ev){
     state.custNameSearch = '';
     state.custRepSearch  = '';
     _customerPivotCache = {};
+    render();
+    return;
+  }
+  // Close agent filter popup on outside click
+  if(state.agentOpenFilter && !ev.target.closest('#agent-filter-popup') && !ev.target.closest('[data-act="agentToggleFilter"]')){
+    state.agentOpenFilter = null;
+    state.agentNameSearch = '';
+    state.agentRepSearch  = '';
+    _agentPivotCache = {};
     render();
     return;
   }
@@ -8283,6 +8379,78 @@ document.addEventListener('click', function(ev){
   else if(act==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.getAttribute('data-val'); state.weeklyDropOpen=false; if(state.page==='tradelane'){ _tradelanePivotCache={}; fetchTradelaneData(function(){render();},false); } else render(); }
   else if(act==='toggleWeeklyDrop'){ ev.stopPropagation(); state.weeklyDropOpen=!state.weeklyDropOpen; state.fromDropOpen=false; state.toDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='setCustomerLob'){ ev.stopPropagation(); state.customerLob=el.getAttribute('data-val'); state.custOpenFilter=null; state.custNameSearch=''; state.custRepSearch=''; state.custNameFilter=[]; state.custRepFilter=[]; _customerPivotCache={}; render(); }
+  
+  else if(act==='agentToggleFilter'){
+    ev.stopPropagation();
+    var col = el.getAttribute('data-col');
+    state.agentOpenFilter = state.agentOpenFilter === col ? null : col;
+    if(state.agentOpenFilter) {
+      var _rect = el.closest('th') ? el.closest('th').getBoundingClientRect() : el.getBoundingClientRect();
+      state.agentFilterAnchor = { top: _rect.bottom + 4, left: Math.min(_rect.left, window.innerWidth - 280) };
+      state.agentFilterDraft = {};
+      var _aAllVals = col==='name'
+        ? Array.from(new Set((agentData && agentData.lobs && agentData.lobs[state.agentLob||'Ocean'] && agentData.lobs[state.agentLob||'Ocean'].allAgents || agentData && agentData.allAgents || []).map(function(a){ return a.name||''; }))).filter(Boolean)
+        : Array.from(new Set((agentData && agentData.lobs && agentData.lobs[state.agentLob||'Ocean'] && agentData.lobs[state.agentLob||'Ocean'].allAgents || agentData && agentData.allAgents || []).reduce(function(a,c){ (c.salesReps||[]).forEach(function(r){ if(r) a.push(r); }); return a; }, []))).filter(Boolean);
+      var _aCurFilter = col==='name' ? state.agentNameFilter : state.agentRepFilter;
+      state.agentFilterDraft[col] = _aCurFilter.length > 0 ? _aCurFilter.slice() : _aAllVals.slice();
+    }
+    _agentPivotCache = {};
+    render();
+  }
+  else if(act==='agentFilterToggleVal'){
+    ev.stopPropagation();
+    var col = el.getAttribute('data-col');
+    var val = el.getAttribute('data-val');
+    if(!state.agentFilterDraft) state.agentFilterDraft = {};
+    if(!state.agentFilterDraft[col]) state.agentFilterDraft[col] = [];
+    var draft = state.agentFilterDraft[col];
+    var didx = draft.indexOf(val);
+    if(didx > -1) draft.splice(didx,1); else draft.push(val);
+    var checkbox = el.querySelector('div[style*="border-radius:4px"]');
+    var BRAND_A1 = '#1D5FCC';
+    var isNowChecked = draft.indexOf(val) > -1;
+    if(checkbox){
+      checkbox.style.background = isNowChecked ? BRAND_A1 : '#fff';
+      checkbox.style.borderColor = isNowChecked ? BRAND_A1 : '#C5D0E0';
+      checkbox.innerHTML = isNowChecked ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '';
+    }
+  }
+  else if(act==='agentFilterSelectAll'){
+    ev.stopPropagation();
+    var col = el.getAttribute('data-col');
+    if(!state.agentFilterDraft) state.agentFilterDraft = {};
+    var _aAllVals2 = col==='name'
+      ? Array.from(new Set((agentData && agentData.lobs && agentData.lobs[state.agentLob||'Ocean'] && agentData.lobs[state.agentLob||'Ocean'].allAgents || agentData && agentData.allAgents || []).map(function(a){ return a.name||''; }))).filter(Boolean)
+      : Array.from(new Set((agentData && agentData.lobs && agentData.lobs[state.agentLob||'Ocean'] && agentData.lobs[state.agentLob||'Ocean'].allAgents || agentData && agentData.allAgents || []).reduce(function(a,c){ (c.salesReps||[]).forEach(function(r){ if(r) a.push(r); }); return a; }, []))).filter(Boolean);
+    state.agentFilterDraft[col] = _aAllVals2.slice();
+    _agentPivotCache = {};
+    render();
+  }
+  else if(act==='agentFilterClearAll'){
+    ev.stopPropagation();
+    var col = el.getAttribute('data-col');
+    if(!state.agentFilterDraft) state.agentFilterDraft = {};
+    state.agentFilterDraft[col] = [];
+    _agentPivotCache = {};
+    render();
+  }
+  else if(act==='agentFilterApply'){
+    ev.stopPropagation();
+    var col = el.getAttribute('data-col');
+    var draft = (state.agentFilterDraft && state.agentFilterDraft[col]) || [];
+    var _aAllVals3 = col==='name'
+      ? Array.from(new Set((agentData && agentData.lobs && agentData.lobs[state.agentLob||'Ocean'] && agentData.lobs[state.agentLob||'Ocean'].allAgents || agentData && agentData.allAgents || []).map(function(a){ return a.name||''; }))).filter(Boolean)
+      : Array.from(new Set((agentData && agentData.lobs && agentData.lobs[state.agentLob||'Ocean'] && agentData.lobs[state.agentLob||'Ocean'].allAgents || agentData && agentData.allAgents || []).reduce(function(a,c){ (c.salesReps||[]).forEach(function(r){ if(r) a.push(r); }); return a; }, []))).filter(Boolean);
+    var _aIsAll = draft.length === _aAllVals3.length || draft.length === 0;
+    if(col==='name') state.agentNameFilter = _aIsAll ? [] : draft;
+    else state.agentRepFilter = _aIsAll ? [] : draft;
+    state.agentOpenFilter = null;
+    state.agentNameSearch = '';
+    state.agentRepSearch  = '';
+    _agentPivotCache = {};
+    render();
+  }
+  else if(act==='setAgentLob'){ ev.stopPropagation(); state.agentLob=el.getAttribute('data-val'); state.agentOpenFilter=null; state.agentNameFilter=[]; state.agentRepFilter=[]; _agentPivotCache={}; render(); }
   else if(act==='setCustView'){ ev.stopPropagation(); state.customerView=el.getAttribute('data-val'); _customerPivotCache={}; render(); }
   else if(act==='custSort'){
     ev.stopPropagation();
