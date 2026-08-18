@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-18T-ocean-v158-air-tradelane-directional-1787033070";
+const DEPLOY_TS = "2026-08-18T-ocean-v159-pendency-zone-fix-1787038612";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2535,6 +2535,15 @@ async function computeBothPendency(db) {
         }
       }
       if (!zone) zone = "Unassigned";
+      // If zone is Unassigned, the mapping sheet FY27 row has blank zone — fall back to INZ code
+      if (zone === "Unassigned") {
+        for (const part of nameParts.slice(1)) {
+          const trimmed = part.toUpperCase();
+          if (inzCodeZoneMap[trimmed] && inzCodeZoneMap[trimmed] !== "Unassigned") {
+            zone = inzCodeZoneMap[trimmed]; break;
+          }
+        }
+      }
 
       const jobOwner = String(job["Job Owner"] || "").trim().split("|")[0].trim() || "";
       const olDone = job["Operation Lock"] && String(job["Operation Lock"]).trim() !== "";
