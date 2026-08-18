@@ -4739,9 +4739,11 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     }
     var tp = colData.reduce(function(s,c){ return s+c.pending; }, 0);
     var td = colData.reduce(function(s,c){ return s+c.done;    }, 0);
-    // If zone not in Sales Performance → Cross Sales; keep originalZone as branch
+    // Cross Sales = genuinely unmapped (Unassigned/empty zone)
+    // NOT reps whose zone simply doesn't appear in the current view's salesZoneSet
     var originalZone = rep.zone || 'Unspecified';
-    var zone = salesZoneSet[originalZone] ? originalZone : 'Cross Sales';
+    var isUnmapped = !originalZone || originalZone === 'Unassigned' || originalZone === 'Unspecified';
+    var zone = isUnmapped ? 'Cross Sales' : originalZone;
     return { name: rep.name, zone: zone, originalZone: originalZone, colData: colData, totalPending: tp, totalDone: td, total: tp+td, jobOwners: rep.jobOwners||[] };
   }).filter(function(r){ return r.total > 0; });
 
