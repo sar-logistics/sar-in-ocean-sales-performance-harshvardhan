@@ -451,7 +451,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-18T-ocean-v156-keep-all-lobdata-1787031743";
+const DEPLOY_TS = "2026-08-18T-ocean-v157-branch-lobdata-rev-1787031994";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1031,7 +1031,7 @@ async function computeSalesAggregate(db) {
           const lobKey = cls.kind + (cls.direction ? " " + cls.direction : "");
           if (!branchLobData[branch]) branchLobData[branch] = {};
           if (!branchLobData[branch][lobKey]) branchLobData[branch][lobKey] = {};
-          if (!branchLobData[branch][lobKey][monthLabel]) branchLobData[branch][lobKey][monthLabel] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
+          if (!branchLobData[branch][lobKey][monthLabel]) branchLobData[branch][lobKey][monthLabel] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0, rev:0, revBilled:0, revProv:0 };
           branchLobData[branch][lobKey][monthLabel].gp   += gp;
           branchLobData[branch][lobKey][monthLabel].gpProv   += gpProv;
           branchLobData[branch][lobKey][monthLabel].gpActual += gpActual;
@@ -1039,6 +1039,9 @@ async function computeSalesAggregate(db) {
           branchLobData[branch][lobKey][monthLabel].tons += tons;
           branchLobData[branch][lobKey][monthLabel].teu  += teu;
           branchLobData[branch][lobKey][monthLabel].lcl  += lcl;
+          branchLobData[branch][lobKey][monthLabel].rev       += rev;
+          branchLobData[branch][lobKey][monthLabel].revBilled += revBilledAmt;
+          branchLobData[branch][lobKey][monthLabel].revProv   += revProvAmt;
         }
         continue;
       }
