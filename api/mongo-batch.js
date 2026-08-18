@@ -589,7 +589,12 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         // Resolve zone from mapping — used client-side for zone drill matching
         const _fy = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25","Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26"].includes(monthLabel) ? "FY26" : "FY27";
         const _meta = repLookupByFY[_fy]?.[salesPerson] || repLookupByFY["FY26"]?.[salesPerson] || repLookupByFY["FY27"]?.[salesPerson];
-        const _zone = _meta ? _meta.zone : null; // null = unmapped/cross sales
+        // If zone is Unassigned in primary FY, try the other FY for a real zone
+        const _metaAlt = (_meta && (_meta.zone === 'Unassigned' || !_meta.zone))
+          ? (repLookupByFY["FY26"]?.[salesPerson] || repLookupByFY["FY27"]?.[salesPerson])
+          : null;
+        const _metaFinal = (_metaAlt && _metaAlt.zone && _metaAlt.zone !== 'Unassigned') ? _metaAlt : _meta;
+        const _zone = _metaFinal ? _metaFinal.zone : null; // null = unmapped/cross sales
         const _dn   = _meta ? _meta.displayName : null; // display name for rep matching
 
         const { gp: rowGP, isProvisional } = pickGP(job, cls);
