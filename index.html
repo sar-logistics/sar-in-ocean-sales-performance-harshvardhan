@@ -6541,6 +6541,21 @@ function drawer(){
     };
     window._drillActiveCols = _activeDrillCols;
     window._drillVisibleRows = visibleRows;
+    // Pre-compute next batch HTML during idle time so load more is instant
+    window._drillNextBatchHTML = null;
+    var _preLimit = state.drill._rowLimit || 10000;
+    if(visibleRows.length > _preLimit) {
+      var _preBuildRow = window._drillBuildRow;
+      var _preActiveCols = _activeDrillCols;
+      requestIdleCallback ? requestIdleCallback(function(){
+        var nextBatch = visibleRows.slice(_preLimit, _preLimit + 2000);
+        window._drillNextBatchHTML = nextBatch.map(function(s,i){
+          var idx = _preLimit+i;
+          var rowBg = idx%2===0?'#FFFFFF':'#F8FAFC';
+          return '<tr style="border-bottom:1px solid #EEF1F6;background:'+rowBg+';">'+_preBuildRow(s,idx,_preActiveCols)+'</tr>';
+        }).join('');
+      }) : null;
+    }
 
     var bodyRows = renderRows.map(function(s, idx){
       var rowBg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
@@ -8903,19 +8918,26 @@ document.addEventListener('click', function(ev){
 
     if(tbody && buildRow && activeCols && allRows) {
       var newRows = allRows.slice(oldLimit, newLimit);
-      var frag = document.createDocumentFragment();
-      newRows.forEach(function(s, i){
+      // Use pre-computed HTML if available, else build now
+      var html = window._drillNextBatchHTML || newRows.map(function(s, i){
         var idx = oldLimit + i;
         var rowBg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
-        var tr = document.createElement('tr');
-        tr.style.cssText = 'border-bottom:1px solid #EEF1F6;background:'+rowBg+';';
-        tr.innerHTML = buildRow(s, idx, activeCols);
-        frag.appendChild(tr);
-      });
-      // Insert before the total row (last tr)
+        return '<tr style="border-bottom:1px solid #EEF1F6;background:'+rowBg+';">'+buildRow(s, idx, activeCols)+'</tr>';
+      }).join('');
+      window._drillNextBatchHTML = null; // clear used cache
       var totalRow = tbody.querySelector('tr:last-child');
-      if(totalRow) tbody.insertBefore(frag, totalRow);
-      else tbody.appendChild(frag);
+      if(totalRow) totalRow.insertAdjacentHTML('beforebegin', html);
+      else tbody.insertAdjacentHTML('beforeend', html);
+      // Pre-compute next batch in background
+      if(newLimit < allRows.length) {
+        requestIdleCallback && requestIdleCallback(function(){
+          var nb = allRows.slice(newLimit, newLimit+2000);
+          window._drillNextBatchHTML = nb.map(function(s,i){
+            var idx=newLimit+i; var rowBg=idx%2===0?'#FFFFFF':'#F8FAFC';
+            return '<tr style="border-bottom:1px solid #EEF1F6;background:'+rowBg+';">'+buildRow(s,idx,activeCols)+'</tr>';
+          }).join('');
+        });
+      }
 
       // Update TOTAL count and Load More button text
       var totalCell = tbody.querySelector('tr:last-child td:first-child');
