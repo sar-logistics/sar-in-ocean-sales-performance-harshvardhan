@@ -6940,14 +6940,6 @@ function positionViewDrop(){ positionAllDrops(); }
 function renderDrillOnly(){
   var drawerEl = document.getElementById('drawer-slot');
   if (drawerEl) drawerEl.innerHTML = drawer() + feedbackModal() + orgEditModal();
-  var scroller = document.getElementById('drill-scroll-area');
-  var loadMoreBanner = document.getElementById('drill-load-more-banner');
-  if(scroller && loadMoreBanner) {
-    scroller.onscroll = function(){
-      var nearBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 200;
-      loadMoreBanner.style.display = nearBottom ? 'block' : 'none';
-    };
-  }
 }
 
 var _lastRenderHash = '';
@@ -8158,6 +8150,15 @@ function _custFilterSearchHandler(inp) {
     if(restored){ restored.focus(); restored.setSelectionRange(cursorPos, cursorPos); }
   });
 }
+// Drill scroll — capture phase catches scroll on #drill-scroll-area div
+document.addEventListener('scroll', function(ev){
+  if(!ev.target || ev.target.id !== 'drill-scroll-area') return;
+  var banner = document.getElementById('drill-load-more-banner');
+  if(!banner) return;
+  var s = ev.target;
+  banner.style.display = (s.scrollTop + s.clientHeight >= s.scrollHeight - 200) ? 'block' : 'none';
+}, true);
+
 document.addEventListener('click', function(ev){
   // Close cust filter popup on outside click
   if(state.custOpenFilter && !ev.target.closest('#cust-filter-popup') && !ev.target.closest('[data-act="custToggleFilter"]')){
