@@ -6650,11 +6650,11 @@ function drawer(){
     }
 
     bodyContent = tabBar
-      + '<div style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;position:relative;">'
+      + '<div id="drill-scroll-area" style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;position:relative;">'
       +'<table style="width:100%;border-collapse:collapse;min-width:3800px;">'
         +'<thead style="position:sticky;top:0;z-index:4;"><tr>'+headCells+'</tr></thead>'
         +'<tbody id="drill-tbody">'+bodyRows
-        +'</tbody>'        +totalRow      +'</table>'      + filterPopup    +'</div>'    +(hiddenCount > 0      ? '<div style="position:sticky;bottom:0;background:#F8FAFC;border-top:1.5px solid #E3EAF3;padding:10px;text-align:center;z-index:10;">'        +'<button data-act="drillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">'          +'Showing '+renderRows.length.toLocaleString()+' of '+visibleRows.length.toLocaleString()+' rows — Load more (+5,000)'        +'</button>'        +'</div>'      : '');
+        +'</tbody>'        +totalRow      +'</table>'      + filterPopup    +'</div>'    +(hiddenCount > 0      ? '<div style="position:sticky;bottom:0;background:#F8FAFC;border-top:1.5px solid #E3EAF3;padding:10px;text-align:center;z-index:10;">'        +'<button data-act="drillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">'          +'Showing '+renderRows.length.toLocaleString()+' of '+visibleRows.length.toLocaleString()+' rows — click to load more'        +'</button>'        +'</div>'      : '');
   }
 
   var subtitle = d.loading ? 'Loading…'
@@ -8874,13 +8874,13 @@ document.addEventListener('click', function(ev){
   else if(act==='drillShowAll'){
     ev.stopPropagation();
     if(state.drill){
-      // Load next 2000 rows instead of all at once
+      var scroller = document.getElementById('drill-scroll-area');
+      var savedScroll = scroller ? scroller.scrollTop : 0;
       state.drill._rowLimit = (state.drill._rowLimit || 10000) + 5000;
       renderDrillOnly();
-      // Keep scroll position
       requestAnimationFrame(function(){
-        var scroller = document.querySelector('.drill-scroll-area');
-        if(scroller) scroller.scrollTop = scroller.scrollTop;
+        var s = document.getElementById('drill-scroll-area');
+        if(s) s.scrollTop = savedScroll;
       });
     }
   }
