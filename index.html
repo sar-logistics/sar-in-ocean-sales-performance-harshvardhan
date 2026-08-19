@@ -6521,8 +6521,8 @@ function drawer(){
       return '<span style="color:#374151;">'+esc(val||'—')+'</span>';
     }
 
-    var DRILL_ROW_LIMIT = 10000;
-    var renderRows = (state.drill._showAll || visibleRows.length <= DRILL_ROW_LIMIT) ? visibleRows : visibleRows.slice(0, DRILL_ROW_LIMIT);
+    var DRILL_ROW_LIMIT = state.drill._rowLimit || 10000;
+    var renderRows = visibleRows.length <= DRILL_ROW_LIMIT ? visibleRows : visibleRows.slice(0, DRILL_ROW_LIMIT);
     var hiddenCount = visibleRows.length - renderRows.length;
 
     var bodyRows = renderRows.map(function(s, idx){
@@ -6654,7 +6654,7 @@ function drawer(){
       +'<table style="width:100%;border-collapse:collapse;min-width:3800px;">'
         +'<thead style="position:sticky;top:0;z-index:4;"><tr>'+headCells+'</tr></thead>'
         +'<tbody id="drill-tbody">'+bodyRows
-        +'</tbody>'        +totalRow      +'</table>'      + filterPopup    +'</div>'    +(hiddenCount > 0      ? '<div style="position:sticky;bottom:0;background:#F8FAFC;border-top:1.5px solid #E3EAF3;padding:10px;text-align:center;z-index:10;">'        +'<button data-act="drillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">'          +'Showing 10,000 of '+visibleRows.length.toLocaleString()+' — Load all rows'        +'</button>'        +'</div>'      : '');
+        +'</tbody>'        +totalRow      +'</table>'      + filterPopup    +'</div>'    +(hiddenCount > 0      ? '<div style="position:sticky;bottom:0;background:#F8FAFC;border-top:1.5px solid #E3EAF3;padding:10px;text-align:center;z-index:10;">'        +'<button data-act="drillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">'          +'Showing '+renderRows.length.toLocaleString()+' of '+visibleRows.length.toLocaleString()+' rows — Load more (+5,000)'        +'</button>'        +'</div>'      : '');
   }
 
   var subtitle = d.loading ? 'Loading…'
@@ -8871,7 +8871,19 @@ document.addEventListener('click', function(ev){
   else if(act==='togglePDrillColFilter'){ ev.stopPropagation(); if(state.pendencyDrill){ state.pendencyDrill.openFilterCol = state.pendencyDrill.openFilterCol===el.getAttribute('data-col')?null:el.getAttribute('data-col'); var drawerEl=document.getElementById('drawer-slot'); if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():''); } }
   else if(act==='togglePDrillColVal'){ ev.stopPropagation(); if(state.pendencyDrill){ var col=el.getAttribute('data-col'),val=el.getAttribute('data-val'); state.pendencyDrill.columnFilters=state.pendencyDrill.columnFilters||{}; var arr=state.pendencyDrill.columnFilters[col]||[]; var idx=arr.indexOf(val); if(idx>-1) arr.splice(idx,1); else arr.push(val); state.pendencyDrill.columnFilters[col]=arr; var drawerEl=document.getElementById('drawer-slot'); if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():''); } }
   else if(act==='clearPDrillColFilter'){ ev.stopPropagation(); if(state.pendencyDrill){ var col=el.getAttribute('data-col'); state.pendencyDrill.columnFilters=state.pendencyDrill.columnFilters||{}; delete state.pendencyDrill.columnFilters[col]; var drawerEl=document.getElementById('drawer-slot'); if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():''); } }
-  else if(act==='drillShowAll'){ ev.stopPropagation(); if(state.drill){ state.drill._showAll=true; renderDrillOnly(); } }
+  else if(act==='drillShowAll'){
+    ev.stopPropagation();
+    if(state.drill){
+      // Load next 2000 rows instead of all at once
+      state.drill._rowLimit = (state.drill._rowLimit || 10000) + 5000;
+      renderDrillOnly();
+      // Keep scroll position
+      requestAnimationFrame(function(){
+        var scroller = document.querySelector('.drill-scroll-area');
+        if(scroller) scroller.scrollTop = scroller.scrollTop;
+      });
+    }
+  }
   else if(act==='setDrillLobTab'){
     ev.stopPropagation();
     state.drill.lobTab = el.getAttribute('data-val');
