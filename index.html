@@ -8911,96 +8911,16 @@ document.addEventListener('click', function(ev){
   else if(act==='drillShowAll'){
     ev.stopPropagation();
     if(!state.drill) return;
-    var oldLimit = state.drill._rowLimit || 10000;
-    var newLimit = oldLimit + 2000;
-    state.drill._rowLimit = newLimit;
-
-    // DOM append — only render new rows, don't touch existing rows
-    var tbody = document.getElementById('drill-tbody');
-    var buildRow = window._drillBuildRow;
-    var activeCols = window._drillActiveCols;
-    var allRows = window._drillVisibleRows;
-
-    if(tbody && buildRow && activeCols && allRows) {
-      var newRows = allRows.slice(oldLimit, newLimit);
-      // Use pre-computed HTML if available, else build now
-      var html = window._drillNextBatchHTML || newRows.map(function(s, i){
-        var idx = oldLimit + i;
-        var rowBg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
-        return '<tr style="border-bottom:1px solid #EEF1F6;background:'+rowBg+';">'+buildRow(s, idx, activeCols)+'</tr>';
-      }).join('');
-      window._drillNextBatchHTML = null; // clear used cache
-      var totalRowEl = document.getElementById('drill-total-row');
-      var scroller2 = document.getElementById('drill-scroll-area');
-      var scrollTop2 = scroller2 ? scroller2.scrollTop : 0;
-      // Lock scroll position during insert to prevent glitch
-      if(scroller2) scroller2.style.overflowY = 'hidden';
-      if(totalRowEl) totalRowEl.insertAdjacentHTML('beforebegin', html);
-      else tbody.insertAdjacentHTML('beforeend', html);
-      if(scroller2) { scroller2.scrollTop = scrollTop2; scroller2.style.overflowY = ''; }
-      requestAnimationFrame(function(){
-      }); // end requestAnimationFrame
-      // Pre-compute next batch in background
-      if(newLimit < allRows.length) {
-        setTimeout(function(){
-          var nb = allRows.slice(newLimit, newLimit+2000);
-          window._drillNextBatchHTML = nb.map(function(s,i){
-            var idx=newLimit+i; var rowBg=idx%2===0?'#FFFFFF':'#F8FAFC';
-            return '<tr style="border-bottom:1px solid #EEF1F6;background:'+rowBg+';">'+buildRow(s,idx,activeCols)+'</tr>';
-          }).join('');
-        }, 0);
-      }
-
-        // Update colSums for new rows
-      var newColSums = window._drillColSums || {};
-      var newActiveCols = window._drillActiveDrillCols || activeCols;
-      newRows.forEach(function(r){
-        newActiveCols.forEach(function(c){
-          if (c.t !== 'cur' && c.t !== 'num') return;
-          var v = c.derived ? c.derived(r) : r[c.k];
-          if (v !== null && v !== undefined && !isNaN(Number(v))) {
-            newColSums[c.k] = (newColSums[c.k] || 0) + Number(v);
-          }
-        });
-      });
-      window._drillColSums = newColSums;
-      // Update numeric total cells in total row
-      var totalRowEl2 = document.getElementById('drill-total-row');
-      if(totalRowEl2) {
-        var tds = totalRowEl2.querySelectorAll('td');
-        tds.forEach(function(td, i){
-          if(i === 0) return; // skip TOTAL label
-          var col = newActiveCols[i];
-          if(!col) return;
-          var sum = newColSums[col.k];
-          if(sum !== undefined && (col.t === 'cur' || col.t === 'num')) {
-            if(col.t === 'cur') td.textContent = fmtCur ? fmtCur(sum) : sum.toFixed(0);
-            else td.textContent = Number.isInteger(sum) ? sum.toLocaleString() : sum.toFixed(2);
-          }
-        });
-      }
-      // Update TOTAL count and Load More button text
-      var totalCell = document.getElementById('drill-total-cell');
-      if(totalCell) totalCell.textContent = 'TOTAL ('+Math.min(newLimit, allRows.length).toLocaleString()+')';
-      var btn = document.querySelector('[data-act="drillShowAll"]');
-      if(btn) {
-        if(newLimit >= allRows.length) {
-          btn.parentElement && btn.parentElement.style && (btn.parentElement.style.display='none');
-        } else {
-          btn.textContent = 'Showing '+Math.min(newLimit,allRows.length).toLocaleString()+' of '+allRows.length.toLocaleString()+' rows — Load more (+2,000)';
-        }
-      }
-    } else {
-      // Fallback: full re-render
-      var scroller = document.getElementById('drill-scroll-area');
-      var savedScroll = scroller ? scroller.scrollTop : 0;
-      renderDrillOnly();
-      requestAnimationFrame(function(){
-        var s = document.getElementById('drill-scroll-area');
-        if(s) s.scrollTop = savedScroll;
-      });
-    }
+    var scroller = document.getElementById('drill-scroll-area');
+    var savedScroll = scroller ? scroller.scrollTop : 0;
+    state.drill._rowLimit = (state.drill._rowLimit || 10000) + 2000;
+    renderDrillOnly();
+    requestAnimationFrame(function(){
+      var s = document.getElementById('drill-scroll-area');
+      if(s) s.scrollTop = savedScroll;
+    });
   }
+  
   else if(act==='setDrillLobTab'){
     ev.stopPropagation();
     state.drill.lobTab = el.getAttribute('data-val');
