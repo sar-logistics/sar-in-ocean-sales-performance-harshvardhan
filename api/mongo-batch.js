@@ -317,13 +317,8 @@ function getDateValueFor(job, cls) {
         || job["Job Date"]
         || null;
   }
-  // General/Road jobs — try all date fields in priority order
-  return job["ETD Loading Port"]
-      || job["ETD First Leg of Origin"]
-      || job["ETA Discharge"]
-      || job["ETA Last Leg of Destination"]
-      || job["Job Date"]
-      || null;
+  // General/Road jobs — use Job Date only (no direction, ETD/ETA not applicable)
+  return job["Job Date"] || null;
 }
 
 // Google Sheets exports dates such as 04/05/2026 in day/month/year format.
@@ -464,7 +459,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-19T-ocean-v173-general-full-date-fallback-1787111894";
+const DEPLOY_TS = "2026-08-19T-ocean-v174-general-jobdate-only-1787112000";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2560,7 +2555,7 @@ async function computeBothPendency(db) {
         ? (job["ETD Loading Port"] || job["ETD First Leg of Origin"] || job["Job Date"])
         : isImport
           ? (job["ETA Discharge"] || job["ETA Last Leg of Destination"] || job["Job Date"])
-          : (job["ETD Loading Port"] || job["ETD First Leg of Origin"] || job["ETA Discharge"] || job["ETA Last Leg of Destination"] || job["Job Date"]);
+          : job["Job Date"];
       if (!rawDate) continue;
       const d = parseSheetDate(rawDate);
       if (!d) continue;
@@ -3111,7 +3106,7 @@ module.exports = async function handler(req, res) {
             ? (job['ETD Loading Port'] || job['ETD First Leg of Origin'] || job['Job Date'])
             : isImp
               ? (job['ETA Discharge'] || job['ETA Last Leg of Destination'] || job['Job Date'])
-              : (job['ETD Loading Port'] || job['ETD First Leg of Origin'] || job['ETA Discharge'] || job['ETA Last Leg of Destination'] || job['Job Date']);
+              : job['Job Date'];
           if (!rawDate) continue;
           const d = parseSheetDate(rawDate);
           if (!d) continue;
