@@ -6690,7 +6690,7 @@ function drawer(){
       +'<table style="width:100%;border-collapse:collapse;min-width:3800px;">'
         +'<thead style="position:sticky;top:0;z-index:4;"><tr>'+headCells+'</tr></thead>'
         +'<tbody id="drill-tbody">'+bodyRows+totalRow
-        +'</tbody>'      +'</table>'      + filterPopup    +'</div>'    +(hiddenCount > 0      ? '<div style="position:sticky;bottom:0;background:#F8FAFC;border-top:1.5px solid #E3EAF3;padding:10px;text-align:center;z-index:10;transition:opacity 0.2s;" id="drill-load-more-banner">'        +'<button data-act="drillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">'          +'Showing '+renderRows.length.toLocaleString()+' of '+visibleRows.length.toLocaleString()+' rows — Load more (+2,000)'        +'</button>'        +'</div>'      : '');
+        +'</tbody>'      +'</table>'      + filterPopup    +'</div>'    +(hiddenCount > 0      ? '<div style="position:sticky;bottom:0;background:#F8FAFC;border-top:1.5px solid #E3EAF3;padding:10px;text-align:center;z-index:10;transition:opacity 0.2s;display:none;" id="drill-load-more-banner">'        +'<button data-act="drillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">'          +'Showing '+renderRows.length.toLocaleString()+' of '+visibleRows.length.toLocaleString()+' rows — Load more (+2,000)'        +'</button>'        +'</div>'      : '');
   }
 
   var subtitle = d.loading ? 'Loading…'
@@ -6946,12 +6946,9 @@ function renderDrillOnly(){
     var loadMoreBanner = document.querySelector('.drill-load-more-banner');
     if(scroller && loadMoreBanner) {
       // Initially hide the banner
-      loadMoreBanner.style.opacity = '0';
-      loadMoreBanner.style.pointerEvents = 'none';
       scroller.onscroll = function(){
-        var nearBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 300;
-        loadMoreBanner.style.opacity = nearBottom ? '1' : '0';
-        loadMoreBanner.style.pointerEvents = nearBottom ? 'auto' : 'none';
+        var nearBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 200;
+        loadMoreBanner.style.display = nearBottom ? 'block' : 'none';
       };
     }
   });
