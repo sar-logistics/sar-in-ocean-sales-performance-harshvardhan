@@ -8914,11 +8914,17 @@ document.addEventListener('click', function(ev){
     var scroller = document.getElementById('drill-scroll-area');
     var savedScroll = scroller ? scroller.scrollTop : 0;
     state.drill._rowLimit = (state.drill._rowLimit || 10000) + 2000;
-    renderDrillOnly();
-    requestAnimationFrame(function(){
-      var s = document.getElementById('drill-scroll-area');
-      if(s) s.scrollTop = savedScroll;
-    });
+    // Show loading indicator on button
+    var btn = el;
+    if(btn) { btn.textContent = 'Loading...'; btn.disabled = true; }
+    // Yield to browser first to update button text, then render
+    setTimeout(function(){
+      renderDrillOnly();
+      requestAnimationFrame(function(){
+        var s = document.getElementById('drill-scroll-area');
+        if(s) s.scrollTop = savedScroll;
+      });
+    }, 50);
   }
   
   else if(act==='setDrillLobTab'){
