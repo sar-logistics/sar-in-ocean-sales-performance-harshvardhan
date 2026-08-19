@@ -8930,8 +8930,11 @@ document.addEventListener('click', function(ev){
       }).join('');
       window._drillNextBatchHTML = null; // clear used cache
       var totalRowEl = document.getElementById('drill-total-row');
-      if(totalRowEl) totalRowEl.insertAdjacentHTML('beforebegin', html);
-      else tbody.insertAdjacentHTML('beforeend', html);
+      // Use requestAnimationFrame to avoid scroll glitch during DOM insert
+      requestAnimationFrame(function(){
+        if(totalRowEl) totalRowEl.insertAdjacentHTML('beforebegin', html);
+        else tbody.insertAdjacentHTML('beforeend', html);
+      }); // end requestAnimationFrame
       // Pre-compute next batch in background
       if(newLimit < allRows.length) {
         setTimeout(function(){
@@ -8943,7 +8946,7 @@ document.addEventListener('click', function(ev){
         }, 0);
       }
 
-      // Update colSums for new rows
+        // Update colSums for new rows
       var newColSums = window._drillColSums || {};
       var newActiveCols = window._drillActiveDrillCols || activeCols;
       newRows.forEach(function(r){
