@@ -313,7 +313,6 @@ function getDateValueFor(job, cls) {
   }
   if (cls.direction === "IMPORT") {
     return job["ETA Discharge"]
-        || job["ETA Last Leg of Destination"]
         || job["Job Date"]
         || null;
   }
@@ -459,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-19T-ocean-v174-general-jobdate-only-1787112000";
+const DEPLOY_TS = "2026-08-19T-ocean-v175-correct-date-fallback-1787112132";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2554,7 +2553,7 @@ async function computeBothPendency(db) {
       const rawDate = isExport
         ? (job["ETD Loading Port"] || job["ETD First Leg of Origin"] || job["Job Date"])
         : isImport
-          ? (job["ETA Discharge"] || job["ETA Last Leg of Destination"] || job["Job Date"])
+          ? (job["ETA Discharge"] || job["Job Date"])
           : job["Job Date"];
       if (!rawDate) continue;
       const d = parseSheetDate(rawDate);
@@ -3105,7 +3104,7 @@ module.exports = async function handler(req, res) {
           const rawDate = isExp
             ? (job['ETD Loading Port'] || job['ETD First Leg of Origin'] || job['Job Date'])
             : isImp
-              ? (job['ETA Discharge'] || job['ETA Last Leg of Destination'] || job['Job Date'])
+              ? (job['ETA Discharge'] || job['Job Date'])
               : job['Job Date'];
           if (!rawDate) continue;
           const d = parseSheetDate(rawDate);
