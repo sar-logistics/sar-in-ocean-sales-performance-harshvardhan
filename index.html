@@ -8873,16 +8873,18 @@ document.addEventListener('click', function(ev){
   else if(act==='clearPDrillColFilter'){ ev.stopPropagation(); if(state.pendencyDrill){ var col=el.getAttribute('data-col'); state.pendencyDrill.columnFilters=state.pendencyDrill.columnFilters||{}; delete state.pendencyDrill.columnFilters[col]; var drawerEl=document.getElementById('drawer-slot'); if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():''); } }
   else if(act==='drillShowAll'){
     ev.stopPropagation();
-    if(state.drill){
-      var scroller = document.getElementById('drill-scroll-area');
-      var savedScroll = scroller ? scroller.scrollTop : 0;
-      state.drill._rowLimit = (state.drill._rowLimit || 10000) + 5000;
+    if(!state.drill) return;
+    var scroller = document.getElementById('drill-scroll-area');
+    var savedScroll = scroller ? scroller.scrollTop : 0;
+    state.drill._rowLimit = (state.drill._rowLimit || 10000) + 5000;
+    // Use setTimeout to yield to browser before re-rendering — prevents UI freeze
+    setTimeout(function(){
       renderDrillOnly();
       requestAnimationFrame(function(){
         var s = document.getElementById('drill-scroll-area');
         if(s) s.scrollTop = savedScroll;
       });
-    }
+    }, 0);
   }
   else if(act==='setDrillLobTab'){
     ev.stopPropagation();
