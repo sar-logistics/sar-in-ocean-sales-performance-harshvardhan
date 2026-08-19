@@ -6575,8 +6575,8 @@ function drawer(){
     // Compute totals for ALL numeric columns from visibleRows
     var colSums = {};
     var dActualGpSum = 0, dProvGpSum = 0;
-    // Sum only rendered rows so totals match what's displayed
-    renderRows.forEach(function(r){
+    // Sum all visible rows for totals (full dataset total)
+    visibleRows.forEach(function(r){
       var _locked = (r.lob==='AIR EXPORT'||r.lob==='AIR IMPORT') ? !!r.financialLock : !!r.operationLock;
       if (_locked) dActualGpSum += (r.actualProfit || 0);
       else dProvGpSum += (r.provisionalProfit || 0);
@@ -8931,38 +8931,6 @@ document.addEventListener('click', function(ev){
       }).join('');
       // Insert directly into tbody (totalRow moved to tfoot by browser)
       tbody.insertAdjacentHTML('beforeend', html);
-      // Update colSums with new rows
-      var updColSums = window._drillColSums || {};
-      var updCols = window._drillActiveDrillCols || activeCols;
-      newRows.forEach(function(r){
-        updCols.forEach(function(c){
-          if(c.t !== 'cur' && c.t !== 'num') return;
-          var v = c.derived ? c.derived(r) : r[c.k];
-          if(v !== null && v !== undefined && !isNaN(Number(v)))
-            updColSums[c.k] = (updColSums[c.k]||0) + Number(v);
-        });
-      });
-      window._drillColSums = updColSums;
-      // Update numeric cells in tfoot total row
-      var tfoot = document.querySelector('#drill-scroll-area tfoot');
-      if(tfoot) {
-        var tds = tfoot.querySelectorAll('td');
-        tds.forEach(function(td, i){
-          var col = updCols[i];
-          if(!col) return;
-          var sum = updColSums[col.k];
-          if(sum === undefined) return;
-          if(col.t === 'cur') {
-            var abs = Math.abs(sum);
-            var fmt = abs >= 1000000 ? '$'+(sum/1000000).toFixed(2)+' Mn'
-                    : abs >= 1000 ? '$'+(sum/1000).toFixed(2)+'k'
-                    : '$'+sum.toFixed(2);
-            td.textContent = fmt;
-          } else if(col.t === 'num') {
-            td.textContent = Number.isInteger(sum) ? sum.toLocaleString() : sum.toFixed(2);
-          }
-        });
-      }
       // Update TOTAL count
       var totalCell = document.getElementById('drill-total-cell');
       if(totalCell) totalCell.textContent = 'TOTAL ('+Math.min(newLimit, allRows.length).toLocaleString()+')';
