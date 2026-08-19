@@ -6521,7 +6521,8 @@ function drawer(){
       return '<span style="color:#374151;">'+esc(val||'—')+'</span>';
     }
 
-    var renderRows = visibleRows; // no row limit
+    var DRILL_ROW_LIMIT = 10000;
+    var renderRows = visibleRows.length > DRILL_ROW_LIMIT ? visibleRows.slice(0, DRILL_ROW_LIMIT) : visibleRows;
     var hiddenCount = visibleRows.length - renderRows.length;
 
     var bodyRows = renderRows.map(function(s, idx){
@@ -7957,7 +7958,7 @@ function pendencyDrillDrawer(){
       return '<th style="position:sticky;top:0;'+ss+'background:#F8FAFC;text-align:left;padding:9px 10px;font-size:9px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;border-bottom:2px solid #E2E8F0;white-space:nowrap;z-index:'+(isSticky?3:1)+';">'+esc(c.l)+'</th>';
     }
 
-    var DRILL_PAGE_SIZE = 500;
+    var DRILL_PAGE_SIZE = 10000;
     var renderRows = pd._showAll ? visibleRows : visibleRows.slice(0, DRILL_PAGE_SIZE);
     var hiddenCount = visibleRows.length - renderRows.length;
 
