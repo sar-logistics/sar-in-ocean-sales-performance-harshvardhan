@@ -6940,18 +6940,14 @@ function positionViewDrop(){ positionAllDrops(); }
 function renderDrillOnly(){
   var drawerEl = document.getElementById('drawer-slot');
   if (drawerEl) drawerEl.innerHTML = drawer() + feedbackModal() + orgEditModal();
-  // Set up scroll-based visibility for load more button
-  requestAnimationFrame(function(){
-    var scroller = document.getElementById('drill-scroll-area');
-    var loadMoreBanner = document.querySelector('.drill-load-more-banner');
-    if(scroller && loadMoreBanner) {
-      // Initially hide the banner
-      scroller.onscroll = function(){
-        var nearBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 200;
-        loadMoreBanner.style.display = nearBottom ? 'block' : 'none';
-      };
-    }
-  });
+  var scroller = document.getElementById('drill-scroll-area');
+  var loadMoreBanner = document.getElementById('drill-load-more-banner');
+  if(scroller && loadMoreBanner) {
+    scroller.onscroll = function(){
+      var nearBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 200;
+      loadMoreBanner.style.display = nearBottom ? 'block' : 'none';
+    };
+  }
 }
 
 var _lastRenderHash = '';
