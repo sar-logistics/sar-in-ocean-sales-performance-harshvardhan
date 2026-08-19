@@ -6671,7 +6671,7 @@ function drawer(){
       +'<table style="width:100%;border-collapse:collapse;min-width:3800px;">'
         +'<thead style="position:sticky;top:0;z-index:4;"><tr>'+headCells+'</tr></thead>'
         +'<tbody id="drill-tbody">'+bodyRows
-        +'</tbody>'        +totalRow      +'</table>'      + filterPopup    +'</div>'    +(hiddenCount > 0      ? '<div style="position:sticky;bottom:0;background:#F8FAFC;border-top:1.5px solid #E3EAF3;padding:10px;text-align:center;z-index:10;">'        +'<button data-act="drillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">'          +'Showing '+renderRows.length.toLocaleString()+' of '+visibleRows.length.toLocaleString()+' rows — Load more (+2,000)'        +'</button>'        +'</div>'      : '');
+        +'</tbody>'        +totalRow      +'</table>'      + filterPopup    +'</div>'    +(hiddenCount > 0      ? '<div style="position:sticky;bottom:0;background:#F8FAFC;border-top:1.5px solid #E3EAF3;padding:10px;text-align:center;z-index:10;">'        +'<button data-act="drillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">'          +'Showing '+renderRows.length.toLocaleString()+' of '+visibleRows.length.toLocaleString()+' rows — Load more (+500)'        +'</button>'        +'</div>'      : '');
   }
 
   var subtitle = d.loading ? 'Loading…'
@@ -8892,7 +8892,7 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation();
     if(!state.drill) return;
     var oldLimit = state.drill._rowLimit || 10000;
-    var newLimit = oldLimit + 2000;
+    var newLimit = oldLimit + 500;
     state.drill._rowLimit = newLimit;
 
     // DOM append — only render new rows, don't touch existing rows
@@ -8903,16 +8903,19 @@ document.addEventListener('click', function(ev){
 
     if(tbody && buildRow && activeCols && allRows) {
       var newRows = allRows.slice(oldLimit, newLimit);
-      var html = '';
+      var frag = document.createDocumentFragment();
       newRows.forEach(function(s, i){
         var idx = oldLimit + i;
         var rowBg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
-        html += '<tr style="border-bottom:1px solid #EEF1F6;background:'+rowBg+';">'+buildRow(s, idx, activeCols)+'</tr>';
+        var tr = document.createElement('tr');
+        tr.style.cssText = 'border-bottom:1px solid #EEF1F6;background:'+rowBg+';';
+        tr.innerHTML = buildRow(s, idx, activeCols);
+        frag.appendChild(tr);
       });
       // Insert before the total row (last tr)
       var totalRow = tbody.querySelector('tr:last-child');
-      if(totalRow) totalRow.insertAdjacentHTML('beforebegin', html);
-      else tbody.insertAdjacentHTML('beforeend', html);
+      if(totalRow) tbody.insertBefore(frag, totalRow);
+      else tbody.appendChild(frag);
 
       // Update TOTAL count and Load More button text
       var totalCell = tbody.querySelector('tr:last-child td:first-child');
@@ -8922,7 +8925,7 @@ document.addEventListener('click', function(ev){
         if(newLimit >= allRows.length) {
           btn.parentElement && btn.parentElement.style && (btn.parentElement.style.display='none');
         } else {
-          btn.textContent = 'Showing '+Math.min(newLimit,allRows.length).toLocaleString()+' of '+allRows.length.toLocaleString()+' rows — Load more (+2,000)';
+          btn.textContent = 'Showing '+Math.min(newLimit,allRows.length).toLocaleString()+' of '+allRows.length.toLocaleString()+' rows — Load more (+500)';
         }
       }
     } else {
