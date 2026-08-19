@@ -6575,7 +6575,8 @@ function drawer(){
     // Compute totals for ALL numeric columns from visibleRows
     var colSums = {};
     var dActualGpSum = 0, dProvGpSum = 0;
-    visibleRows.forEach(function(r){
+    // Sum only rendered rows so totals match what's displayed
+    renderRows.forEach(function(r){
       var _locked = (r.lob==='AIR EXPORT'||r.lob==='AIR IMPORT') ? !!r.financialLock : !!r.operationLock;
       if (_locked) dActualGpSum += (r.actualProfit || 0);
       else dProvGpSum += (r.provisionalProfit || 0);
@@ -6587,6 +6588,9 @@ function drawer(){
         }
       });
     });
+    // Store colSums builder for dynamic update when more rows are appended
+    window._drillColSums = colSums;
+    window._drillActiveDrillCols = _activeDrillCols;
     // Override derived OL-status GP columns with their correct sums
     colSums['gpOlDone']    = dActualGpSum;
     colSums['gpOlNotDone'] = dProvGpSum;
@@ -8939,6 +8943,34 @@ document.addEventListener('click', function(ev){
         }, 0);
       }
 
+      // Update colSums for new rows
+      var newColSums = window._drillColSums || {};
+      var newActiveCols = window._drillActiveDrillCols || activeCols;
+      newRows.forEach(function(r){
+        newActiveCols.forEach(function(c){
+          if (c.t !== 'cur' && c.t !== 'num') return;
+          var v = c.derived ? c.derived(r) : r[c.k];
+          if (v !== null && v !== undefined && !isNaN(Number(v))) {
+            newColSums[c.k] = (newColSums[c.k] || 0) + Number(v);
+          }
+        });
+      });
+      window._drillColSums = newColSums;
+      // Update numeric total cells in total row
+      var totalRowEl2 = document.getElementById('drill-total-row');
+      if(totalRowEl2) {
+        var tds = totalRowEl2.querySelectorAll('td');
+        tds.forEach(function(td, i){
+          if(i === 0) return; // skip TOTAL label
+          var col = newActiveCols[i];
+          if(!col) return;
+          var sum = newColSums[col.k];
+          if(sum !== undefined && (col.t === 'cur' || col.t === 'num')) {
+            if(col.t === 'cur') td.textContent = fmtCur ? fmtCur(sum) : sum.toFixed(0);
+            else td.textContent = Number.isInteger(sum) ? sum.toLocaleString() : sum.toFixed(2);
+          }
+        });
+      }
       // Update TOTAL count and Load More button text
       var totalCell = document.getElementById('drill-total-cell');
       if(totalCell) totalCell.textContent = 'TOTAL ('+Math.min(newLimit, allRows.length).toLocaleString()+')';
