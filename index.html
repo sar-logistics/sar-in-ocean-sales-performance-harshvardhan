@@ -6525,6 +6525,23 @@ function drawer(){
     var renderRows = visibleRows.length <= DRILL_ROW_LIMIT ? visibleRows : visibleRows.slice(0, DRILL_ROW_LIMIT);
     var hiddenCount = visibleRows.length - renderRows.length;
 
+    // Store row builder for DOM append in load-more
+    window._drillBuildRow = function(s, idx, activeCols) {
+      var rowBg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
+      var cells = activeCols.map(function(c){
+        var v = cellVal(c, s);
+        var isSticky = c.sticky !== undefined;
+        var isLastSticky = c.k === 'lob';
+        var stickyStyle = isSticky
+          ? 'position:sticky;left:'+c.sticky+'px;width:'+c.width+'px;min-width:'+c.width+'px;max-width:'+c.width+'px;z-index:2;background:'+rowBg+';'+(isLastSticky?'box-shadow:2px 0 4px rgba(13,43,94,0.08);':'')
+          : '';
+        return '<td style="padding:7px 10px;font-size:11.5px;white-space:nowrap;text-align:'+((c.t==='cur'||c.t==='num')?'right':'left')+';'+stickyStyle+'">'+fmtCell(c, v)+'</td>';
+      }).join('');
+      return cells;
+    };
+    window._drillActiveCols = _activeDrillCols;
+    window._drillVisibleRows = visibleRows;
+
     var bodyRows = renderRows.map(function(s, idx){
       var rowBg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
       var cells = _activeDrillCols.map(function(c){
@@ -8874,17 +8891,50 @@ document.addEventListener('click', function(ev){
   else if(act==='drillShowAll'){
     ev.stopPropagation();
     if(!state.drill) return;
-    var scroller = document.getElementById('drill-scroll-area');
-    var savedScroll = scroller ? scroller.scrollTop : 0;
-    state.drill._rowLimit = (state.drill._rowLimit || 10000) + 2000;
-    // Use setTimeout to yield to browser before re-rendering — prevents UI freeze
-    setTimeout(function(){
+    var oldLimit = state.drill._rowLimit || 10000;
+    var newLimit = oldLimit + 2000;
+    state.drill._rowLimit = newLimit;
+
+    // DOM append — only render new rows, don't touch existing rows
+    var tbody = document.getElementById('drill-tbody');
+    var buildRow = window._drillBuildRow;
+    var activeCols = window._drillActiveCols;
+    var allRows = window._drillVisibleRows;
+
+    if(tbody && buildRow && activeCols && allRows) {
+      var newRows = allRows.slice(oldLimit, newLimit);
+      var html = '';
+      newRows.forEach(function(s, i){
+        var idx = oldLimit + i;
+        var rowBg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
+        html += '<tr style="border-bottom:1px solid #EEF1F6;background:'+rowBg+';">'+buildRow(s, idx, activeCols)+'</tr>';
+      });
+      // Insert before the total row (last tr)
+      var totalRow = tbody.querySelector('tr:last-child');
+      if(totalRow) totalRow.insertAdjacentHTML('beforebegin', html);
+      else tbody.insertAdjacentHTML('beforeend', html);
+
+      // Update TOTAL count and Load More button text
+      var totalCell = tbody.querySelector('tr:last-child td:first-child');
+      if(totalCell) totalCell.textContent = 'TOTAL ('+Math.min(newLimit, allRows.length).toLocaleString()+')';
+      var btn = document.querySelector('[data-act="drillShowAll"]');
+      if(btn) {
+        if(newLimit >= allRows.length) {
+          btn.parentElement && btn.parentElement.style && (btn.parentElement.style.display='none');
+        } else {
+          btn.textContent = 'Showing '+Math.min(newLimit,allRows.length).toLocaleString()+' of '+allRows.length.toLocaleString()+' rows — Load more (+2,000)';
+        }
+      }
+    } else {
+      // Fallback: full re-render
+      var scroller = document.getElementById('drill-scroll-area');
+      var savedScroll = scroller ? scroller.scrollTop : 0;
       renderDrillOnly();
       requestAnimationFrame(function(){
         var s = document.getElementById('drill-scroll-area');
         if(s) s.scrollTop = savedScroll;
       });
-    }, 0);
+    }
   }
   else if(act==='setDrillLobTab'){
     ev.stopPropagation();
