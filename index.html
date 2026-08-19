@@ -6588,8 +6588,8 @@ function drawer(){
         }
       });
     });
-    // Store colSums builder for dynamic update when more rows are appended
-    window._drillColSums = colSums;
+    // Reset and store colSums fresh each render
+    window._drillColSums = JSON.parse(JSON.stringify(colSums)); // deep copy
     window._drillActiveDrillCols = _activeDrillCols;
     // Override derived OL-status GP columns with their correct sums
     colSums['gpOlDone']    = dActualGpSum;
