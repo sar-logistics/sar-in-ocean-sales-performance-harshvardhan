@@ -7513,6 +7513,7 @@ function _defaultDrillLobTab() {
 
 function openInsightDrill(drillType, name, drillMonth) {
   // Show loading drawer immediately — gives instant visual feedback
+  document.body.style.overflow = 'hidden'; // prevent bg scroll when drill open
   state.drill = { entity: name, metric: 'Shipments', col: 'FY Total', valueFmt: null,
     loading: true, rows: null, lobTab: 'ALL', insightDrill: true,
     columnFilters: {}, openFilterCol: null, filterDraft: {} };
@@ -9089,7 +9090,7 @@ document.addEventListener('click', function(ev){
     // overlay. Checking ev.target itself (not the resolved ancestor) fixes it.
     var clickedCloseButtonDirectly = ev.target.matches && ev.target.matches('[data-act="close"]');
     if (ev.target.closest('[data-stop]') && !clickedCloseButtonDirectly) return;
-    state.drill=null; render();
+    document.body.style.overflow=''; state.drill=null; render();
   }
 });
 document.addEventListener('keydown', function(e){ 
