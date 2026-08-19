@@ -5829,6 +5829,11 @@ function tableRows(){
     var isGrand = e.isGrand;
     var isZone  = e.isZone;
     var isRep   = e.isRep;
+    // Hide reps with 0 shipments in selected date range — they've left the org or have no activity
+    if (isRep && !e.isBranch) {
+      var totalShip = e.ship ? e.ship.reduce(function(s,v){ return s+(v||0); }, 0) : 0;
+      if (totalShip === 0) return;
+    }
     var shipOpen = state.shipOpen[e.name] === true;
     var gpOpen   = state.gpOpen[e.name]   === true;
     var revOpen  = state.revOpen[e.name]  === true;
