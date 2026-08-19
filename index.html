@@ -8929,12 +8929,7 @@ document.addEventListener('click', function(ev){
         var rowBg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
         return '<tr style="border-bottom:1px solid #EEF1F6;background:'+rowBg+';">'+buildRow(s, idx, activeCols)+'</tr>';
       }).join('');
-      // Lock scroll, insert, restore
-      var scroller = document.getElementById('drill-scroll-area');
-      var savedScroll = scroller ? scroller.scrollTop : 0;
-      if(scroller) scroller.style.overflow = 'hidden';
       totalRowEl.insertAdjacentHTML('beforebegin', html);
-      if(scroller) { scroller.style.overflow = ''; scroller.scrollTop = savedScroll; }
       // Update TOTAL count
       var totalCell = document.getElementById('drill-total-cell');
       if(totalCell) totalCell.textContent = 'TOTAL ('+Math.min(newLimit, allRows.length).toLocaleString()+')';
