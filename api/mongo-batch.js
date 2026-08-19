@@ -458,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-18T-ocean-v171-soft-delete-users-1787050141";
+const DEPLOY_TS = "2026-08-19T-ocean-v172-general-in-pendency-1787111655";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2522,7 +2522,7 @@ async function computeBothPendency(db) {
   // Single DB pass — track OL and FL simultaneously in same loop
   // No DB-level date filter — DD/MM/YYYY format breaks string comparison.
   // FY_MONTHS check in parseSheetDate handles in-memory filtering.
-  const ALL_JOB_COLLS = Object.values(COLLECTIONS).filter(c => !c.includes('general') && !c.includes('road') && !c.includes('clearance'));
+  const ALL_JOB_COLLS = Object.values(COLLECTIONS).filter(c => !c.includes('road') && !c.includes('clearance'));
   const allDrillJobRows = []; // all job rows for client-side drill filtering
   // Two independent maps — one per lock type — built in the same loop
   const olMap = {}; // OL: norm → { zone, displayName, monthData: { month → { pending, done } }, jobOwners }
@@ -3078,7 +3078,7 @@ module.exports = async function handler(req, res) {
         }
       }
 
-      const ALL_JOB_COLLS = Object.values(COLLECTIONS).filter(c => !c.includes('general') && !c.includes('road') && !c.includes('clearance'));
+      const ALL_JOB_COLLS = Object.values(COLLECTIONS).filter(c => !c.includes('road') && !c.includes('clearance'));
       const rows = [];
 
       await Promise.all(ALL_JOB_COLLS.map(async (collName) => {
@@ -3151,7 +3151,7 @@ module.exports = async function handler(req, res) {
         if (n1) { knownNorms.add(n1); knownDisplay[n1] = { raw: row["Sales Rep Name"], display: row["Display Name"], zone: row["Zone"] }; }
         if (n2) { knownNorms.add(n2); knownDisplay[n2] = { raw: row["Sales Rep Name"], display: row["Display Name"], zone: row["Zone"] }; }
       }
-      const ALL_JOB_COLLS = Object.values(COLLECTIONS).filter(c => !c.includes('general') && !c.includes('road') && !c.includes('clearance'));
+      const ALL_JOB_COLLS = Object.values(COLLECTIONS).filter(c => !c.includes('road') && !c.includes('clearance'));
       const unrecognized = {}; // norm → { rawNames: Set, count }
       const recognized = {};
       await Promise.all(ALL_JOB_COLLS.map(async (collName) => {
