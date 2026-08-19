@@ -8930,10 +8930,14 @@ document.addEventListener('click', function(ev){
       }).join('');
       window._drillNextBatchHTML = null; // clear used cache
       var totalRowEl = document.getElementById('drill-total-row');
-      // Use requestAnimationFrame to avoid scroll glitch during DOM insert
+      var scroller2 = document.getElementById('drill-scroll-area');
+      var scrollTop2 = scroller2 ? scroller2.scrollTop : 0;
+      // Lock scroll position during insert to prevent glitch
+      if(scroller2) scroller2.style.overflowY = 'hidden';
+      if(totalRowEl) totalRowEl.insertAdjacentHTML('beforebegin', html);
+      else tbody.insertAdjacentHTML('beforeend', html);
+      if(scroller2) { scroller2.scrollTop = scrollTop2; scroller2.style.overflowY = ''; }
       requestAnimationFrame(function(){
-        if(totalRowEl) totalRowEl.insertAdjacentHTML('beforebegin', html);
-        else tbody.insertAdjacentHTML('beforeend', html);
       }); // end requestAnimationFrame
       // Pre-compute next batch in background
       if(newLimit < allRows.length) {
