@@ -6654,7 +6654,7 @@ function drawer(){
       +'<table style="width:100%;border-collapse:collapse;min-width:3800px;">'
         +'<thead style="position:sticky;top:0;z-index:4;"><tr>'+headCells+'</tr></thead>'
         +'<tbody id="drill-tbody">'+bodyRows
-        +'</tbody>'        +totalRow      +'</table>'      + filterPopup    +'</div>'    +(hiddenCount > 0      ? '<div style="position:sticky;bottom:0;background:#F8FAFC;border-top:1.5px solid #E3EAF3;padding:10px;text-align:center;z-index:10;">'        +'<button data-act="drillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">'          +'Showing '+renderRows.length.toLocaleString()+' of '+visibleRows.length.toLocaleString()+' rows — click to load more'        +'</button>'        +'</div>'      : '');
+        +'</tbody>'        +totalRow      +'</table>'      + filterPopup    +'</div>'    +(hiddenCount > 0      ? '<div style="position:sticky;bottom:0;background:#F8FAFC;border-top:1.5px solid #E3EAF3;padding:10px;text-align:center;z-index:10;">'        +'<button data-act="drillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">'          +'Showing '+renderRows.length.toLocaleString()+' of '+visibleRows.length.toLocaleString()+' rows — Load more (+2,000)'        +'</button>'        +'</div>'      : '');
   }
 
   var subtitle = d.loading ? 'Loading…'
@@ -8876,7 +8876,7 @@ document.addEventListener('click', function(ev){
     if(!state.drill) return;
     var scroller = document.getElementById('drill-scroll-area');
     var savedScroll = scroller ? scroller.scrollTop : 0;
-    state.drill._rowLimit = (state.drill._rowLimit || 10000) + 5000;
+    state.drill._rowLimit = (state.drill._rowLimit || 10000) + 2000;
     // Use setTimeout to yield to browser before re-rendering — prevents UI freeze
     setTimeout(function(){
       renderDrillOnly();
