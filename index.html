@@ -8929,7 +8929,8 @@ document.addEventListener('click', function(ev){
         var rowBg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
         return '<tr style="border-bottom:1px solid #EEF1F6;background:'+rowBg+';">'+buildRow(s, idx, activeCols)+'</tr>';
       }).join('');
-      totalRowEl.insertAdjacentHTML('beforebegin', html);
+      // Insert directly into tbody (totalRow moved to tfoot by browser)
+      tbody.insertAdjacentHTML('beforeend', html);
       // Update TOTAL count
       var totalCell = document.getElementById('drill-total-cell');
       if(totalCell) totalCell.textContent = 'TOTAL ('+Math.min(newLimit, allRows.length).toLocaleString()+')';
