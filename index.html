@@ -5829,14 +5829,7 @@ function tableRows(){
     var isGrand = e.isGrand;
     var isZone  = e.isZone;
     var isRep   = e.isRep;
-    // Hide reps with 0 shipments across ALL months (truly inactive/left org)
-    // We use repsRaw total ship (all months) not just selected range
-    // This way reps on leave still appear — they have jobs in other months
-    if (isRep && !e.isBranch) {
-      var _rawRep = repsRaw.find(function(r){ return r.name === e.name; });
-      var _allTimeShip = _rawRep && _rawRep.ship ? _rawRep.ship.reduce(function(s,v){ return s+(v||0); }, 0) : 0;
-      if (_allTimeShip === 0) return; // never had any jobs — truly inactive
-    }
+
     var shipOpen = state.shipOpen[e.name] === true;
     var gpOpen   = state.gpOpen[e.name]   === true;
     var revOpen  = state.revOpen[e.name]  === true;
