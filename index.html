@@ -6568,7 +6568,7 @@ function drawer(){
           var stickyStyle = isSticky
             ? 'position:sticky;left:'+c.sticky+'px;width:'+c.width+'px;min-width:'+c.width+'px;max-width:'+c.width+'px;z-index:4;background:'+totalRowBg+';'+(isLastSticky?'box-shadow:2px 0 4px rgba(13,43,94,0.08);':'')
             : '';
-          if (i === 0) return '<td style="padding:10px 10px;font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;'+stickyStyle+'">TOTAL ('+visibleRows.length.toLocaleString()+')</td>';
+          if (i === 0) return '<td style="padding:10px 10px;font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;'+stickyStyle+'">TOTAL ('+renderRows.length.toLocaleString()+')</td>';
           if (isSticky) return '<td style="padding:10px 10px;'+stickyStyle+'"></td>';
           var sum = colSums[c.k];
           if (c.t === 'cur' && sum !== undefined) {
