@@ -6522,7 +6522,7 @@ function drawer(){
     }
 
     var DRILL_ROW_LIMIT = 10000;
-    var renderRows = visibleRows.length > DRILL_ROW_LIMIT ? visibleRows.slice(0, DRILL_ROW_LIMIT) : visibleRows;
+    var renderRows = (state.drill._showAll || visibleRows.length <= DRILL_ROW_LIMIT) ? visibleRows : visibleRows.slice(0, DRILL_ROW_LIMIT);
     var hiddenCount = visibleRows.length - renderRows.length;
 
     var bodyRows = renderRows.map(function(s, idx){
@@ -6654,16 +6654,7 @@ function drawer(){
       +'<table style="width:100%;border-collapse:collapse;min-width:3800px;">'
         +'<thead style="position:sticky;top:0;z-index:4;"><tr>'+headCells+'</tr></thead>'
         +'<tbody id="drill-tbody">'+bodyRows
-        +(hiddenCount > 0
-          ? '<tr><td colspan="'+COLS.length+'" style="text-align:center;padding:14px;background:#F8FAFC;">'
-            +'<button data-act="drillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">Show all '+visibleRows.length.toLocaleString()+' rows ('+hiddenCount.toLocaleString()+' more)</button>'
-            +'</td></tr>'
-          : '')
-        +'</tbody>'
-        +totalRow
-      +'</table>'
-      + filterPopup
-    +'</div>';
+        +'</tbody>'        +totalRow      +'</table>'      + filterPopup    +'</div>'    +(hiddenCount > 0      ? '<div style="position:sticky;bottom:0;background:#F8FAFC;border-top:1.5px solid #E3EAF3;padding:10px;text-align:center;z-index:10;">'        +'<button data-act="drillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">'          +'Showing 10,000 of '+visibleRows.length.toLocaleString()+' — Load all rows'        +'</button>'        +'</div>'      : '');
   }
 
   var subtitle = d.loading ? 'Loading…'
