@@ -3131,7 +3131,7 @@ function customerPage(){
           tons: Math.round(counts.tons*100)/100,
           teu: Math.round(counts.teu*100)/100,
           gpPct: counts.rev > 0 ? Math.round((counts.gp/counts.rev)*1000)/10 : 0
-        });
+        }, 0);
       }).filter(Boolean);
     } else {
       filteredCusts = lobData.allCustomers.filter(function(c) {
@@ -3505,7 +3505,7 @@ function agentPage(){
           _aAgentCounts[ag].rev += r.r||0;
           _aAgentCounts[ag].tons += r.tons||0;
           _aAgentCounts[ag].teu += r.t||0;
-        });
+        }, 0);
       });
       filteredAgents = lobData.allAgents.map(function(a){
         var key = (a.name||'').toLowerCase();
@@ -3518,7 +3518,7 @@ function agentPage(){
           tons: Math.round(counts.tons*100)/100,
           teu: Math.round(counts.teu*100)/100,
           gpPct: counts.rev > 0 ? Math.round((counts.gp/counts.rev)*1000)/10 : 0
-        });
+        }, 0);
       }).filter(Boolean);
     } else {
       filteredAgents = lobData.allAgents.filter(function(a) {
@@ -4628,7 +4628,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           if (!merged[m]) merged[m] = { pending: 0, done: 0 };
           merged[m].pending += lobData[m].pending || 0;
           merged[m].done    += lobData[m].done    || 0;
-        });
+        }, 0);
       });
       _pendencyLobIndex[rep.name] = merged;
     });
@@ -5093,7 +5093,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
               bodyRows += metricRows(joFiltered, null, '#FAFBFD', false, 'Cross Sales', repKey, false, jo.name+'||'+_joParentId, joAvatar, joLabel, '', 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1px dotted #C8D3E0;', 'border-bottom:2px solid '+PBORDER_STRONG+';', jo.name+'||'+_joParentId, lockType);
             });
           }
-        });
+        }, 0);
       });
       return; // done with Cross Sales zone
     }
@@ -5153,7 +5153,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           +'</div>';
           var _jpId = jo.name+'||'+(rep._norm||rep.name);
           bodyRows += metricRows(joFiltered, null, '#FAFBFD', false, zone, repKey, false, _jpId, joAvatar, joLabel, '', 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1px dotted #C8D3E0;', 'border-bottom:2px solid '+PBORDER_STRONG+';', _jpId, lockType);
-        });
+        }, 0);
       }
     });
   });
@@ -6547,14 +6547,14 @@ function drawer(){
     if(visibleRows.length > _preLimit) {
       var _preBuildRow = window._drillBuildRow;
       var _preActiveCols = _activeDrillCols;
-      requestIdleCallback ? requestIdleCallback(function(){
+      setTimeout(function(){
         var nextBatch = visibleRows.slice(_preLimit, _preLimit + 2000);
         window._drillNextBatchHTML = nextBatch.map(function(s,i){
           var idx = _preLimit+i;
           var rowBg = idx%2===0?'#FFFFFF':'#F8FAFC';
           return '<tr style="border-bottom:1px solid #EEF1F6;background:'+rowBg+';">'+_preBuildRow(s,idx,_preActiveCols)+'</tr>';
         }).join('');
-      }) : null;
+      }, 0);
     }
 
     var bodyRows = renderRows.map(function(s, idx){
@@ -8930,13 +8930,13 @@ document.addEventListener('click', function(ev){
       else tbody.insertAdjacentHTML('beforeend', html);
       // Pre-compute next batch in background
       if(newLimit < allRows.length) {
-        requestIdleCallback && requestIdleCallback(function(){
+        setTimeout(function(){
           var nb = allRows.slice(newLimit, newLimit+2000);
           window._drillNextBatchHTML = nb.map(function(s,i){
             var idx=newLimit+i; var rowBg=idx%2===0?'#FFFFFF':'#F8FAFC';
             return '<tr style="border-bottom:1px solid #EEF1F6;background:'+rowBg+';">'+buildRow(s,idx,activeCols)+'</tr>';
           }).join('');
-        });
+        }, 0);
       }
 
       // Update TOTAL count and Load More button text
