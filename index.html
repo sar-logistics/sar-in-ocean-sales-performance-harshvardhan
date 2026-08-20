@@ -3274,7 +3274,37 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
   var custLobRepMap = _custLobRepMapCache[activeLob] || {};
   var _custLobRepMapLoaded = Object.keys(custLobRepMap).length > 0;
   var _custLobRepMapLoaded = Object.keys(custLobRepMap).length > 0;
+  // Apply zone filter client-side using allDrillRows as source of truth
+  var _fz = state.filterZones && state.filterZones.length > 0 ? state.filterZones : null;
   var rows = (lobData.allCustomers || []).slice();
+  if (_fz && allDrillRows && allDrillRows.length > 0) {
+    // Build set of customer names that have at least 1 shipment in the selected zones
+    var _custZoneSet = {};
+    allDrillRows.forEach(function(r){
+      if (_fz.indexOf(r._zone) > -1 || (_fz.indexOf('Cross Sales') > -1 && !r._zone)) {
+        var ck = (r.customer||'').toLowerCase().trim();
+        if (ck) _custZoneSet[ck] = true;
+      }
+    });
+    rows = rows.filter(function(c){ return _custZoneSet[(c.name||'').toLowerCase().trim()]; });
+    // Also recompute shipments/gp/revenue from allDrillRows for zone-filtered customers
+    rows = rows.map(function(c){
+      var ck = (c.name||'').toLowerCase().trim();
+      var zRows = allDrillRows.filter(function(r){
+        var inZone = _fz.indexOf(r._zone) > -1 || (_fz.indexOf('Cross Sales') > -1 && !r._zone);
+        return inZone && (r.customer||'').toLowerCase().trim() === ck
+          && (_activeLobKeys.length === 0 || _activeLobKeys.indexOf(r.lob) > -1);
+      });
+      if (zRows.length === 0) return null;
+      var ships = zRows.length;
+      var gp = zRows.reduce(function(s,r){ return s + (r.g||r.actualProfit||r.provisionalProfit||0); }, 0);
+      var rev = zRows.reduce(function(s,r){ return s + (r.r||r.billedRevenue||r.provRevenue||0); }, 0);
+      var teu = zRows.reduce(function(s,r){ return s + (r.teu||0); }, 0);
+      var tons = zRows.reduce(function(s,r){ return s + (r.tons||0); }, 0);
+      var reps = [...new Set(zRows.map(function(r){ return r._dn || r._sp; }).filter(Boolean))];
+      return Object.assign({}, c, {shipments: ships, gp: gp, revenue: rev, teu: teu, tons: tons, salesReps: reps, gpPct: rev > 0 ? Math.round(gp/rev*100) : 0});
+    }).filter(Boolean);
+  }
   var sortCol = state.custSortCol || 'gp';
   var sortDir = (state.custSortDir === undefined) ? -1 : state.custSortDir;
   var isAir = activeLob === 'Air';
