@@ -8014,15 +8014,35 @@ function pendencyDrillDrawer(){
   } else {
     // Apply global LOB filter to all pendency drill rows
     var _pdLobs = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
-    var visibleRows = _pdLobs
-      ? pd.rows.filter(function(r){ return _pdLobs.indexOf(r.lob) !== -1; })
-      : pd.rows.slice();
+    var _pdColFilters = (state.pendencyDrill && state.pendencyDrill.colFilters) || {};
+    var visibleRows = pd.rows.filter(function(r){
+      if (_pdLobs && _pdLobs.indexOf(r.lob) === -1) return false;
+      // Apply per-column filters
+      for (var ck in _pdColFilters) {
+        var fv = _pdColFilters[ck];
+        if (!fv || fv.length === 0) continue;
+        var rv = r[ck];
+        var rvStr = rv === null || rv === undefined || rv === '' ? '(blank)' : String(rv);
+        if (fv.indexOf(rvStr) === -1) return false;
+      }
+      return true;
+    });
+
+    // Column filters state on pendency drill
+    var pdColFilters = (state.pendencyDrill && state.pendencyDrill.colFilters) || {};
 
     function th(c){
       var isSticky = c.sticky !== undefined;
       var isLastSticky = c.k === 'lob';
       var ss = isSticky ? 'position:sticky;left:'+c.sticky+'px;width:'+c.width+'px;min-width:'+c.width+'px;max-width:'+c.width+'px;z-index:3;'+(isLastSticky?'box-shadow:2px 0 4px rgba(13,43,94,0.08);':'') : '';
-      return '<th style="position:sticky;top:0;'+ss+'background:#F8FAFC;text-align:left;padding:9px 10px;font-size:9px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;border-bottom:2px solid #E2E8F0;white-space:nowrap;z-index:'+(isSticky?3:1)+';">'+esc(c.l)+'</th>';
+      var hasFilter = pdColFilters[c.k] && pdColFilters[c.k].length > 0;
+      var isOpen = state.pendencyDrill && state.pendencyDrill.openFilterCol === c.k;
+      var headerColor = hasFilter ? '#1D5FCC' : '#64748B';
+      var headerBg = hasFilter ? '#EEF3FC' : '#F8FAFC';
+      return '<th data-act="openPendDrillFilter" data-col="'+c.k+'" style="cursor:pointer;position:sticky;top:0;'+ss+'background:'+headerBg+';text-align:left;padding:9px 10px;font-size:9px;font-weight:700;letter-spacing:0.05em;color:'+headerColor+';text-transform:uppercase;border-bottom:2px solid #E2E8F0;white-space:nowrap;z-index:'+(isSticky?3:1)+';user-select:none;">'+esc(c.l)
+        +'<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="margin-left:3px;opacity:0.6;"><polyline points="6 9 12 15 18 9"/></svg>'
+        +(hasFilter ? '<span style="background:#1D5FCC;color:#fff;border-radius:999px;font-size:8px;font-weight:800;padding:1px 5px;margin-left:3px;">●</span>' : '')
+        +'</th>';
     }
 
     var DRILL_PAGE_SIZE = 10000;
@@ -8041,20 +8061,28 @@ function pendencyDrillDrawer(){
     }).join('');
 
 
-    var filterPopup = ''; // LOB filter applied globally
-    bodyContent = '<div style="flex:1;overflow:auto;position:relative;-webkit-overflow-scrolling:touch;">'
-      +'<table style="width:100%;border-collapse:collapse;min-width:1400px;font-variant-numeric:tabular-nums;">'
-        +'<thead style="position:sticky;top:0;z-index:4;"><tr>'+COLS.map(th).join('')+'</tr></thead>'
-        +'<tbody>'+bodyRows
-        +(hiddenCount>0
-          ? '<tr><td colspan="'+COLS.length+'" style="text-align:center;padding:14px;background:#F8FAFC;">'
-            +'<button data-act="pendencyDrillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">Show all '+visibleRows.length.toLocaleString()+' rows ('+hiddenCount.toLocaleString()+' more)</button>'
-            +'</td></tr>'
-          : '')
-        +'</tbody>'
-      +'</table>'
-      +filterPopup
-    +'</div>';
+    // Per-column filter popup
+    var filterPopup = '';
+    if (state.pendencyDrill && state.pendencyDrill.openFilterCol) {
+      var pfCol = COLS.filter(function(c){ return c.k === state.pendencyDrill.openFilterCol; })[0];
+      if (pfCol) {
+        var pfAllVals = Array.from(new Set(pd.rows.map(function(r){
+          var v = r[pfCol.k];
+          return (v === null || v === undefined || v === '') ? '(blank)' : String(v);
+        }))).sort();
+        var pfActive = _pdColFilters[pfCol.k] && _pdColFilters[pfCol.k].length > 0 ? _pdColFilters[pfCol.k] : pfAllVals.slice();
+        var pfAnchor = state.pendencyDrill.filterAnchor || { top: 100, left: 200 };
+        filterPopup = '<div id="pend-filter-popup" data-stop="1" style="position:fixed;top:'+pfAnchor.top+'px;left:'+pfAnchor.left+'px;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.08);padding:14px;z-index:9999;min-width:180px;max-width:260px;">'          +'<div style="font-size:12px;font-weight:800;color:#0D2B5E;margin-bottom:8px;">Filter: '+esc(pfCol.l)+'</div>'          +'<div style="display:flex;gap:6px;margin-bottom:8px;">'            +'<button data-act="pendDrillFilterAll" data-col="'+pfCol.k+'" style="flex:1;background:#F4F7FA;border:none;border-radius:6px;padding:5px;font-size:10px;font-weight:700;color:#374151;cursor:pointer;">All</button>'            +'<button data-act="pendDrillFilterNone" data-col="'+pfCol.k+'" style="flex:1;background:#F4F7FA;border:none;border-radius:6px;padding:5px;font-size:10px;font-weight:700;color:#374151;cursor:pointer;">None</button>'          +'</div>'          +'<div style="max-height:200px;overflow-y:auto;">'          +pfAllVals.map(function(v){
+            var checked = pfActive.indexOf(v) > -1;
+            return '<label style="display:flex;align-items:center;gap:7px;padding:4px 2px;cursor:pointer;font-size:11px;color:#374151;">'              +'<input type="checkbox" data-act="pendDrillFilterToggle" data-col="'+pfCol.k+'" data-val="'+esc(v)+'" '+(checked?'checked':'')+' style="cursor:pointer;"/>'              +esc(v)            +'</label>';
+          }).join('')          +'</div>'          +'<button data-act="closePendDrillFilter" style="margin-top:10px;width:100%;background:#1D5FCC;border:none;border-radius:7px;padding:7px;font-size:11px;font-weight:700;color:#FFFFFF;cursor:pointer;">Apply</button>'        +'</div>';
+      }
+    }
+        var hasPdColFilters = Object.keys(_pdColFilters).some(function(k){ return _pdColFilters[k] && _pdColFilters[k].length > 0; });
+    var clearFiltersBtn = hasPdColFilters
+      ? '<div style="padding:6px 14px;background:#FEF3C7;border-bottom:1px solid #FDE68A;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;">'          +'<span style="font-size:11px;color:#92400E;font-weight:600;">Column filters active — showing '+visibleRows.length.toLocaleString()+' of '+pd.rows.length.toLocaleString()+' jobs</span>'          +'<button data-act="clearPendDrillFilters" style="background:#F59E0B;border:none;border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700;color:#FFFFFF;cursor:pointer;">Clear filters</button>'        +'</div>'
+      : '';
+    bodyContent = clearFiltersBtn+'<div style="flex:1;overflow:auto;position:relative;-webkit-overflow-scrolling:touch;contain:paint;">'      +filterPopup      +'<table style="width:100%;border-collapse:collapse;min-width:1400px;font-variant-numeric:tabular-nums;">'        +'<thead style="position:sticky;top:0;z-index:4;"><tr>'+COLS.map(th).join('')+'</tr></thead>'        +'<tbody>'+bodyRows        +(hiddenCount>0          ? '<tr><td colspan="'+COLS.length+'" style="text-align:center;padding:14px;background:#F8FAFC;">'            +'<button data-act="pendencyDrillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">Show all '+visibleRows.length.toLocaleString()+' rows ('+hiddenCount.toLocaleString()+' more)</button>'            +'</td></tr>'          : '')        +'</tbody>'      +'</table>'    +'</div>';
   }
 
   var pdFilteredCount = visibleRows ? visibleRows.length : (pd.count || 0);
@@ -8952,6 +8980,58 @@ document.addEventListener('click', function(ev){
   else if(act==='insightDrill'){ ev.stopPropagation(); openInsightDrill(el.getAttribute('data-drill-type'), el.getAttribute('data-drill-name'), el.getAttribute('data-drill-month')); }
   else if(act==='pendencyDrill'){ ev.stopPropagation(); openPendencyDrill(el.getAttribute('data-rep'),el.getAttribute('data-col'),el.getAttribute('data-status'),el.getAttribute('data-lock'),el.getAttribute('data-type')||'rep'); }
   else if(act==='closePendencyDrill'){ if(el.getAttribute('data-stop')) return; state.pendencyDrill=null; render(); }
+  else if(act==='openPendDrillFilter'){
+    ev.stopPropagation();
+    if(!state.pendencyDrill) return;
+    var col = el.getAttribute('data-col');
+    var rect = el.getBoundingClientRect();
+    state.pendencyDrill.openFilterCol = state.pendencyDrill.openFilterCol === col ? null : col;
+    state.pendencyDrill.filterAnchor = { top: rect.bottom+4, left: Math.min(rect.left, window.innerWidth-270) };
+    render();
+  }
+  else if(act==='closePendDrillFilter'){
+    ev.stopPropagation();
+    if(state.pendencyDrill) { state.pendencyDrill.openFilterCol = null; }
+    render();
+  }
+  else if(act==='pendDrillFilterToggle'){
+    ev.stopPropagation();
+    if(!state.pendencyDrill) return;
+    var col = el.getAttribute('data-col');
+    var val = el.getAttribute('data-val');
+    if(!state.pendencyDrill.colFilters) state.pendencyDrill.colFilters = {};
+    var allVals = Array.from(new Set(state.pendencyDrill.rows.map(function(r){
+      var v = r[col]; return (v===null||v===undefined||v==='') ? '(blank)' : String(v);
+    }))).sort();
+    var cur = state.pendencyDrill.colFilters[col] && state.pendencyDrill.colFilters[col].length > 0
+      ? state.pendencyDrill.colFilters[col].slice() : allVals.slice();
+    var vidx = cur.indexOf(val);
+    if(el.checked && vidx === -1) cur.push(val);
+    else if(!el.checked && vidx > -1) cur.splice(vidx,1);
+    state.pendencyDrill.colFilters[col] = cur.length === allVals.length ? [] : cur;
+    render();
+  }
+  else if(act==='pendDrillFilterAll'){
+    ev.stopPropagation();
+    if(!state.pendencyDrill) return;
+    var col = el.getAttribute('data-col');
+    if(!state.pendencyDrill.colFilters) state.pendencyDrill.colFilters = {};
+    state.pendencyDrill.colFilters[col] = [];
+    render();
+  }
+  else if(act==='pendDrillFilterNone'){
+    ev.stopPropagation();
+    if(!state.pendencyDrill) return;
+    var col = el.getAttribute('data-col');
+    if(!state.pendencyDrill.colFilters) state.pendencyDrill.colFilters = {};
+    state.pendencyDrill.colFilters[col] = ['__none__'];
+    render();
+  }
+  else if(act==='clearPendDrillFilters'){
+    ev.stopPropagation();
+    if(state.pendencyDrill) { state.pendencyDrill.colFilters = {}; state.pendencyDrill.openFilterCol = null; }
+    render();
+  }
   else if(act==='pendencyDrillShowAll'){ ev.stopPropagation(); if(state.pendencyDrill){ state.pendencyDrill._showAll=true; var drawerEl=document.getElementById('drawer-slot'); if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():''); } }
   else if(act==='togglePDrillColFilter'){ ev.stopPropagation(); if(state.pendencyDrill){ state.pendencyDrill.openFilterCol = state.pendencyDrill.openFilterCol===el.getAttribute('data-col')?null:el.getAttribute('data-col'); var drawerEl=document.getElementById('drawer-slot'); if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():''); } }
   else if(act==='togglePDrillColVal'){ ev.stopPropagation(); if(state.pendencyDrill){ var col=el.getAttribute('data-col'),val=el.getAttribute('data-val'); state.pendencyDrill.columnFilters=state.pendencyDrill.columnFilters||{}; var arr=state.pendencyDrill.columnFilters[col]||[]; var idx=arr.indexOf(val); if(idx>-1) arr.splice(idx,1); else arr.push(val); state.pendencyDrill.columnFilters[col]=arr; var drawerEl=document.getElementById('drawer-slot'); if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():''); } }
