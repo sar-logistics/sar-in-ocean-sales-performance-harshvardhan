@@ -2235,6 +2235,10 @@ function zoneEntity(zoneName){
     weeklyTgt:   zData.weeklyTarget  || 0,
     yearlyTgt:   zData.yearlyTarget  || 0,
     dailyTgt:    zData.dailyTarget   || 0,
+    fy26MonthlyTarget: zData.fy26MonthlyTarget || 0,
+    fy26YearlyTarget:  zData.fy26YearlyTarget  || 0,
+    fy27MonthlyTarget: zData.fy27MonthlyTarget || 0,
+    fy27YearlyTarget:  zData.fy27YearlyTarget  || 0,
     joinDate:    null,
     exitDate:    null
   };
@@ -2278,14 +2282,31 @@ function repTgtForView(r){
 // Zone target for view — always from mapping_zone_targets, never summed from reps
 function zoneTgtForView(zData, zReps){
   var v = state.reportView;
-  if (v === 'Weekly')  return zData.weeklyTarget  || 0;
-  if (v === 'Yearly')  return zData.yearlyTarget ? (zData.yearlyTarget / 12) : (zData.monthlyTarget || 0);
+  // Pick FY-appropriate target based on selected months
+  var fy26MonthSet = {'Apr-25':1,'May-25':1,'Jun-25':1,'Jul-25':1,'Aug-25':1,'Sep-25':1,'Oct-25':1,'Nov-25':1,'Dec-25':1,'Jan-26':1,'Feb-26':1,'Mar-26':1};
+  var idxs = filteredMonthIndices();
+  var activeMs = idxs.map(function(i){ return months26[i]; });
+  var isEntirelyFY26 = activeMs.length > 0 && activeMs.every(function(m){ return fy26MonthSet[m]; });
+  // Use FY26 or FY27 monthly/yearly target
+  var monthlyTgt = isEntirelyFY26
+    ? (zData.fy26MonthlyTarget || zData.monthlyTarget || 0)
+    : (zData.fy27MonthlyTarget || zData.monthlyTarget || 0);
+  var yearlyTgt = isEntirelyFY26
+    ? (zData.fy26YearlyTarget || zData.yearlyTarget || 0)
+    : (zData.fy27YearlyTarget || zData.yearlyTarget || 0);
+  if (v === 'Weekly')  return (zData.weeklyTarget || 0);
+  if (v === 'Yearly')  return yearlyTgt ? (yearlyTgt / 12) : monthlyTgt;
   if (v === 'Custom')  {
-    // Prorate monthly target by number of active months
-    var idxs = filteredMonthIndices();
-    return (zData.monthlyTarget || 0) * idxs.length;
+    // For mixed FY ranges — sum per-month targets
+    var total = 0;
+    activeMs.forEach(function(m){
+      total += fy26MonthSet[m]
+        ? (zData.fy26MonthlyTarget || zData.monthlyTarget || 0)
+        : (zData.fy27MonthlyTarget || zData.monthlyTarget || 0);
+    });
+    return total;
   }
-  return zData.monthlyTarget || 0;
+  return monthlyTgt;
 }
 
 function zoneHue(zone){
