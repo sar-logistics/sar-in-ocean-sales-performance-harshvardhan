@@ -8072,10 +8072,12 @@ function pendencyDrillDrawer(){
         }))).sort();
         var pfActive = _pdColFilters[pfCol.k] && _pdColFilters[pfCol.k].length > 0 ? _pdColFilters[pfCol.k] : pfAllVals.slice();
         var pfAnchor = state.pendencyDrill.filterAnchor || { top: 100, left: 200 };
-        filterPopup = '<div id="pend-filter-popup" data-stop="1" style="position:fixed;top:'+pfAnchor.top+'px;left:'+pfAnchor.left+'px;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.08);padding:14px;z-index:9999;min-width:180px;max-width:260px;">'          +'<div style="font-size:12px;font-weight:800;color:#0D2B5E;margin-bottom:8px;">Filter: '+esc(pfCol.l)+'</div>'          +'<div style="display:flex;gap:6px;margin-bottom:8px;">'            +'<button data-act="pendDrillFilterAll" data-col="'+pfCol.k+'" style="flex:1;background:#F4F7FA;border:none;border-radius:6px;padding:5px;font-size:10px;font-weight:700;color:#374151;cursor:pointer;">All</button>'            +'<button data-act="pendDrillFilterNone" data-col="'+pfCol.k+'" style="flex:1;background:#F4F7FA;border:none;border-radius:6px;padding:5px;font-size:10px;font-weight:700;color:#374151;cursor:pointer;">None</button>'          +'</div>'          +'<div style="max-height:200px;overflow-y:auto;">'          +pfAllVals.map(function(v){
+        var pfSearch = (state.pendencyDrill.filterSearch && state.pendencyDrill.filterSearch[pfCol.k]) || '';
+        var pfFiltered = pfSearch ? pfAllVals.filter(function(v){ return v.toLowerCase().indexOf(pfSearch.toLowerCase()) > -1; }) : pfAllVals;
+        filterPopup = '<div id="pend-filter-popup" data-stop="1" style="position:fixed;top:'+pfAnchor.top+'px;left:'+pfAnchor.left+'px;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.08);padding:14px;z-index:9999;min-width:220px;max-width:280px;">'          +'<div style="font-size:12px;font-weight:800;color:#0D2B5E;margin-bottom:8px;">Filter: '+esc(pfCol.l)+'</div>'          +'<input data-act="pendDrillFilterSearch" data-col="'+pfCol.k+'" value="'+esc(pfSearch)+'" placeholder="Search..." style="width:100%;box-sizing:border-box;border:1.5px solid #E3EAF3;border-radius:7px;padding:6px 10px;font-size:11px;color:#374151;margin-bottom:8px;outline:none;"/>'          +'<div style="display:flex;gap:6px;margin-bottom:8px;">'            +'<button data-act="pendDrillFilterAll" data-col="'+pfCol.k+'" style="flex:1;background:#F4F7FA;border:none;border-radius:6px;padding:5px;font-size:10px;font-weight:700;color:#374151;cursor:pointer;">All</button>'            +'<button data-act="pendDrillFilterNone" data-col="'+pfCol.k+'" style="flex:1;background:#F4F7FA;border:none;border-radius:6px;padding:5px;font-size:10px;font-weight:700;color:#374151;cursor:pointer;">None</button>'          +'</div>'          +'<div style="max-height:200px;overflow-y:auto;">'          +pfFiltered.map(function(v){
             var checked = pfActive.indexOf(v) > -1;
             return '<label style="display:flex;align-items:center;gap:7px;padding:4px 2px;cursor:pointer;font-size:11px;color:#374151;">'              +'<input type="checkbox" data-act="pendDrillFilterToggle" data-col="'+pfCol.k+'" data-val="'+esc(v)+'" '+(checked?'checked':'')+' style="cursor:pointer;"/>'              +esc(v)            +'</label>';
-          }).join('')          +'</div>'          +'<button data-act="closePendDrillFilter" style="margin-top:10px;width:100%;background:#1D5FCC;border:none;border-radius:7px;padding:7px;font-size:11px;font-weight:700;color:#FFFFFF;cursor:pointer;">Apply</button>'        +'</div>';
+          }).join('')          +(pfFiltered.length===0 ? '<div style="color:#9AAFC8;font-size:11px;padding:4px 2px;">No results</div>' : '')          +'</div>'          +'<button data-act="closePendDrillFilter" style="margin-top:10px;width:100%;background:#1D5FCC;border:none;border-radius:7px;padding:7px;font-size:11px;font-weight:700;color:#FFFFFF;cursor:pointer;">Apply</button>'        +'</div>';
       }
     }
         var hasPdColFilters = Object.keys(_pdColFilters).some(function(k){ return _pdColFilters[k] && _pdColFilters[k].length > 0; });
@@ -8217,6 +8219,20 @@ function _custFilterSearchHandler(inp) {
     if(restored){ restored.focus(); restored.setSelectionRange(cursorPos, cursorPos); }
   });
 }
+// Pendency drill filter search — input event on search box
+document.addEventListener('input', function(ev){
+  var el = ev.target;
+  if(!el || el.getAttribute('data-act') !== 'pendDrillFilterSearch') return;
+  if(!state.pendencyDrill) return;
+  var col = el.getAttribute('data-col');
+  if(!state.pendencyDrill.filterSearch) state.pendencyDrill.filterSearch = {};
+  state.pendencyDrill.filterSearch[col] = el.value;
+  var drawerEl = document.getElementById('drawer-slot');
+  if(drawerEl) drawerEl.innerHTML = drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'');
+  var inp = document.querySelector('[data-act="pendDrillFilterSearch"]');
+  if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+}, true);
+
 // Drill scroll — capture phase catches scroll on #drill-scroll-area div
 document.addEventListener('scroll', function(ev){
   if(!ev.target || ev.target.id !== 'drill-scroll-area') return;
@@ -9031,6 +9047,18 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation();
     if(state.pendencyDrill) { state.pendencyDrill.colFilters = {}; state.pendencyDrill.openFilterCol = null; }
     render();
+  }
+  else if(act==='pendDrillFilterSearch'){
+    ev.stopPropagation();
+    if(!state.pendencyDrill) return;
+    var col = el.getAttribute('data-col');
+    if(!state.pendencyDrill.filterSearch) state.pendencyDrill.filterSearch = {};
+    state.pendencyDrill.filterSearch[col] = el.value;
+    var drawerEl = document.getElementById('drawer-slot');
+    if(drawerEl) drawerEl.innerHTML = drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'');
+    // Re-focus search input
+    var inp = document.querySelector('[data-act="pendDrillFilterSearch"]');
+    if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
   }
   else if(act==='pendencyDrillShowAll'){ ev.stopPropagation(); if(state.pendencyDrill){ state.pendencyDrill._showAll=true; var drawerEl=document.getElementById('drawer-slot'); if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():''); } }
   else if(act==='togglePDrillColFilter'){ ev.stopPropagation(); if(state.pendencyDrill){ state.pendencyDrill.openFilterCol = state.pendencyDrill.openFilterCol===el.getAttribute('data-col')?null:el.getAttribute('data-col'); var drawerEl=document.getElementById('drawer-slot'); if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():''); } }
