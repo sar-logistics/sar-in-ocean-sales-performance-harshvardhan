@@ -8227,10 +8227,18 @@ document.addEventListener('input', function(ev){
   var col = el.getAttribute('data-col');
   if(!state.pendencyDrill.filterSearch) state.pendencyDrill.filterSearch = {};
   state.pendencyDrill.filterSearch[col] = el.value;
-  var drawerEl = document.getElementById('drawer-slot');
-  if(drawerEl) drawerEl.innerHTML = drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'');
-  var inp = document.querySelector('[data-act="pendDrillFilterSearch"]');
-  if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  // Only re-render the popup — not the full drawer (prevents blinking)
+  var popup = document.getElementById('pend-filter-popup');
+  if(popup) {
+    var tmp = document.createElement('div');
+    tmp.innerHTML = pendencyDrillDrawer();
+    var newPopup = tmp.querySelector('#pend-filter-popup');
+    if(newPopup) {
+      popup.innerHTML = newPopup.innerHTML;
+      var inp = popup.querySelector('[data-act="pendDrillFilterSearch"]');
+      if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+    }
+  }
 }, true);
 
 // Drill scroll — capture phase catches scroll on #drill-scroll-area div
