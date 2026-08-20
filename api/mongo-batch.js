@@ -458,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-20T-ocean-v180-redeploy-1787227428";
+const DEPLOY_TS = "2026-08-20T-ocean-v181-zone-fy-targets-1787228152";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1244,6 +1244,13 @@ async function computeSalesAggregate(db) {
         weeklyTarget:  chosenTarget.weeklyTarget  || 0,
         dailyTarget:   chosenTarget.dailyTarget   || 0,
         zonalManager:  chosenTarget.zonalManager  || "",
+        // Store both FY targets so client can pick correct one
+        fy26MonthlyTarget: (fy26Target || {}).monthlyTarget || 0,
+        fy26YearlyTarget:  (fy26Target || {}).yearlyTarget  || 0,
+        fy26WeeklyTarget:  (fy26Target || {}).weeklyTarget  || 0,
+        fy27MonthlyTarget: (fy27Target || {}).monthlyTarget || 0,
+        fy27YearlyTarget:  (fy27Target || {}).yearlyTarget  || 0,
+        fy27WeeklyTarget:  (fy27Target || {}).weeklyTarget  || 0,
         gp:   activeMonths.map(() => 0),
         ship: activeMonths.map(() => 0),
         tons: activeMonths.map(() => 0),
