@@ -458,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-19T-ocean-v175-correct-date-fallback-1787112132";
+const DEPLOY_TS = "2026-08-19T-ocean-v176-wipeable-mapping-1787217064";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -3443,6 +3443,7 @@ if (action === "wipeCollection") {
         "srr_air_export","srr_air_import","srr_sea_export","srr_sea_import",
         "srr_isotank_export","srr_isotank_import",
         "ocean_mapping_sales_targets","ocean_mapping_zone_targets",
+        "mapping_sales_targets","mapping_zone_targets",
       ];
       if (!WIPEABLE_COLLS.includes(collName)) return res.status(400).json({ error: "unknown collection" });
       const result = await db.collection(collName).deleteMany({});
