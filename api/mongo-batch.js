@@ -458,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-19T-ocean-v176-wipeable-mapping-1787217064";
+const DEPLOY_TS = "2026-08-20T-ocean-v177-zone-tgt-fy-fix-1787224359";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1233,7 +1233,10 @@ async function computeSalesAggregate(db) {
     if (!zonesMap[rep.zone]) {
       const fy27Target = zoneTargetsByFY.FY27[rep.zone];
       const fy26Target = zoneTargetsByFY.FY26[rep.zone];
-      const chosenTarget = fy27Target || fy26Target || {};
+      // Use FY26 target if majority of active months are in FY26 (Apr-25 to Mar-26)
+      const fy26Months = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25","Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26"];
+      const isMostlyFY26 = activeMonths.filter(m => fy26Months.includes(m)).length > activeMonths.length / 2;
+      const chosenTarget = isMostlyFY26 ? (fy26Target || fy27Target || {}) : (fy27Target || fy26Target || {});
       zonesMap[rep.zone] = {
         zone: rep.zone,
         monthlyTarget: chosenTarget.monthlyTarget || 0,
