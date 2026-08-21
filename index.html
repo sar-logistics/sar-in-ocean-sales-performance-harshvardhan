@@ -5914,7 +5914,17 @@ function tableRows(){
       dispTgt  = activeGroups.map(function(g){
         // Yearly view: show correct FY yearly target per group
         // Yearly view: show full yearly target (monthly tgt × 12)
-        if (isYearly) return e.tgt * 12;
+        if (isYearly) {
+          // For zone entities — use correct FY yearly target per group
+          if (isZone && !isGrand && g.idxs.length > 0) {
+            var _fy26MsYr = {'Apr-25':1,'May-25':1,'Jun-25':1,'Jul-25':1,'Aug-25':1,'Sep-25':1,'Oct-25':1,'Nov-25':1,'Dec-25':1,'Jan-26':1,'Feb-26':1,'Mar-26':1};
+            var firstM = months26[_fidxs[g.idxs[0]]];
+            return firstM && _fy26MsYr[firstM]
+              ? (e.fy26YearlyTarget || e.tgt * 12)
+              : (e.fy27YearlyTarget || e.tgt * 12);
+          }
+          return e.tgt * 12;
+        }
         // Sum per-month targets prorated by join/exit date
         var _fy26Ms = {'Apr-25':1,'May-25':1,'Jun-25':1,'Jul-25':1,'Aug-25':1,'Sep-25':1,'Oct-25':1,'Nov-25':1,'Dec-25':1,'Jan-26':1,'Feb-26':1,'Mar-26':1};
         return sum(g.idxs.map(function(i){
