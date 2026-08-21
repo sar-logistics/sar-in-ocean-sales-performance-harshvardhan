@@ -458,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-20T-ocean-v181-zone-fy-targets-1787228152";
+const DEPLOY_TS = "2026-08-21T-ocean-v182-fix-doe-colname-1787295654";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -867,7 +867,7 @@ async function computeSalesAggregate(db) {
       monthlyTarget, weeklyTarget, yearlyTarget, dailyTarget,
       monthlyTargetUSD, weeklyTargetUSD, yearlyTargetUSD, dailyTargetUSD,
       joinDate:      row["Date of Joining"] ? new Date(row["Date of Joining"]) : null,
-      exitDate:      row["Date Of Exit"]    ? new Date(row["Date Of Exit"])    : null,
+      exitDate:      row["Date of Exit"]    ? new Date(row["Date of Exit"])    : null,
       email:         String(row["Email ID"] || "").toLowerCase().trim(),
     };
     repLookupByFY[fy][key] = entry;
