@@ -5893,11 +5893,14 @@ function tableRows(){
       var _doe = e.exitDate ? new Date(e.exitDate) : null;
       if (_doj || _doe) {
         var _MN2 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        var _pm2 = function(ml){ var p=ml.split('-'); return new Date(Date.UTC(2000+parseInt(p[1],10),_MN2.indexOf(p[0]),1)); };
         var _rms2 = filteredMonths();
         if (_rms2.length > 0) {
-          var _rs2 = _pm2(_rms2[0]);
-          var _re2 = _pm2(_rms2[_rms2.length-1]);
+          // Range start = first day of first month
+          var _p0 = _rms2[0].split('-');
+          var _rs2 = new Date(Date.UTC(2000+parseInt(_p0[1],10), _MN2.indexOf(_p0[0]), 1));
+          // Range end = last day of last month
+          var _pN = _rms2[_rms2.length-1].split('-');
+          var _re2 = new Date(Date.UTC(2000+parseInt(_pN[1],10), _MN2.indexOf(_pN[0])+1, 0));
           if (_doj && _re2 < _doj) return; // rep hadn't joined yet by end of range
           if (_doe && _rs2 > _doe) return; // rep had already left before start of range
         }
