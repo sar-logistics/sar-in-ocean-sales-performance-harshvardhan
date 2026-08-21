@@ -5887,6 +5887,23 @@ function tableRows(){
     var isZone  = e.isZone;
     var isRep   = e.isRep;
 
+    // DOJ + DOE visibility filter — hide rep if outside their active period
+    if (isRep && !e.isBranch) {
+      var _doj = e.joinDate ? new Date(e.joinDate) : null;
+      var _doe = e.exitDate ? new Date(e.exitDate) : null;
+      if (_doj || _doe) {
+        var _MN2 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        var _pm2 = function(ml){ var p=ml.split('-'); return new Date(Date.UTC(2000+parseInt(p[1],10),_MN2.indexOf(p[0]),1)); };
+        var _rms2 = filteredMonths();
+        if (_rms2.length > 0) {
+          var _rs2 = _pm2(_rms2[0]);
+          var _re2 = _pm2(_rms2[_rms2.length-1]);
+          if (_doj && _re2 < _doj) return; // rep hadn't joined yet by end of range
+          if (_doe && _rs2 > _doe) return; // rep had already left before start of range
+        }
+      }
+    }
+
     var shipOpen = state.shipOpen[e.name] === true;
     var gpOpen   = state.gpOpen[e.name]   === true;
     var revOpen  = state.revOpen[e.name]  === true;
