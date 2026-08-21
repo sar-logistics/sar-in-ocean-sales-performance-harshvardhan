@@ -5261,6 +5261,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     });
   });
 
+  var _showKpi = !isYearly && !isQuarterly && (state.reportView === 'Monthly' || state.reportView === 'Custom');
   var table = '<div style="position:relative;background:#fff;border:1px solid #E3EAF3;border-radius:12px;box-shadow:0 1px 3px rgba(13,43,94,0.05);overflow:hidden;">'
     +'<div style="padding:14px 18px;border-bottom:1px solid #E3EAF3;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;background:#fff;border-radius:12px 12px 0 0;">'
       +'<div style="display:flex;align-items:center;gap:10px;">'
@@ -5292,7 +5293,6 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     +'</div>'
   +'</div>';
 
-  var _showKpi = !isYearly && !isQuarterly && (state.reportView === 'Monthly' || state.reportView === 'Custom');
   return '<div style="padding:24px 28px 32px;">'+(_showKpi ? kpis : '') + table+'</div>';
 }
 
