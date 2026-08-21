@@ -458,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v182-fix-doe-colname-1787295654";
+const DEPLOY_TS = "2026-08-21T-ocean-v183-doj-doe-month-fix-1787297790";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -866,8 +866,22 @@ async function computeSalesAggregate(db) {
       lob:           String(row["LOB"] || "").trim(),
       monthlyTarget, weeklyTarget, yearlyTarget, dailyTarget,
       monthlyTargetUSD, weeklyTargetUSD, yearlyTargetUSD, dailyTargetUSD,
-      joinDate:      row["Date of Joining"] ? new Date(row["Date of Joining"]) : null,
-      exitDate:      row["Date of Exit"]    ? new Date(row["Date of Exit"])    : null,
+      joinDate:      (function(){
+        var d = row["Date of Joining"];
+        if (!d) return null;
+        var dt = new Date(d);
+        if (isNaN(dt)) return null;
+        // Use START of that month
+        return new Date(Date.UTC(dt.getFullYear(), dt.getMonth(), 1));
+      })(),
+      exitDate:      (function(){ 
+        var d = row["Date of Exit"];
+        if (!d) return null;
+        var dt = new Date(d);
+        if (isNaN(dt)) return null;
+        // Use END of that month to avoid timezone cutoff issues
+        return new Date(Date.UTC(dt.getFullYear(), dt.getMonth()+1, 0, 23, 59, 59));
+      })(),
       email:         String(row["Email ID"] || "").toLowerCase().trim(),
     };
     repLookupByFY[fy][key] = entry;
