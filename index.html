@@ -5428,7 +5428,7 @@ function usagePage(){
     + usageKpiCard(d.loggedIn7Day, 'Logged in (7 days)', '#7C3AED')
   +'</div>'
   +'<div style="background:#FFFFFF;border:1px solid #E7ECF3;border-radius:10px;overflow:hidden;">'
-    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 260px);">'
+    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 130px);">'
     +'<table style="width:100%;border-collapse:collapse;">'
       +'<thead style="position:sticky;top:0;z-index:4;"><tr style="background:#F8FAFC;border-bottom:2px solid #E2E8F0;">'
         +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">#</th>'
@@ -6458,7 +6458,7 @@ function salesTable(M){
           : '<button data-act="page" data-val="leaderboard" class="btnq" style="display:flex;align-items:center;gap:6px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Leaderboard</button>')
       +'</div>'
     +'</div>'
-    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - '+(isWeekly2 ? '110' : (state.reportView==='Quarterly'||state.reportView==='Yearly') ? '130' : '200')+'px);">'
+    +'<div style="position:relative;overflow-x:auto;overflow-y:auto;max-height:calc(100vh - '+(isWeekly2 ? '170' : (state.reportView==='Quarterly'||state.reportView==='Yearly') ? '190' : '260')+'px);">'
       +'<table style="width:100%;border-collapse:collapse;min-width:850px;font-variant-numeric:tabular-nums;">'
         +'<thead style="position:sticky;top:0;z-index:4;">'+head+'</thead>'
         +'<tbody>'+body+'</tbody>'
@@ -6976,7 +6976,7 @@ function leaderboard(){
       +'</div>'
     +'</div>'
     // table
-    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 260px);">'
+    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 130px);">'
       +'<table style="width:100%;border-collapse:collapse;">'
         +'<thead style="position:sticky;top:0;z-index:4;background:#F4F7FB;">'
           +'<tr>'
