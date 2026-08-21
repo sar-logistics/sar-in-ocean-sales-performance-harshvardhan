@@ -5261,7 +5261,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     });
   });
 
-  var table = '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;box-shadow:0 1px 3px rgba(13,43,94,0.05);">'
+  var table = '<div style="position:relative;background:#fff;border:1px solid #E3EAF3;border-radius:12px;box-shadow:0 1px 3px rgba(13,43,94,0.05);overflow:hidden;">'
     +'<div style="padding:14px 18px;border-bottom:1px solid #E3EAF3;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;background:#fff;border-radius:12px 12px 0 0;">'
       +'<div style="display:flex;align-items:center;gap:10px;">'
         +'<div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#1D5FCC,#0D2B5E);display:flex;align-items:center;justify-content:center;">'
@@ -5284,7 +5284,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       +'</div>'
       +'<span style="font-size:11px;color:#94A3B8;font-weight:500;">'+dateLabel+'</span>'
     +'</div>'
-    +'<div style="overflow-x:auto;max-height:calc(100vh - '+(_showKpi ? '220' : '150')+'px);overflow-y:auto;contain:paint;">'
+    +'<div style="overflow-x:auto;max-height:calc(100vh - '+(_showKpi ? '220' : '150')+'px);overflow-y:auto;">'
       +'<table style="width:100%;border-collapse:collapse;min-width:700px;">'
         +thead
         +'<tbody>'+grandRows+bodyRows+'</tbody>'
