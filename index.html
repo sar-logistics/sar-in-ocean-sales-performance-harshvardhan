@@ -5978,21 +5978,26 @@ function tableRows(){
         if (v === 'Monthly' || v === 'Quarterly') {
           // Per month column — prorate by join/exit if rep wasn't active all month
           var m = filteredMonths()[ci];
+          // For zone entities — pick FY-appropriate monthly target per column
+          var _fy26MsCol = {'Apr-25':1,'May-25':1,'Jun-25':1,'Jul-25':1,'Aug-25':1,'Sep-25':1,'Oct-25':1,'Nov-25':1,'Dec-25':1,'Jan-26':1,'Feb-26':1,'Mar-26':1};
+          var colMonthlyTgt = (isZone && !isGrand && m)
+            ? (_fy26MsCol[m] ? (e.fy26MonthlyTarget || _tgtBase) : (e.fy27MonthlyTarget || _tgtBase))
+            : _tgtBase;
           if (m && (join || exit)) {
             var bounds = monthBounds(m);
             var active = activeDaysInRange(bounds[0], bounds[1], join, exit);
             if (active <= 0) return 0;
             var total = Math.round((new Date(bounds[1]) - new Date(bounds[0])) / 86400000) + 1;
-            return active < total ? Math.round(e.tgt * active / total) : e.tgt;
+            return active < total ? Math.round(colMonthlyTgt * active / total) : colMonthlyTgt;
           }
+          return colMonthlyTgt;
         }
 
         if (v === 'Weekly') {
-          // Per week — use weeklyTgt directly (weekly target already per-week)
           return e.tgt;
         }
 
-        return e.tgt;
+        return _tgtBase;
       });
       dispAch  = e.gp.map(function(v, ci){ var t = dispTgt[ci]; return t ? Math.round(v/t*100) : 0; });
     }
