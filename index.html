@@ -4576,7 +4576,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     + rows.map(function(r){ return buildBlock(r.name, tlIni(r.name), tlHue(r.name), r, isWeekly ? (r.weekData||{}) : (r.monthData||{}), false); }).join('')
     + '</tbody>';
 
-  return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
+  return '<div style="position:relative;background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
     +'<div style="overflow-x:auto;max-height:calc(100vh - 155px);overflow-y:auto;">'
     +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+'</table>'
     +'</div></div>';
