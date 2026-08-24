@@ -339,6 +339,7 @@ function _showDashboardBody() {
     months26 = ALL_FY.filter(function(m){ return cachedMonths.indexOf(m) >= 0; });
     if (months26.length === 0) months26 = cachedMonths.length > 0 ? cachedMonths : ALL_FY;
     repsRawOriginal = cached.repsRaw;
+    rebuildZoneRegionMap();
     // Invalidate cache if rev field missing (added in ocean-v9)
     if (repsRawOriginal.length > 0 && !repsRawOriginal[0].rev) {
       repsRawOriginal = [];
