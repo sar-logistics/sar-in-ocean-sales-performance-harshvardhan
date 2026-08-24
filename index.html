@@ -7769,7 +7769,7 @@ function openInsightDrill(drillType, name, drillMonth) {
   if (drillType === 'tradelane') {
     matched.forEach(function(r){
       r.tradelane = r._tg;
-      if (!r.loadingPort && r.srrLoadingPort) r.loadingPort = r.srrLoadingPort;
+      if (!r.loadingPort && r.srrLoadingCountry) r.loadingPort = r.srrLoadingCountry;
     });
   }
   var _iResult = {
