@@ -3994,6 +3994,13 @@ function tradelanePage(){
   var filterLobs = _INSIGHT_LOB_MAP[activeLob] || [];
   var _filterZonesTL = state.filterZones || [];
   var _filterRepsTL  = state.filterReps  || [];
+  var _filterRegionsTL = state.filterRegions || [];
+  // Expand Region filter into matching zones when no explicit Zone filter is set
+  if (_filterRegionsTL.length > 0 && _filterZonesTL.length === 0 && window._zoneRegionMap) {
+    _filterZonesTL = getZones().filter(function(z){
+      return _filterRegionsTL.indexOf(window._zoneRegionMap[z] || '') > -1;
+    });
+  }
   var _rlsRepsTL     = _getRLSReps(); // RLS: non-empty for sales rep / zonal manager
 
   // If zone/rep/RLS filter active and allDrillRows not loaded — trigger load and show spinner
