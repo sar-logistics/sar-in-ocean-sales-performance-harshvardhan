@@ -458,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v187-discharge-country-india-for-imports-1787554421";
+const DEPLOY_TS = "2026-08-21T-ocean-v188-include-zero-job-reps-1787558451";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1206,6 +1206,45 @@ async function computeSalesAggregate(db) {
       weekData: repWeekData[repKey] || {},
       lobData: repLobData[repKey] || {},
     });
+  }
+
+  // Include mapping-only reps (0 jobs, e.g. brand-new joiners) so they still
+  // appear in the dashboard with zero-filled metrics instead of being silently
+  // dropped just because they have no job records yet.
+  const _existingRepKeys = new Set(repsRaw.map(r => normalizeName(r.name)));
+  const _seenMappingKeys = new Set();
+  for (const fy of ["FY26", "FY27"]) {
+    for (const [key, entry] of Object.entries(repLookupByFY[fy] || {})) {
+      const normKey = normalizeName(entry.displayName);
+      if (_existingRepKeys.has(normKey) || _seenMappingKeys.has(normKey)) continue;
+      _seenMappingKeys.add(normKey);
+      const zeroArr = activeMonths.map(() => 0);
+      repsRaw.push({
+        name:  entry.displayName,
+        zone:  entry.zone,
+        lob:   entry.lob,
+        email: entry.email,
+        hue:   zoneHue(entry.zone),
+        gp: zeroArr, gpProv: zeroArr, gpActual: zeroArr, ship: zeroArr,
+        tons: zeroArr, teu: zeroArr, lcl: zeroArr,
+        rev: zeroArr, revBilled: zeroArr, revProv: zeroArr,
+        tank: zeroArr,
+        tgt:          entry.monthlyTarget || 0,
+        weeklyTgt:    entry.weeklyTarget  || 0,
+        yearlyTgt:    entry.yearlyTarget  || 0,
+        fy26YearlyTgt: entry.yearlyTarget || 0,
+        fy27YearlyTgt: entry.yearlyTarget || 0,
+        dailyTgt:     entry.dailyTarget   || 0,
+        tgtUSD:       entry.monthlyTargetUSD || 0,
+        weeklyTgtUSD: entry.weeklyTargetUSD  || 0,
+        yearlyTgtUSD: entry.yearlyTargetUSD  || 0,
+        dailyTgtUSD:  entry.dailyTargetUSD   || 0,
+        joinDate:     entry.joinDate && !isNaN(entry.joinDate) ? entry.joinDate.toISOString().slice(0,10) : null,
+        exitDate:     entry.exitDate && !isNaN(entry.exitDate) ? entry.exitDate.toISOString().slice(0,10) : null,
+        weekData: {},
+        lobData: {},
+      });
+    }
   }
 
   // Cross Sales branches
