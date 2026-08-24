@@ -2211,14 +2211,19 @@ function zoneEntity(zoneName){
   var isWeekly = state.reportView === 'Weekly' && weekDataLoaded();
   var idxs = filteredMonthIndices();
   var wkeys = isWeekly ? filteredWeekKeys() : null;
-  var zReps = repsRaw.filter(function(r){ return r.zone === zoneName; });
+  var _zeFr = state.filterReps && state.filterReps.length > 0 ? state.filterReps.map(function(x){ return normalizeName(x); }) : null;
+  var zReps = repsRaw.filter(function(r){
+    if (r.zone !== zoneName) return false;
+    if (_zeFr && _zeFr.indexOf(normalizeName(r.name)) === -1) return false;
+    return true;
+  });
   var zData = zonesRaw.find(function(z){ return z.zone === zoneName; }) || {};
   return {
     name: zoneName, initials: zoneName.slice(0,2).toUpperCase(),
     avatarBg: 'oklch(0.5 0.14 ' + zoneHue(zoneName) + ')',
     isZone: true, zone: zoneName,
     ship: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0);})
-                   : idxs.map(function(i){ var _ml=months26[i]; if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null; var _isCross=zoneName==='Cross Sales'; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl||_fl.indexOf(r.lob)>-1)&&(_isCross?!r._zone:r._zone===zoneName);}).length;} return sum(zReps.map(function(r){return r.ship[i]||0;})); }),
+                   : idxs.map(function(i){ var _ml=months26[i]; if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null; var _isCross=zoneName==='Cross Sales'; var _fr3=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl||_fl.indexOf(r.lob)>-1)&&(_isCross?!r._zone:r._zone===zoneName)&&(!_fr3||(_fr3.indexOf(r._sp)>-1));}).length;} return sum(zReps.map(function(r){return r.ship[i]||0;})); }),
     gp:   isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
                    : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gp)||0);},0);})) : sum(zReps.map(function(r){return (r.gp&&r.gp[i])||0;}));}),
     tons: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);})
