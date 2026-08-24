@@ -2154,6 +2154,11 @@ function grandEntity(){
       var v = state.reportView;
       var _fz = state.filterZones&&state.filterZones.length>0 ? state.filterZones : null;
       var _fr = state.filterReps&&state.filterReps.length>0 ? state.filterReps : null;
+      var _fregT = state.filterRegions&&state.filterRegions.length>0 ? state.filterRegions : null;
+      // Expand Region filter into matching zones when no explicit Zone filter is set
+      if (_fregT && !_fz && window._zoneRegionMap) {
+        _fz = getZones().filter(function(z){ return _fregT.indexOf(window._zoneRegionMap[z] || '') > -1; });
+      }
       // When zone filter active: sum only selected zones' targets
       // When rep filter active: sum only that rep's targets from repsRaw
       if (_fr && _fr.length > 0) {
