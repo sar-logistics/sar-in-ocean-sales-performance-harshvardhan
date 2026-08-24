@@ -458,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v184-srr-direct-country-fields-1787552285";
+const DEPLOY_TS = "2026-08-21T-ocean-v185-rename-loading-country-1787553513";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -634,7 +634,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
 
         // Compute tradelane group (_tg) from port field — mirrors SRR tradelane logic
         // Air Export: Discharge Port; Air Import: Loading Port; Sea Export: Discharge Country; Sea Import: Loading Port; ISO Tank: Consignee/Shipper Country
-        let _tg = "", _srrDischargeCountry = "", _srrLoadingPort = "";
+        let _tg = "", _srrDischargeCountry = "", _srrLoadingCountry = "";
         if (cls.kind === "AIR") {
           // SRR is the authoritative source for Air tradelane too — job sheet
           // ports are not reliable; use direct country fields from SRR.
@@ -643,7 +643,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
             ? (_srrTgByNo.airExport[_snoTgAir] || "IN – Others")
             : (_srrTgByNo.airImport[_snoTgAir] || "Others – IN");
           _srrDischargeCountry = cls.direction === "EXPORT" ? (_srrDetailByNo.airExport[_snoTgAir] || "") : "";
-          _srrLoadingPort      = cls.direction === "IMPORT" ? (_srrDetailByNo.airImport[_snoTgAir] || "") : "";
+          _srrLoadingCountry   = cls.direction === "IMPORT" ? (_srrDetailByNo.airImport[_snoTgAir] || "") : "";
         } else if (cls.kind === "SEA") {
           // SRR is the authoritative source for Sea tradelane — job sheet
           // fields (Discharge Country / Loading Country) are not reliable here.
@@ -652,7 +652,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
             ? (_srrTgByNo.seaExport[_snoTg] || "IN – Others")
             : (_srrTgByNo.seaImport[_snoTg] || "Others – IN");
           _srrDischargeCountry = cls.direction === "EXPORT" ? (_srrDetailByNo.seaExport[_snoTg] || "") : "";
-          _srrLoadingPort      = cls.direction === "IMPORT" ? (_srrDetailByNo.seaImport[_snoTg] || "") : "";
+          _srrLoadingCountry   = cls.direction === "IMPORT" ? (_srrDetailByNo.seaImport[_snoTg] || "") : "";
         } else if (cls.kind === "ISOTANK") {
           const _raw = cls.direction === "EXPORT"
             ? (String(job["Consignee Country"] || job["Destination Country"] || "").trim())
@@ -716,7 +716,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           _dn,   // display name from mapping — null if unmapped
           _tg,   // tradelane group (IN – US, US – IN etc) — SRR-sourced, for per-country count accuracy
           dischargeCountry: _srrDischargeCountry, // SRR-sourced, Sea Export only
-          srrLoadingPort:   _srrLoadingPort,       // SRR-sourced, Sea Import only
+          srrLoadingCountry: _srrLoadingCountry,   // SRR-sourced, direct Loading Country field
         });
       }
     }
@@ -3390,7 +3390,7 @@ module.exports = async function handler(req, res) {
       srrByNo[sno] = {
         tradelane: tlName || (cfg.dir === "Export" ? "IN – Others" : "Others – IN"),
         dischargeCountry: cfg.dir === "Export" ? raw : "",
-        srrLoadingPort:   cfg.dir === "Import" ? raw : "",
+        srrLoadingCountry: cfg.dir === "Import" ? raw : "",
       };
     }
     const cls = { kind:"SEA", direction: cfg.dir === "Export" ? "EXPORT" : "IMPORT" };
@@ -3421,7 +3421,7 @@ module.exports = async function handler(req, res) {
       rows.push({
         shipmentNo: sno, lob: cfg.dir==="Export"?"SEA EXPORT":"SEA IMPORT",
         tradelane, dischargeCountry: srr.dischargeCountry||"",
-        loadingPort: srr.srrLoadingPort||job["Loading Port"]||"",
+        loadingCountry: srr.srrLoadingCountry||job["Loading Port"]||"",
         dischargePort: job["Discharge Port"]||"",
         jobDate: (job._primaryDate||parseSheetDate(getDateValueFor(job,cls)||job["Job Date"]||"")||new Date(0)).toISOString(),
         masterNo: job["Master No."]||"", houseNo: job["House No."]||"",
