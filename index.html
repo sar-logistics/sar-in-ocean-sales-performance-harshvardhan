@@ -6896,12 +6896,39 @@ function leaderboard(){
 
   // Only show actual Sales Reps — exclude zone aggregates, nomination sales, branch/cross-sell entities
   var EXCLUDE_NAMES = ['nomination sales', 'nomination sales - us', 'cross sell', 'others'];
+  var _lbFz = state.filterZones && state.filterZones.length > 0 ? state.filterZones : null;
+  var _lbFreg = state.filterRegions && state.filterRegions.length > 0 ? state.filterRegions : null;
+  var _lbMonths = filteredMonths();
+  var _lbMN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var salesRepsOnly = repsRaw.filter(function(r){
     // Exclude branch/cross-sell entities (Mumbai, AMS, etc.)
     if (r.isBranch) return false;
     var nameLower = (r.name||'').toLowerCase();
     // Exclude non-individual entries by name
     if (EXCLUDE_NAMES.some(function(x){ return nameLower.includes(x); })) return false;
+    // Respect Zone filter
+    if (_lbFz) {
+      var hasCross = _lbFz.indexOf('Cross Sales') > -1;
+      if (hasCross && !r.zone) { /* ok */ }
+      else if (r.zone && _lbFz.indexOf(r.zone) > -1) { /* ok */ }
+      else return false;
+    }
+    // Respect Region filter
+    if (_lbFreg) {
+      var reg = (r.zone && window._zoneRegionMap) ? (window._zoneRegionMap[r.zone] || '') : '';
+      if (_lbFreg.indexOf(reg) === -1) return false;
+    }
+    // DOJ + DOE visibility — hide rep if outside their active period for selected range
+    var doj = r.joinDate ? new Date(r.joinDate) : null;
+    var doe = r.exitDate ? new Date(r.exitDate) : null;
+    if ((doj || doe) && _lbMonths.length > 0) {
+      var p0 = _lbMonths[0].split('-');
+      var rangeStart = new Date(Date.UTC(2000+parseInt(p0[1],10), _lbMN.indexOf(p0[0]), 1));
+      var pN = _lbMonths[_lbMonths.length-1].split('-');
+      var rangeEnd = new Date(Date.UTC(2000+parseInt(pN[1],10), _lbMN.indexOf(pN[0])+1, 0));
+      if (doj && rangeEnd < doj) return false;
+      if (doe && rangeStart > doe) return false;
+    }
     return true;
   });
 
