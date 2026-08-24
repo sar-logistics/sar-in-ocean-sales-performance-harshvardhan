@@ -458,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v190-usd-rate-94-1787563659";
+const DEPLOY_TS = "2026-08-21T-ocean-v191-dynamic-region-mapping-1787564148";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -868,6 +868,7 @@ async function computeSalesAggregate(db) {
     const entry = {
       displayName:   String(row["Display Name"] || row["Sales Rep Name"] || "").trim(),
       zone:          String(row["Zone"] || "Unassigned").trim(),
+      region:        String(row["Region"] || "").trim(),
       lob:           String(row["LOB"] || "").trim(),
       monthlyTarget, weeklyTarget, yearlyTarget, dailyTarget,
       monthlyTargetUSD, weeklyTargetUSD, yearlyTargetUSD, dailyTargetUSD,
@@ -1185,6 +1186,7 @@ async function computeSalesAggregate(db) {
     repsRaw.push({
       name:  meta.displayName,
       zone:  meta.zone,
+      region: meta.region || "",
       lob:   meta.lob,
       email: meta.email,
       hue:   zoneHue(meta.zone),
@@ -1224,6 +1226,7 @@ async function computeSalesAggregate(db) {
       repsRaw.push({
         name:  entry.displayName,
         zone:  entry.zone,
+        region: entry.region || "",
         lob:   entry.lob,
         email: entry.email,
         hue:   zoneHue(entry.zone),
