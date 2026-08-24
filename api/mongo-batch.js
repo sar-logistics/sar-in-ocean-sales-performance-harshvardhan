@@ -458,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v186-revert-discharge-fallback-1787554107";
+const DEPLOY_TS = "2026-08-21T-ocean-v187-discharge-country-india-for-imports-1787554421";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -715,7 +715,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           _zone, // zone from mapping — null if unmapped
           _dn,   // display name from mapping — null if unmapped
           _tg,   // tradelane group (IN – US, US – IN etc) — SRR-sourced, for per-country count accuracy
-          dischargeCountry: _srrDischargeCountry, // SRR-sourced, Sea Export only
+          dischargeCountry: cls.direction === "IMPORT" ? "India" : _srrDischargeCountry, // Import always discharges in India; Export uses SRR-sourced country
           srrLoadingCountry: _srrLoadingCountry,   // SRR-sourced, direct Loading Country field
         });
       }
