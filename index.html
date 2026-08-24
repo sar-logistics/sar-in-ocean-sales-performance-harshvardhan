@@ -7167,6 +7167,23 @@ function render(){
     state.pendencyZoneOpen[currentUser.zone] = true;
   }
   var _tRender = performance.now();
+  // PERMANENT FIX: when Region filter is active but Zone filter is empty,
+  // expand Region -> matching zones and write directly into state.filterZones.
+  // This is the single source of truth every scattered filter check reads
+  // from (state.filterZones), so Region now propagates everywhere
+  // automatically without needing to patch each individual filter block.
+  if (state.filterRegions && state.filterRegions.length > 0
+      && (!state.filterZones || state.filterZones.length === 0)
+      && window._zoneRegionMap) {
+    state.filterZones = getZones().filter(function(z){
+      return state.filterRegions.indexOf(window._zoneRegionMap[z] || '') > -1;
+    });
+    state._regionExpandedZones = true; // marker so we can clear this expansion later if region is deselected
+  } else if (state._regionExpandedZones && (!state.filterRegions || state.filterRegions.length === 0)) {
+    // Region was cleared — remove the zones we auto-added for it
+    state.filterZones = [];
+    state._regionExpandedZones = false;
+  }
   computeFilteredRepsRaw();
   // Skip model() on insight pages — they don't use it, saves CPU
   var M = (state.page==='customers'||state.page==='agents'||state.page==='tradelane'||state.page==='usage'||state.page==='teams'||state.page==='admin'||state.page==='finance'||state.page==='op') ? null : model();
