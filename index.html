@@ -7638,8 +7638,9 @@ function computeDrillResult(entity, metric, month){
     } else {
       var isZoneEntity = repsRaw.some(function(r){ return !r.isBranch && r.zone === entity; });
       if (isZoneEntity) {
-        // Zone: row._zone must match
+        // Zone: row._zone must match, AND respect global Rep filter if active
         if (row._zone !== entity) continue;
+        if (_fr.length > 0 && _fr.map(function(n){return normalizeName(n);}).indexOf(row._sp) === -1) continue;
       } else {
         // Rep: row._dn must match display name
         var repMatch = row._dn === entity;
