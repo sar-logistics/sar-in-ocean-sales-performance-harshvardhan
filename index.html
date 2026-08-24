@@ -190,23 +190,18 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 var CACHE_VERSION = 'ocean-v164';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
-// Used by Regional Manager RLS to filter reps by region
-window._zoneRegionMap = {
-  'INZ01 (Deen Dayal)':     'North',
-  'INZ02 (Kamal Kant)':     'North',
-  'INZ03 (Mukesh Palav)':   'North',
-  'INZ04 (Nikhil Joshi)':   'West',
-  'INZ05 (Tanmay Sharma)':  'North',
-  'INZ06 (Chittranjan)':    'West',
-  'INZ07 (Tapan Sengupta)': 'East',
-  'INZ08 (Bhupati N)':      'South',
-  'INZ09 (Saduddin S)':     'South',
-  'INZ10 (Mugilan S)':      'South',
-  'INZ11 (Surojen Lobo)':   'South',
-  'INZ13 (ISO Tank)':       'Tank',
-  'INZ14 (Shivangi Mehta)': 'Network',
-  'INZ15 (Anita Chowdhary)':'North',
-};
+// Used by Regional Manager RLS to filter reps by region.
+// Built dynamically from repsRaw (Region column in mapping sheet) so any
+// new zone/region added to the sheet is picked up automatically — no
+// hardcoded list to maintain.
+window._zoneRegionMap = {};
+function rebuildZoneRegionMap(){
+  var map = {};
+  (repsRawOriginal || []).forEach(function(r){
+    if (r.zone && r.region && !map[r.zone]) map[r.zone] = r.region;
+  });
+  window._zoneRegionMap = map;
+}
  // bump on every deploy to wipe stale localStorage
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
@@ -849,6 +844,7 @@ function fetchLiveData(callback, force){
         if (data.repsRaw && data.repsRaw.length > 0) {
           _liveDataRetryCount = 0;
           repsRawOriginal = data.repsRaw;
+          rebuildZoneRegionMap();
           zonesRaw  = data.zones  || [];
           // Keep months in FY order, only include months with actual data
           var ALL_FY2 = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25',
@@ -9492,6 +9488,7 @@ window.addEventListener('load', function() {
           var salesChanged = dbUpdated > cacheBuiltAt;
           if (!dataReady || salesChanged) {
             repsRawOriginal = d.sales.repsRaw;
+            rebuildZoneRegionMap();
             zonesRaw  = d.sales.zones || [];
             months26  = newMonths;
             syncDateRangeToData();
