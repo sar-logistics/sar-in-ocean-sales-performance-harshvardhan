@@ -458,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v185-rename-loading-country-1787553513";
+const DEPLOY_TS = "2026-08-21T-ocean-v186-revert-discharge-fallback-1787554107";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
