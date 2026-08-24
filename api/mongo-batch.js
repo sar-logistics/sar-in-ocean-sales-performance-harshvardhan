@@ -458,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v188-include-zero-job-reps-1787558451";
+const DEPLOY_TS = "2026-08-21T-ocean-v189-fix-doj-doe-utc-timezone-shift-1787558970";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -876,16 +876,18 @@ async function computeSalesAggregate(db) {
         if (!d) return null;
         var dt = new Date(d);
         if (isNaN(dt)) return null;
-        // Use START of that month
-        return new Date(Date.UTC(dt.getFullYear(), dt.getMonth(), 1));
+        // Use UTC getters to avoid timezone shift — d may already be UTC ISO
+        // string; using local getMonth()/getFullYear() can shift across the
+        // UTC boundary (e.g. Aug 1 IST midnight = Jul 31 18:30 UTC).
+        return new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), 1));
       })(),
       exitDate:      (function(){ 
         var d = row["Date of Exit"];
         if (!d) return null;
         var dt = new Date(d);
         if (isNaN(dt)) return null;
-        // Use END of that month to avoid timezone cutoff issues
-        return new Date(Date.UTC(dt.getFullYear(), dt.getMonth()+1, 0, 23, 59, 59));
+        // Use UTC getters to avoid timezone shift (see joinDate above)
+        return new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth()+1, 0, 23, 59, 59));
       })(),
       email:         String(row["Email ID"] || "").toLowerCase().trim(),
     };
