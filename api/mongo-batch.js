@@ -458,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v183-doj-doe-month-fix-1787297790";
+const DEPLOY_TS = "2026-08-21T-ocean-v184-srr-direct-country-fields-1787552285";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -548,32 +548,34 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
       JOB_COLLECTIONS.map(c => db.collection(c).find({}).toArray().then(r => ({ collName: c, rows: r })))
     );
 
-    // SRR is the authoritative source for tradelane data — NOT the job sheet
-    // (job documents do not reliably carry Discharge Country / Loading Port).
-    // Build shipmentNo -> tradelane maps, same logic as computeTradelaneAggregate.
-    const _srrTgByNo = { export: {}, import: {} };
-    const _srrDetailByNo = { export: {}, import: {} }; // sno -> raw discharge country / loading port, for drill display
+    // SRR is the authoritative source for tradelane data for BOTH Sea and Air
+    // (job documents do not reliably carry Discharge Country / Loading Country).
+    // All 4 SRR tabs now carry direct Loading Country / Discharge Country
+    // columns — use those directly instead of deriving from port codes.
+    const _srrTgByNo = { seaExport: {}, seaImport: {}, airExport: {}, airImport: {} };
+    const _srrDetailByNo = { seaExport: {}, seaImport: {}, airExport: {}, airImport: {} };
+    const _SRR_DRILL_CONFIG = [
+      { coll: "srr_sea_export", key: "seaExport", countryField: "Discharge Country", dir: "Export" },
+      { coll: "srr_sea_import", key: "seaImport", countryField: "Loading Country",   dir: "Import" },
+      { coll: "srr_air_export", key: "airExport", countryField: "Discharge Country", dir: "Export" },
+      { coll: "srr_air_import", key: "airImport", countryField: "Loading Country",   dir: "Import" },
+    ];
     try {
-      const [_srrExpRows, _srrImpRows] = await Promise.all([
-        db.collection("srr_sea_export").find({}, { projection: { "Shipment No": 1, "Discharge Country": 1 } }).toArray(),
-        db.collection("srr_sea_import").find({}, { projection: { "Shipment No": 1, "Loading Port": 1 } }).toArray(),
-      ]);
-      for (const r of _srrExpRows) {
-        const sno = String(r["Shipment No"] || "").trim(); if (!sno) continue;
-        const raw = String(r["Discharge Country"] || "").trim();
-        const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
-        const tlBase = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
-        _srrTgByNo.export[sno] = tlBase ? "IN – " + tlBase : "Others";
-        _srrDetailByNo.export[sno] = raw;
-      }
-      for (const r of _srrImpRows) {
-        const sno = String(r["Shipment No"] || "").trim(); if (!sno) continue;
-        const raw = String(r["Loading Port"] || "").trim();
-        const info = portToInfo(raw);
-        const tlBase = info.tradelane || cityToTradelane(raw);
-        _srrTgByNo.import[sno] = tlBase ? tlBase + " – IN" : "Others";
-        _srrDetailByNo.import[sno] = raw;
-      }
+      await Promise.all(_SRR_DRILL_CONFIG.map(async (cfg) => {
+        const rows = await db.collection(cfg.coll).find({}, {
+          projection: { "Shipment No": 1, [cfg.countryField]: 1 }
+        }).toArray();
+        for (const r of rows) {
+          const sno = String(r["Shipment No"] || "").trim(); if (!sno) continue;
+          const raw = String(r[cfg.countryField] || "").trim();
+          const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
+          const tlBase = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
+          _srrTgByNo[cfg.key][sno] = tlBase
+            ? (cfg.dir === "Export" ? "IN – " + tlBase : tlBase + " – IN")
+            : (cfg.dir === "Export" ? "IN – Others" : "Others – IN");
+          _srrDetailByNo[cfg.key][sno] = raw;
+        }
+      }));
     } catch (e) { console.error("SRR tg map fetch failed:", e && e.message); }
 
     const allRows = [];
@@ -634,20 +636,23 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         // Air Export: Discharge Port; Air Import: Loading Port; Sea Export: Discharge Country; Sea Import: Loading Port; ISO Tank: Consignee/Shipper Country
         let _tg = "", _srrDischargeCountry = "", _srrLoadingPort = "";
         if (cls.kind === "AIR") {
-          const _portField = cls.direction === "EXPORT" ? "Discharge Port" : "Loading Port";
-          const _portVal = String(job[_portField] || "").trim();
-          const _tlBase = portToInfo(_portVal).tradelane || (!_portVal ? "" : cityToTradelane(_portVal));
-          // Apply same IN– directional prefix as Sea/Isotank
-          _tg = _tlBase ? (cls.direction === "EXPORT" ? "IN – " + _tlBase : _tlBase + " – IN") : "Others";
+          // SRR is the authoritative source for Air tradelane too — job sheet
+          // ports are not reliable; use direct country fields from SRR.
+          const _snoTgAir = String(job["Shipment No"] || "").trim();
+          _tg = cls.direction === "EXPORT"
+            ? (_srrTgByNo.airExport[_snoTgAir] || "IN – Others")
+            : (_srrTgByNo.airImport[_snoTgAir] || "Others – IN");
+          _srrDischargeCountry = cls.direction === "EXPORT" ? (_srrDetailByNo.airExport[_snoTgAir] || "") : "";
+          _srrLoadingPort      = cls.direction === "IMPORT" ? (_srrDetailByNo.airImport[_snoTgAir] || "") : "";
         } else if (cls.kind === "SEA") {
           // SRR is the authoritative source for Sea tradelane — job sheet
-          // fields (Discharge Country / Loading Port) are not reliable here.
+          // fields (Discharge Country / Loading Country) are not reliable here.
           const _snoTg = String(job["Shipment No"] || "").trim();
           _tg = cls.direction === "EXPORT"
-            ? (_srrTgByNo.export[_snoTg] || "Others")
-            : (_srrTgByNo.import[_snoTg] || "Others");
-          _srrDischargeCountry = cls.direction === "EXPORT" ? (_srrDetailByNo.export[_snoTg] || "") : "";
-          _srrLoadingPort      = cls.direction === "IMPORT" ? (_srrDetailByNo.import[_snoTg] || "") : "";
+            ? (_srrTgByNo.seaExport[_snoTg] || "IN – Others")
+            : (_srrTgByNo.seaImport[_snoTg] || "Others – IN");
+          _srrDischargeCountry = cls.direction === "EXPORT" ? (_srrDetailByNo.seaExport[_snoTg] || "") : "";
+          _srrLoadingPort      = cls.direction === "IMPORT" ? (_srrDetailByNo.seaImport[_snoTg] || "") : "";
         } else if (cls.kind === "ISOTANK") {
           const _raw = cls.direction === "EXPORT"
             ? (String(job["Consignee Country"] || job["Destination Country"] || "").trim())
@@ -1991,11 +1996,13 @@ async function computeTradelaneAggregate(db) {
   // Sea Import: Loading Port → portToInfo
   // Air Export: Discharge Port → portToInfo
   // Air Import: Loading Port → portToInfo
+  // All 4 SRR tabs now carry direct "Loading Country" / "Discharge Country"
+  // columns — use those directly instead of deriving from port codes.
   const SRR_CONFIG = [
-    { coll: "srr_sea_export",  lob: "Ocean",    dir: "Export", countryField: "Discharge Country", fromPort: false },
-    { coll: "srr_sea_import",  lob: "Ocean",    dir: "Import", countryField: "Loading Port",       fromPort: true  },
-    { coll: "srr_air_export",  lob: "Air",      dir: "Export", countryField: "Discharge Port",     fromPort: true  },
-    { coll: "srr_air_import",  lob: "Air",      dir: "Import", countryField: "Loading Port",       fromPort: true  },
+    { coll: "srr_sea_export",  lob: "Ocean", dir: "Export", countryField: "Discharge Country" },
+    { coll: "srr_sea_import",  lob: "Ocean", dir: "Import", countryField: "Loading Country"    },
+    { coll: "srr_air_export",  lob: "Air",   dir: "Export", countryField: "Discharge Country" },
+    { coll: "srr_air_import",  lob: "Air",   dir: "Import", countryField: "Loading Country"    },
   ];
 
   // shipmentNo → { country, tradelane, lob, dir }
@@ -2010,26 +2017,17 @@ async function computeTradelaneAggregate(db) {
         const sno = String(r["Shipment No"] || "").trim();
         if (!sno) continue;
         const raw = String(r[cfg.countryField] || "").trim();
-        let country = "", tradelane = "";
-        if (cfg.fromPort) {
-          const info = portToInfo(raw);
-          country = info.country;
-          // Same fallback as the drill-rows SRR builder: if the ISO port
-          // code lookup misses, try matching by city name before giving up.
-          tradelane = info.tradelane || cityToTradelane(raw);
+        const country = raw;
+        const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
+        const tlBase = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
+        let tradelane = tlBase;
+        // Directional prefix — applies to both Ocean and Air; blank country -> "Others" on that side
+        if (cfg.dir === "Export") {
+          tradelane = tradelane ? ("IN – " + tradelane) : "IN – Others";
         } else {
-          country = raw;
-          const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
-          const tlBase = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
-          tradelane = tlBase;
+          tradelane = tradelane ? (tradelane + " – IN") : "Others – IN";
         }
-        // Directional prefix for Ocean
-        if (cfg.lob === "Ocean") {
-          tradelane = tradelane
-            ? (cfg.dir === "Export" ? "IN – " + tradelane : tradelane + " – IN")
-            : "Others";
-        }
-        if (country || cfg.lob === "Ocean") srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
+        srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
       }
     } catch (e) {
       console.error("SRR fetch failed for", cfg.coll, ":", e && e.message);
@@ -3380,20 +3378,17 @@ module.exports = async function handler(req, res) {
     for (const r of srrRows) {
       const sno = String(r["Shipment No"] || "").trim();
       if (!sno) continue;
+      // Both Export/Import SRR tabs now carry direct country columns.
       const raw = cfg.dir === "Export"
         ? String(r["Discharge Country"] || "").trim()
-        : String(r["Loading Port"] || "").trim();
-      let tlName = "";
-      if (cfg.dir === "Import") {
-        const info = portToInfo(raw);
-        tlName = info.tradelane ? info.tradelane + " – IN" : "";
-      } else {
-        const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
-        const tlBase = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
-        tlName = tlBase ? "IN – " + tlBase : "";
-      }
+        : String(r["Loading Country"] || "").trim();
+      const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
+      const tlBase = entry ? entry.tradelane : (countryNameToTradelane(raw) || "");
+      const tlName = cfg.dir === "Export"
+        ? (tlBase ? "IN – " + tlBase : "")
+        : (tlBase ? tlBase + " – IN" : "");
       srrByNo[sno] = {
-        tradelane: tlName || "Others",
+        tradelane: tlName || (cfg.dir === "Export" ? "IN – Others" : "Others – IN"),
         dischargeCountry: cfg.dir === "Export" ? raw : "",
         srrLoadingPort:   cfg.dir === "Import" ? raw : "",
       };
