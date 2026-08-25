@@ -458,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v199-CRITICAL-fix-revenue-lock-lob-mismatch-1787635090";
+const DEPLOY_TS = "2026-08-21T-ocean-v200-fix-customer-insights-revenue-lock-1787635392";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1436,11 +1436,15 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
 
       const customer = String(job["Customer"] || "").trim();
       if (!customer) continue;
-      const isLocked = !!(job["Job Rev Recognition Date"]);
-      const revenue = isLocked
-        ? (parseFloat(job["Billed Revenue (C)"] || 0) || 0)
-        : (parseFloat(job["Provisional Revenue (A)"] || 0) || 0);
-      const { gp } = pickGP(job, cls);
+      // FIXED: revenue lock now uses the SAME isProvisional as GP (pickGP
+      // correctly handles Air=Financial Lock vs Sea/ISOTank=Job Rev
+      // Recognition Date) — was previously hardcoded to Job Rev Recognition
+      // Date regardless of LOB, causing Air rows' revenue to disagree with
+      // their own GP lock status.
+      const { gp, isProvisional } = pickGP(job, cls);
+      const revenue = isProvisional
+        ? (parseFloat(job["Provisional Revenue (A)"] || 0) || 0)
+        : (parseFloat(job["Billed Revenue (C)"] || 0) || 0);
 
       // Tons for Air only
       let tons = 0;
