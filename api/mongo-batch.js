@@ -457,7 +457,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v196-teu-debug-v2-1787632539";
+const DEPLOY_TS = "2026-08-21T-ocean-v197-fix-missing-cargotype-projection-1787632675";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1362,7 +1362,7 @@ async function getCustomerAggregate(db, force, dateFrom, dateTo, cacheKey) {
 }
 
 async function computeCustomerAggregate(db, dateFrom, dateTo) {
-  const _localTeuDebug = []; let _lclRowCount = 0; let _lclTeuSum = 0; let _totalRowsSeen = 0;
+  
   // Parse active month labels from dateFrom/dateTo (e.g. "Jan-26" to "Jun-26")
   const FY_MONTHS_LIST = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
     "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
@@ -1399,7 +1399,7 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
     "Sales Person": 1,
     "Financial Lock": 1, "Operation Lock": 1, "Job Rev Recognition Date": 1, "Provisional Revenue (A)": 1,
     "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
-    "Container TEU": 1, "Volume": 1, "Volume Unit": 1,
+    "Container TEU": 1, "Volume": 1, "Volume Unit": 1, "Cargo Type": 1,
     "ETD Loading Port": 1, "ETD First Leg of Origin": 1, "ETA Discharge": 1, "ETA Last Leg of Destination": 1, "Job Date": 1,
     "Job Rev Recognition Date": 1, "Provisional Revenue (A)": 1,
   };
@@ -1449,16 +1449,11 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
         else tons = rawW / 1000;
       }
 
-      _totalRowsSeen++;
       // TEU for Ocean/ISO Tank — any Cargo Type other than LCL counts as TEU
       let teu = 0;
       if (!isAir) {
         const _cargoTypeCI = String(job["Cargo Type"] || "").toUpperCase().trim();
         if (_cargoTypeCI !== "LCL") teu = parseFloat(job["Container TEU"] || 0) || 0;
-        if (_cargoTypeCI === "LCL") {
-          _lclRowCount++;
-          _lclTeuSum += parseFloat(job["Container TEU"]||0) || 0;
-        }
       }
 
       // Derive month label for this job
@@ -1540,10 +1535,6 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
 
   return {
     success: true,
-    _teuDebugRows: _localTeuDebug,
-    _debugLclRowCount: _lclRowCount,
-    _debugLclTeuSum: _lclTeuSum,
-    _debugTotalRowsSeen: _totalRowsSeen,
     lobs: {
       "Air":      buildStats(custMapByLob["Air"]),
       "Ocean":    buildStats(custMapByLob["Ocean"]),
@@ -2338,7 +2329,7 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
     "Financial Lock": 1, "Operation Lock": 1, "Job Rev Recognition Date": 1, "Provisional Revenue (A)": 1,
     "Sales Person": 1,
     "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
-    "Container TEU": 1,
+    "Container TEU": 1, "Cargo Type": 1,
     "ETD Loading Port": 1, "ETD First Leg of Origin": 1, "ETA Discharge": 1, "ETA Last Leg of Destination": 1, "Job Date": 1,
     "Job Rev Recognition Date": 1, "Provisional Revenue (A)": 1,
   };
