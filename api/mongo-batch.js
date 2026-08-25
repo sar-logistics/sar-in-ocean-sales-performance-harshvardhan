@@ -457,7 +457,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v193-fix-customer-agent-date-fallback-direction-1787630727";
+const DEPLOY_TS = "2026-08-21T-ocean-v194-teu-debug-1787631919";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1362,6 +1362,7 @@ async function getCustomerAggregate(db, force, dateFrom, dateTo, cacheKey) {
 }
 
 async function computeCustomerAggregate(db, dateFrom, dateTo) {
+  global.__teuDebugRows = [];
   // Parse active month labels from dateFrom/dateTo (e.g. "Jan-26" to "Jun-26")
   const FY_MONTHS_LIST = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
     "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
@@ -1453,6 +1454,10 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
       if (!isAir) {
         const _cargoTypeCI = String(job["Cargo Type"] || "").toUpperCase().trim();
         if (_cargoTypeCI !== "LCL") teu = parseFloat(job["Container TEU"] || 0) || 0;
+        if (!global.__teuDebugRows) global.__teuDebugRows = [];
+        if (global.__teuDebugRows.length < 5 && _cargoTypeCI === "LCL" && parseFloat(job["Container TEU"]||0) > 0) {
+          global.__teuDebugRows.push({sno: job["Shipment No"], rawCargoType: job["Cargo Type"], cargoTypeCI: _cargoTypeCI, teuAssigned: teu, containerTeuRaw: job["Container TEU"]});
+        }
       }
 
       // Derive month label for this job
@@ -1534,6 +1539,7 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
 
   return {
     success: true,
+    _teuDebugRows: global.__teuDebugRows || [],
     lobs: {
       "Air":      buildStats(custMapByLob["Air"]),
       "Ocean":    buildStats(custMapByLob["Ocean"]),
