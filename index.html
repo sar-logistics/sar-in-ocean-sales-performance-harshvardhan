@@ -2124,7 +2124,24 @@ function grandEntity(){
                    return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].gp)||0);},0);})) : sum(repsRaw.map(function(r){return (r.gp&&r.gp[i])||0;}));
                  }),
     tons: isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);})
-                   : idxs.map(function(i){return sum(repsRaw.map(function(r){return (r.tons&&r.tons[i])||0;}));}),
+                   : idxs.map(function(i){var _ml=months26[i];
+                     if(allDrillRows&&allDrillRows.length>0){
+                       var _flTo=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+                       var _fzTo=state.filterZones&&state.filterZones.length>0?state.filterZones:null;
+                       var _frTo=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null;
+                       return allDrillRows.filter(function(r){
+                         if(r._ml!==_ml) return false;
+                         if(_flTo && _flTo.indexOf(r.lob)===-1) return false;
+                         if(_fzTo){
+                           var _hcTo=_fzTo.indexOf('Cross Sales')>-1;
+                           if(_hcTo && !r._zone){} else if(r._zone && _fzTo.indexOf(r._zone)>-1){} else return false;
+                         }
+                         if(_frTo && (!r._sp || _frTo.indexOf(r._sp)===-1)) return false;
+                         return true;
+                       }).reduce(function(s,r){return s+(r.tons||0);},0);
+                     }
+                     return sum(repsRaw.map(function(r){return (r.tons&&r.tons[i])||0;}));
+                   }),
     teu:  isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0);},0);})
                    : idxs.map(function(i){var _ml=months26[i];
                      if(allDrillRows&&allDrillRows.length>0){
@@ -2266,7 +2283,17 @@ function zoneEntity(zoneName){
     gp:   isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
                    : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gp)||0);},0);})) : sum(zReps.map(function(r){return (r.gp&&r.gp[i])||0;}));}),
     tons: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);})
-                   : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].tons)||0);},0);})) : sum(zReps.map(function(r){return (r.tons&&r.tons[i])||0;}));}),
+                   : idxs.map(function(i){var m=months26[i]; var _ml=months26[i];
+                     if(allDrillRows&&allDrillRows.length>0){
+                       var _flZt=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+                       var _isCrossZt=zoneName==='Cross Sales';
+                       return allDrillRows.filter(function(r){
+                         if(r._ml!==_ml) return false;
+                         if(_flZt && _flZt.indexOf(r.lob)===-1) return false;
+                         return _isCrossZt ? !r._zone : r._zone===zoneName;
+                       }).reduce(function(s,r){return s+(r.tons||0);},0);
+                     }
+                     return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].tons)||0);},0);})) : sum(zReps.map(function(r){return (r.tons&&r.tons[i])||0;}));}),
     teu:  isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0);},0);})
                    : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].teu)||0);},0);})) : sum(zReps.map(function(r){return (r.teu&&r.teu[i])||0;}));}),
     lcl:  isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].lcl)||0);},0);})
