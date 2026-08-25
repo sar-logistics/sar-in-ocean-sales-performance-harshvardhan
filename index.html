@@ -9561,7 +9561,11 @@ document.addEventListener('click', function(ev){
     if (!wasOpen) {
       // Compute the popup's screen position SYNCHRONOUSLY, from the trigger
       // element that still exists right now (before render() destroys it).
-      var rect = el.getBoundingClientRect();
+      // Anchor to the FULL column header cell (not just the small arrow
+      // icon) so the popup clearly sits under the correct column instead of
+      // looking ambiguously positioned at a column boundary.
+      var thEl = el.closest("th") || el;
+      var rect = thEl.getBoundingClientRect();
       var top = rect.bottom + 6;
       var left = rect.left;
       var maxLeft = window.innerWidth - 296;
