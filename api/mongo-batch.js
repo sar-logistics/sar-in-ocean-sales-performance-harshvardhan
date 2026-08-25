@@ -287,9 +287,8 @@ function hasTeuLclRow(cls) { return cls.kind === "SEA" || cls.kind === "ISOTANK"
 // depending purely on what Cargo Type says, not on its LOB classification.
 function cargoMetricFor(job) {
   const cargoType = String(job["Cargo Type"] || "").toUpperCase().trim();
-  if (cargoType === "FCL" || cargoType === "LIQUID (CONT)") return "TEU";
   if (cargoType === "LCL") return "LCL";
-  return null; // unrecognized Cargo Type — contributes to neither TEU nor LCL
+  return "TEU"; // any Cargo Type other than LCL counts as TEU (FCL, Liquid (Cont), blank, etc.)
 }
 
 // Date column: Export-direction rows use "ETD Loading Port", Import-direction
@@ -458,7 +457,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v191-dynamic-region-mapping-1787564148";
+const DEPLOY_TS = "2026-08-21T-ocean-v192-teu-consistent-non-lcl-rule-1787629756";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1448,10 +1447,11 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
         else tons = rawW / 1000;
       }
 
-      // TEU for Ocean/ISO Tank
+      // TEU for Ocean/ISO Tank — any Cargo Type other than LCL counts as TEU
       let teu = 0;
       if (!isAir) {
-        teu = parseFloat(job["Container TEU"] || 0) || 0;
+        const _cargoTypeCI = String(job["Cargo Type"] || "").toUpperCase().trim();
+        if (_cargoTypeCI !== "LCL") teu = parseFloat(job["Container TEU"] || 0) || 0;
       }
 
       // Derive month label for this job
@@ -2152,13 +2152,14 @@ async function computeTradelaneAggregate(db) {
         else if (wUnit === "lb" || wUnit === "lbs") tons = rawW * 0.000453592;
         else tons = rawW / 1000;
       }
-      const teu = !isAir ? (parseFloat(job["Container TEU"] || 0) || 0) : 0;
-      // FCL TEU vs Tank TEU vs LCL
       const cargoType = String(job["Cargo Type"] || "").toUpperCase().trim();
       const isIsoTank = cfg.lob === "ISO Tank";
-      const fclTeu  = (!isAir && !isIsoTank && (cargoType === "FCL" || cargoType === "LIQUID (CONT)")) ? teu : 0;
-      const tankTeu = (!isAir && isIsoTank) ? teu : 0;
-      const lclVol  = (!isAir && cargoType === "LCL") ? (parseFloat(job["Volume"] || 0) || 0) : 0;
+      const isLclRow = cargoType === "LCL";
+      // Any Cargo Type other than LCL counts as TEU (matches dashboard-wide rule)
+      const teu = (!isAir && !isLclRow) ? (parseFloat(job["Container TEU"] || 0) || 0) : 0;
+      const fclTeu  = (!isAir && !isIsoTank && !isLclRow) ? teu : 0;
+      const tankTeu = (!isAir && isIsoTank && !isLclRow) ? teu : 0;
+      const lclVol  = (!isAir && isLclRow) ? (parseFloat(job["Volume"] || 0) || 0) : 0;
 
       const rawSP = String(job["Sales Person"] || "").trim();
       const dispSP = rawSP ? rawSP.split("|")[0].trim() : "";
@@ -2380,7 +2381,10 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
         else tons = rawW / 1000;
       }
       let teu = 0;
-      if (!isAir) teu = parseFloat(job["Container TEU"] || 0) || 0;
+      if (!isAir) {
+        const _cargoTypeCI2 = String(job["Cargo Type"] || "").toUpperCase().trim();
+        if (_cargoTypeCI2 !== "LCL") teu = parseFloat(job["Container TEU"] || 0) || 0;
+      }
 
       function addTo(map, key) {
         if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0 };
