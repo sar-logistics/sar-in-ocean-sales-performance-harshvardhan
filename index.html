@@ -9021,7 +9021,7 @@ document.addEventListener('click', function(ev){
     }
     _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops);
   }
-  else if(act==='filterZoneAll'){ ev.stopPropagation(); state.filterZones=[]; _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterZoneAll'){ ev.stopPropagation(); state.filterZones=[]; state.filterRegions=[]; state._regionExpandedZones=false; _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleFilterZone'){
     ev.stopPropagation();
     var zv = el.getAttribute('data-val');
@@ -9031,6 +9031,9 @@ document.addEventListener('click', function(ev){
     } else {
       state.filterZones = state.filterZones.concat([zv]);
     }
+    // User is now manually editing zones — hand off control from the Region
+    // auto-expansion so it stops overwriting this edit on the next render.
+    state._regionExpandedZones = false;
     // Clear rep filter when zone changes so rep list resets to zone's reps
     state.filterReps = [];
     _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops);
@@ -9044,7 +9047,7 @@ document.addEventListener('click', function(ev){
           state.filterZones = []; state._regionExpandedZones = false;
           render(); }
         else if(act==='toggleFilterZoneDrop'){ ev.stopPropagation(); state.filterZoneDropOpen=!state.filterZoneDropOpen; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='filterResetAll'){ ev.stopPropagation(); state.filterLobs=[]; state.filterReps=[]; state.filterZones=[]; _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterResetAll'){ ev.stopPropagation(); state.filterLobs=[]; state.filterReps=[]; state.filterZones=[]; state.filterRegions=[]; state._regionExpandedZones=false; _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='rateEdit'){ state.rateEditing=true; render(); setTimeout(function(){ var inp=document.getElementById('rate-input'); if(inp) inp.focus(); },50); }
   else if(act==='rateCommit'){ var v=parseFloat(document.getElementById('rate-input').value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
   else if(act==='feedbackOpen'){ ev.stopPropagation(); state.feedbackOpen=true; state.feedbackSent=false; state.feedbackText=''; render(); }
