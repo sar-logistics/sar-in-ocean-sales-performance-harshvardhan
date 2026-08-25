@@ -458,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v200-fix-customer-insights-revenue-lock-1787635392";
+const DEPLOY_TS = "2026-08-21T-ocean-v201-fix-tons-teu-lcl-premature-rounding-1787647718";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1178,9 +1178,9 @@ async function computeSalesAggregate(db) {
     const gpProv  = activeMonths.map(m => monthData[m]?.gpProv  || 0);
     const gpActual= activeMonths.map(m => monthData[m]?.gpActual|| 0);
     const ship = activeMonths.map(m => monthData[m]?.ship || 0);
-    const tons = activeMonths.map(m => Math.round((monthData[m]?.tons || 0) * 100) / 100);
-    const teu  = activeMonths.map(m => Math.round((monthData[m]?.teu  || 0) * 100) / 100);
-    const lcl  = activeMonths.map(m => Math.round((monthData[m]?.lcl  || 0) * 100) / 100);
+    const tons = activeMonths.map(m => monthData[m]?.tons || 0); // full precision — round only at final display, not here, to avoid cumulative rounding loss when summed across many reps/months
+    const teu  = activeMonths.map(m => monthData[m]?.teu  || 0); // full precision, round only at display
+    const lcl  = activeMonths.map(m => monthData[m]?.lcl  || 0); // full precision, round only at display
 
     // Use rep's own targets directly from the mapping sheet
     const repTgt = meta.monthlyTarget || 0;
@@ -1260,9 +1260,9 @@ async function computeSalesAggregate(db) {
     const gpProv  = activeMonths.map(m => monthData[m]?.gpProv  || 0);
     const gpActual= activeMonths.map(m => monthData[m]?.gpActual|| 0);
     const ship = activeMonths.map(m => monthData[m]?.ship || 0);
-    const tons = activeMonths.map(m => Math.round((monthData[m]?.tons || 0) * 100) / 100);
-    const teu  = activeMonths.map(m => Math.round((monthData[m]?.teu  || 0) * 100) / 100);
-    const lcl  = activeMonths.map(m => Math.round((monthData[m]?.lcl  || 0) * 100) / 100);
+    const tons = activeMonths.map(m => monthData[m]?.tons || 0); // full precision — round only at final display, not here, to avoid cumulative rounding loss when summed across many reps/months
+    const teu  = activeMonths.map(m => monthData[m]?.teu  || 0); // full precision, round only at display
+    const lcl  = activeMonths.map(m => monthData[m]?.lcl  || 0); // full precision, round only at display
 
     repsRaw.push({
       name:  branchName,
