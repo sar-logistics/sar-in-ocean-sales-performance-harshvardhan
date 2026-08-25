@@ -9600,16 +9600,12 @@ document.addEventListener('click', function(ev){
     if (!state.drill.filterDraft[fk]) state.drill.filterDraft[fk] = [];
     var draft = state.drill.filterDraft[fk];
     var idx = draft.indexOf(v);
-    var nowChecked;
-    if (idx > -1) { draft.splice(idx,1); nowChecked = false; }
-    else          { draft.push(v);       nowChecked = true;  }
+    if (idx > -1) { draft.splice(idx,1); } else { draft.push(v); }
     state.drill.filterDraft[fk] = draft;
-    var box = el.querySelector('div');
-    if (box) {
-      box.style.borderColor = nowChecked ? BRAND_A1 : '#C5D0E0';
-      box.style.background  = nowChecked ? BRAND_A1 : '#FFFFFF';
-      box.innerHTML = nowChecked ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '';
-    }
+    // Full re-render of the drawer for guaranteed-correct checkbox visuals —
+    // safe now that the underlying table itself is cached (see bodyRows
+    // caching), so this stays fast even though it rebuilds the popup.
+    renderDrillOnly();
   }
   else if(act==='drillFilterSelectAll'){
     ev.stopPropagation();
@@ -9639,7 +9635,7 @@ document.addEventListener('click', function(ev){
     if (!state.drill.columnFilters) state.drill.columnFilters = {};
     state.drill.columnFilters = Object.assign({}, state.drill.columnFilters);
     state.drill.columnFilters[fk3] = newFilterVals;
-    // Keep popup open so user can see filter applied — they can click outside to close
+    state.drill.openFilterCol = null; // close the popup after applying
     renderDrillOnly();
   }
   else if(act==='clearDrillColFilters'){
