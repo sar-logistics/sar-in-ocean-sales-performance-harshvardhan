@@ -9588,22 +9588,6 @@ document.addEventListener('click', function(ev){
       state.drill.filterAnchor = { top: top, left: left };
     }
     renderDrillOnly();
-    // Close the popup on scroll — position:fixed is anchored to where the
-    // header WAS at click time, so it would otherwise drift/float away from
-    // the actual column when the table scrolls (esp. horizontally).
-    if (!wasOpen) {
-      setTimeout(function(){
-        var scrollArea = document.getElementById("drill-scroll-area");
-        if (scrollArea) {
-          var closeOnScroll = function(){
-            state.drill.openFilterCol = null;
-            renderDrillOnly();
-            scrollArea.removeEventListener("scroll", closeOnScroll);
-          };
-          scrollArea.addEventListener("scroll", closeOnScroll, { once: true, passive: true });
-        }
-      }, 0);
-    }
   }
   else if(act==='drillFilterToggleVal'){
     // Checkbox toggles only affect the STAGED draft (not yet applied to the
