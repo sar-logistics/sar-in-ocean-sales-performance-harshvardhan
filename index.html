@@ -9036,7 +9036,13 @@ document.addEventListener('click', function(ev){
     _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops);
   }
   else if(act==='toggleFilterRegionDrop'){ state.filterRegionDropOpen=!state.filterRegionDropOpen; state.filterZoneDropOpen=false; state.filterLobDropOpen=false; state.filterRepDropOpen=false; render(); }
-        else if(act==='toggleFilterRegion'){ var rv=el.getAttribute('data-val'); var ri2=state.filterRegions||[]; var ix=ri2.indexOf(rv); if(ix>-1)ri2.splice(ix,1); else ri2.push(rv); state.filterRegions=ri2; render(); }
+        else if(act==='toggleFilterRegion'){ var rv=el.getAttribute('data-val'); var ri2=state.filterRegions||[]; var ix=ri2.indexOf(rv); if(ix>-1)ri2.splice(ix,1); else ri2.push(rv); state.filterRegions=ri2;
+          // Selecting/deselecting a Region always takes over from any manually-picked
+          // Zones — clear filterZones here so render()s auto-expansion cleanly
+          // rebuilds it from the current Region selection, rather than leaving old
+          // manual zone picks stuck in place alongside (or instead of) the region.
+          state.filterZones = []; state._regionExpandedZones = false;
+          render(); }
         else if(act==='toggleFilterZoneDrop'){ ev.stopPropagation(); state.filterZoneDropOpen=!state.filterZoneDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='filterResetAll'){ ev.stopPropagation(); state.filterLobs=[]; state.filterReps=[]; state.filterZones=[]; _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='rateEdit'){ state.rateEditing=true; render(); setTimeout(function(){ var inp=document.getElementById('rate-input'); if(inp) inp.focus(); },50); }
