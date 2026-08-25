@@ -7344,22 +7344,10 @@ function positionViewDrop(){ positionAllDrops(); }
 // visible "blink": every filter click was needlessly repainting the entire
 // dashboard behind the overlay.
 function renderDrillOnly(){
-  // If a stray popup from a previous open is still sitting on body (e.g.
-  // the whole drill closed via a path that didnt clean it up), remove it
-  // before rebuilding, so we never end up with a duplicate.
-  var _stray = document.body.querySelector(':scope > #drill-filter-popup');
-  if (_stray) _stray.remove();
   var drawerEl = document.getElementById('drawer-slot');
   if (drawerEl) drawerEl.innerHTML = drawer() + feedbackModal() + orgEditModal();
-  var _popupEl = document.getElementById('drill-filter-popup');
-  if (_popupEl && _popupEl.parentElement !== document.body) {
-    document.body.appendChild(_popupEl);
-  }
 }
-function _cleanupDrillFilterPopup(){
-  var _p = document.body.querySelector(':scope > #drill-filter-popup');
-  if (_p) _p.remove();
-}
+function _cleanupDrillFilterPopup(){ /* no-op — popup no longer re-parented */ }
 
 var _lastRenderHash = '';
 var _lastTopbarHash = '';
@@ -9575,11 +9563,7 @@ document.addEventListener('click', function(ev){
     if (!wasOpen) {
       // Compute the popup's screen position SYNCHRONOUSLY, from the trigger
       // element that still exists right now (before render() destroys it).
-      // Anchor to the FULL column header cell (not just the small arrow
-      // icon) so the popup clearly sits under the correct column instead of
-      // looking ambiguously positioned at a column boundary.
-      var thEl = el.closest("th") || el;
-      var rect = thEl.getBoundingClientRect();
+      var rect = el.getBoundingClientRect();
       var top = rect.bottom + 6;
       var left = rect.left;
       var maxLeft = window.innerWidth - 296;
