@@ -9448,7 +9448,8 @@ function positionDrop(btnAct, dropId){
   drop.style.left = Math.max(8,left)+'px';
 }
 
-function positionAllDrops(){
+function positionAllDrops(_retryCount){
+  _retryCount = _retryCount || 0;
   var pairs = [
     ['toggleCustomCal','custom-cal-drop'],
     ['toggleViewDrop','view-drop'],['toggleFromDrop','from-drop'],
@@ -9456,6 +9457,7 @@ function positionAllDrops(){
     ['toggleQyrDrop','qyr-drop'],['toggleQuarterDrop','quarter-drop'],
     ['toggleYearTypeDrop','yeartype-drop'],['toggleFiltersDrop','filters-drop']
   ];
+  var _anyInvalid = false;
   pairs.forEach(function(p){
     var drop = document.getElementById(p[1]);
     if(!drop) return;
@@ -9463,6 +9465,10 @@ function positionAllDrops(){
     var btn = document.querySelector('[data-act="'+p[0]+'"]');
     if(!btn) return;
     var rect = btn.getBoundingClientRect();
+    // Defensive guard: if the button measured with zero size, its position
+    // is not trustworthy yet (mid-render / stale DOM node) — skip this pass
+    // and retry shortly, rather than computing a bogus far-left position.
+    if (rect.width === 0 && rect.height === 0) { _anyInvalid = true; return; }
     var top = rect.bottom + 6;
     var left;
     if (p[0] === 'toggleFiltersDrop') {
@@ -9486,6 +9492,12 @@ function positionAllDrops(){
     var active = drop.querySelector('[style*="color:#1D5FCC"]');
     if(active) active.scrollIntoView({block:'nearest'});
   });
+  // If any button measured with zero size this pass, DOM likely wasn't
+  // fully laid out yet — retry a few times with a short delay instead of
+  // leaving a dropdown mispositioned at the far-left fallback.
+  if (_anyInvalid && _retryCount < 5) {
+    setTimeout(function(){ positionAllDrops(_retryCount + 1); }, 30);
+  }
 }
 window.addEventListener('resize', positionAllDrops);
 // Close dropdowns when the main content area scrolls (not inner table divs)
