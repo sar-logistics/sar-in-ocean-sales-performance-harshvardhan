@@ -458,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v198-CRITICAL-fix-import-date-fallback-missing-step-1787634331";
+const DEPLOY_TS = "2026-08-21T-ocean-v199-CRITICAL-fix-revenue-lock-lob-mismatch-1787635090";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -703,7 +703,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           volumeUnit:   job["Volume Unit"]         || "",
           operationLock: job["Operation Lock"]     || "",
           financialLock: job["Financial Lock"]     || "",
-          g: rowGP, r: (job["Job Rev Recognition Date"] !== undefined && job["Job Rev Recognition Date"] !== null && String(job["Job Rev Recognition Date"]).trim() !== "") ? billedRevenue : provRevenue, x: postedCost,
+          g: rowGP, r: isProvisional ? provRevenue : billedRevenue, x: postedCost, // FIXED: was checking Job Rev Recognition Date directly regardless of LOB, causing Air rows Revenue to be inconsistent with their own GP lock status
           t: parseFloat(job["Container TEU"] || 0) || 0,
           chargeableWeight,
           chargeableWeightUnit,
@@ -1000,11 +1000,13 @@ async function computeSalesAggregate(db) {
       // Revenue: use Billed Revenue if locked, else Provisional Revenue
       const billedRev = parseFloat(job["Billed Revenue (C)"]      || 0) || 0;
       const provRev   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
-      // Revenue: Job Rev Recognition Date filled → locked → Billed; else → Provisional
-      const _revLocked = job["Job Rev Recognition Date"] !== undefined && job["Job Rev Recognition Date"] !== null && String(job["Job Rev Recognition Date"]).trim() !== "";
-      const rev = _revLocked ? billedRev : provRev;
-      const revBilledAmt = _revLocked ? billedRev : 0;
-      const revProvAmt   = _revLocked ? 0 : provRev;
+      // Revenue: use the SAME lock status as GP (isProvisional from pickGP) —
+      // FIXED: was re-checking Job Rev Recognition Date directly regardless of
+      // LOB, so Air rows Revenue could disagree with their own GP lock status
+      // (Air should key off Financial Lock, not Job Rev Recognition Date).
+      const rev = isProvisional ? provRev : billedRev;
+      const revBilledAmt = isProvisional ? 0 : billedRev;
+      const revProvAmt   = isProvisional ? provRev : 0;
 
       // Tons — only for AIR rows, Chargeable Weight (kg) ÷ 1000
       let tons = 0;
