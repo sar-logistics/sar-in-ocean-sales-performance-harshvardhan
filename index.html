@@ -2118,88 +2118,198 @@ function grandEntity(){
         return sum(repsRaw.map(function(r){return r.ship[i]||0;}));
       });
     })(),
-    gp:   isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
-                   : idxs.map(function(i){var _ml=months26[i];
-                   if(allDrillRows&&allDrillRows.length>0){var _fl2=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;var _fz2=state.filterZones&&state.filterZones.length>0?state.filterZones:null;var _fr2=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null; var _freg2=state.filterRegions&&state.filterRegions.length>0?state.filterRegions:null; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl2||_fl2.indexOf(r.lob)>-1)&&(!_fz2||((_fz2.indexOf('Cross Sales')>-1&&!r._zone)||(_fz2.indexOf(r._zone)>-1)))&&(!_freg2||(_freg2.indexOf((r._zone&&window._zoneRegionMap)?(window._zoneRegionMap[r._zone]||''):'')>-1))&&(!_fr2||(_fr2.indexOf(r._sp)>-1));}).reduce(function(s,r){return s+(r.g||0);},0);}
-                   return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].gp)||0);},0);})) : sum(repsRaw.map(function(r){return (r.gp&&r.gp[i])||0;}));
-                 }),
-    tons: isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);})
-                   : idxs.map(function(i){var _ml=months26[i];
-                     if(allDrillRows&&allDrillRows.length>0){
-                       var _flTo=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
-                       var _fzTo=state.filterZones&&state.filterZones.length>0?state.filterZones:null;
-                       var _frTo=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null;
-                       return allDrillRows.filter(function(r){
-                         if(r._ml!==_ml) return false;
-                         if(_flTo && _flTo.indexOf(r.lob)===-1) return false;
-                         if(_fzTo){
-                           var _hcTo=_fzTo.indexOf('Cross Sales')>-1;
-                           if(_hcTo && !r._zone){} else if(r._zone && _fzTo.indexOf(r._zone)>-1){} else return false;
-                         }
-                         if(_frTo && (!r._sp || _frTo.indexOf(r._sp)===-1)) return false;
-                         return true;
-                       }).reduce(function(s,r){return s+(r.tons||0);},0);
-                     }
-                     return sum(repsRaw.map(function(r){return (r.tons&&r.tons[i])||0;}));
-                   }),
-    teu:  isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0);},0);})
-                   : idxs.map(function(i){var _ml=months26[i];
-                     if(allDrillRows&&allDrillRows.length>0){
-                       var _flT=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
-                       var _fzT=state.filterZones&&state.filterZones.length>0?state.filterZones:null;
-                       var _frT=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null;
-                       return allDrillRows.filter(function(r){
-                         if(r._ml!==_ml) return false;
-                         if(_flT && _flT.indexOf(r.lob)===-1) return false;
-                         if(_fzT){
-                           var _hc=_fzT.indexOf('Cross Sales')>-1;
-                           if(_hc && !r._zone){} else if(r._zone && _fzT.indexOf(r._zone)>-1){} else return false;
-                         }
-                         if(_frT && (!r._sp || _frT.indexOf(r._sp)===-1)) return false;
-                         return (r.cargoType||'').toUpperCase().trim()!=='LCL';
-                       }).reduce(function(s,r){return s+(r.teu||0);},0);
-                     }
-                     return sum(repsRaw.map(function(r){return (r.teu&&r.teu[i])||0;}));
-                   }),
-    lcl:  isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].lcl)||0);},0);})
-                   : idxs.map(function(i){var _ml=months26[i];
-                     if(allDrillRows&&allDrillRows.length>0){
-                       var _flL=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
-                       var _fzL=state.filterZones&&state.filterZones.length>0?state.filterZones:null;
-                       var _frL=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null;
-                       return allDrillRows.filter(function(r){
-                         if(r._ml!==_ml) return false;
-                         if(_flL && _flL.indexOf(r.lob)===-1) return false;
-                         if(_fzL){
-                           var _hc2=_fzL.indexOf('Cross Sales')>-1;
-                           if(_hc2 && !r._zone){} else if(r._zone && _fzL.indexOf(r._zone)>-1){} else return false;
-                         }
-                         if(_frL && (!r._sp || _frL.indexOf(r._sp)===-1)) return false;
-                         return (r.cargoType||'').toUpperCase().trim()==='LCL';
-                       }).reduce(function(s,r){return s+(r.volume||0);},0);
-                     }
-                     return sum(repsRaw.map(function(r){return (r.lcl&&r.lcl[i])||0;}));
-                   }),
-    rev:       isWeekly ? wkeys.map(function(k){return sum(repsRaw.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].rev)||0;}));}) : idxs.map(function(i){var _ml=months26[i];
-                   if(allDrillRows&&allDrillRows.length>0){var _fl2=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;var _fz2=state.filterZones&&state.filterZones.length>0?state.filterZones:null;var _fr2=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null; var _freg2=state.filterRegions&&state.filterRegions.length>0?state.filterRegions:null; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl2||_fl2.indexOf(r.lob)>-1)&&(!_fz2||((_fz2.indexOf('Cross Sales')>-1&&!r._zone)||(_fz2.indexOf(r._zone)>-1)))&&(!_freg2||(_freg2.indexOf((r._zone&&window._zoneRegionMap)?(window._zoneRegionMap[r._zone]||''):'')>-1))&&(!_fr2||(_fr2.indexOf(r._sp)>-1));}).reduce(function(s,r){return s+(r.r||0);},0);}
-                   return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].rev)||0);},0);})) : sum(repsRaw.map(function(r){return (r.rev&&r.rev[i])||0;}));
-                 }),
-    revBilled: isWeekly ? wkeys.map(function(k){return sum(repsRaw.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].revBilled)||0;}));}) : idxs.map(function(i){var _ml=months26[i];
-                   if(allDrillRows&&allDrillRows.length>0){var _fl2=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;var _fz2=state.filterZones&&state.filterZones.length>0?state.filterZones:null;var _fr2=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null; var _freg2=state.filterRegions&&state.filterRegions.length>0?state.filterRegions:null; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl2||_fl2.indexOf(r.lob)>-1)&&(!_fz2||((_fz2.indexOf('Cross Sales')>-1&&!r._zone)||(_fz2.indexOf(r._zone)>-1)))&&(!_freg2||(_freg2.indexOf((r._zone&&window._zoneRegionMap)?(window._zoneRegionMap[r._zone]||''):'')>-1))&&(!_fr2||(_fr2.indexOf(r._sp)>-1))&&!!r.jobRevRecogDate;}).reduce(function(s,r){return s+(r.billedRevenue||0);},0);}
-                   return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].revBilled)||0);},0);})) : sum(repsRaw.map(function(r){return (r.revBilled&&r.revBilled[i])||0;}));
-                 }),
-    revProv:   isWeekly ? wkeys.map(function(k){return sum(repsRaw.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].revProv)||0;}));}) : idxs.map(function(i){var _ml=months26[i];
-                   if(allDrillRows&&allDrillRows.length>0){var _fl2=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;var _fz2=state.filterZones&&state.filterZones.length>0?state.filterZones:null;var _fr2=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null; var _freg2=state.filterRegions&&state.filterRegions.length>0?state.filterRegions:null; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl2||_fl2.indexOf(r.lob)>-1)&&(!_fz2||((_fz2.indexOf('Cross Sales')>-1&&!r._zone)||(_fz2.indexOf(r._zone)>-1)))&&(!_freg2||(_freg2.indexOf((r._zone&&window._zoneRegionMap)?(window._zoneRegionMap[r._zone]||''):'')>-1))&&(!_fr2||(_fr2.indexOf(r._sp)>-1))&&!r.jobRevRecogDate;}).reduce(function(s,r){return s+(r.provRevenue||0);},0);}
-                   return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].revProv)||0);},0);})) : sum(repsRaw.map(function(r){return (r.revProv&&r.revProv[i])||0;}));
-                 }),
-    gpProv:   isWeekly ? wkeys.map(function(k){return sum(repsRaw.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].gpProv)||0;}));}) : idxs.map(function(i){var _ml=months26[i];
-                   if(allDrillRows&&allDrillRows.length>0){var _fl2=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;var _fz2=state.filterZones&&state.filterZones.length>0?state.filterZones:null;var _fr2=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null; var _freg2=state.filterRegions&&state.filterRegions.length>0?state.filterRegions:null; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl2||_fl2.indexOf(r.lob)>-1)&&(!_fz2||((_fz2.indexOf('Cross Sales')>-1&&!r._zone)||(_fz2.indexOf(r._zone)>-1)))&&(!_freg2||(_freg2.indexOf((r._zone&&window._zoneRegionMap)?(window._zoneRegionMap[r._zone]||''):'')>-1))&&(!_fr2||(_fr2.indexOf(r._sp)>-1))&&r.prov===1;}).reduce(function(s,r){return s+(r.g||0);},0);}
-                   return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].gpProv)||0);},0);})) : sum(repsRaw.map(function(r){return (r.gpProv&&r.gpProv[i])||0;}));
-                 }),
-    gpActual: isWeekly ? wkeys.map(function(k){return sum(repsRaw.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].gpActual)||0;}));}) : idxs.map(function(i){var _ml=months26[i];
-                   if(allDrillRows&&allDrillRows.length>0){var _fl2=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;var _fz2=state.filterZones&&state.filterZones.length>0?state.filterZones:null;var _fr2=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null; var _freg2=state.filterRegions&&state.filterRegions.length>0?state.filterRegions:null; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl2||_fl2.indexOf(r.lob)>-1)&&(!_fz2||((_fz2.indexOf('Cross Sales')>-1&&!r._zone)||(_fz2.indexOf(r._zone)>-1)))&&(!_freg2||(_freg2.indexOf((r._zone&&window._zoneRegionMap)?(window._zoneRegionMap[r._zone]||''):'')>-1))&&(!_fr2||(_fr2.indexOf(r._sp)>-1))&&!r.prov;}).reduce(function(s,r){return s+(r.g||0);},0);}
-                   return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].gpActual)||0);},0);})) : sum(repsRaw.map(function(r){return (r.gpActual&&r.gpActual[i])||0;}));
-                 }),
+    gp:   (function(){
+      var _flg=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+      var _fzg=state.filterZones&&state.filterZones.length>0?state.filterZones:null;
+      var _frg=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null;
+      var _fregg=state.filterRegions&&state.filterRegions.length>0?state.filterRegions:null;
+      function _gMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        if(_flg && _flg.indexOf(r.lob)===-1) return false;
+        if(_fzg){var _hc=_fzg.indexOf('Cross Sales')>-1; if(_hc&&!r._zone){}else if(r._zone&&_fzg.indexOf(r._zone)>-1){}else return false;}
+        if(_fregg){var _rg=(r._zone&&window._zoneRegionMap)?(window._zoneRegionMap[r._zone]||''):''; if(_fregg.indexOf(_rg)===-1) return false;}
+        if(_frg && (!r._sp||_frg.indexOf(r._sp)===-1)) return false;
+        return true;
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _gMatch(r,k,true);}).reduce(function(s,r){return s+(r.g||0);},0);
+        return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);
+      });
+      return idxs.map(function(i){var _ml=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _gMatch(r,_ml,false);}).reduce(function(s,r){return s+(r.g||0);},0);
+        return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].gp)||0);},0);})) : sum(repsRaw.map(function(r){return (r.gp&&r.gp[i])||0;}));
+      });
+    })(),
+    tons: (function(){
+      var _flTo=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+      var _fzTo=state.filterZones&&state.filterZones.length>0?state.filterZones:null;
+      var _frTo=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null;
+      function _tMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        if(_flTo && _flTo.indexOf(r.lob)===-1) return false;
+        if(_fzTo){var _hcTo=_fzTo.indexOf('Cross Sales')>-1; if(_hcTo&&!r._zone){}else if(r._zone&&_fzTo.indexOf(r._zone)>-1){}else return false;}
+        if(_frTo && (!r._sp||_frTo.indexOf(r._sp)===-1)) return false;
+        return true;
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _tMatch(r,k,true);}).reduce(function(s,r){return s+(r.tons||0);},0);
+        return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);
+      });
+      return idxs.map(function(i){var _ml=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _tMatch(r,_ml,false);}).reduce(function(s,r){return s+(r.tons||0);},0);
+        return sum(repsRaw.map(function(r){return (r.tons&&r.tons[i])||0;}));
+      });
+    })(),
+    teu:  (function(){
+      var _flT=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+      var _fzT=state.filterZones&&state.filterZones.length>0?state.filterZones:null;
+      var _frT=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null;
+      function _teMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        if(_flT && _flT.indexOf(r.lob)===-1) return false;
+        if(_fzT){var _hc=_fzT.indexOf('Cross Sales')>-1; if(_hc&&!r._zone){}else if(r._zone&&_fzT.indexOf(r._zone)>-1){}else return false;}
+        if(_frT && (!r._sp||_frT.indexOf(r._sp)===-1)) return false;
+        return (r.cargoType||'').toUpperCase().trim()!=='LCL';
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _teMatch(r,k,true);}).reduce(function(s,r){return s+(r.teu||0);},0);
+        return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0);},0);
+      });
+      return idxs.map(function(i){var _ml=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _teMatch(r,_ml,false);}).reduce(function(s,r){return s+(r.teu||0);},0);
+        return sum(repsRaw.map(function(r){return (r.teu&&r.teu[i])||0;}));
+      });
+    })(),
+    lcl:  (function(){
+      var _flL=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+      var _fzL=state.filterZones&&state.filterZones.length>0?state.filterZones:null;
+      var _frL=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null;
+      function _lMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        if(_flL && _flL.indexOf(r.lob)===-1) return false;
+        if(_fzL){var _hc2=_fzL.indexOf('Cross Sales')>-1; if(_hc2&&!r._zone){}else if(r._zone&&_fzL.indexOf(r._zone)>-1){}else return false;}
+        if(_frL && (!r._sp||_frL.indexOf(r._sp)===-1)) return false;
+        return (r.cargoType||'').toUpperCase().trim()==='LCL';
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _lMatch(r,k,true);}).reduce(function(s,r){return s+(r.volume||0);},0);
+        return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].lcl)||0);},0);
+      });
+      return idxs.map(function(i){var _ml=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _lMatch(r,_ml,false);}).reduce(function(s,r){return s+(r.volume||0);},0);
+        return sum(repsRaw.map(function(r){return (r.lcl&&r.lcl[i])||0;}));
+      });
+    })(),
+    rev:       (function(){
+      var _flr=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+      var _fzr=state.filterZones&&state.filterZones.length>0?state.filterZones:null;
+      var _frr=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null;
+      var _fregr=state.filterRegions&&state.filterRegions.length>0?state.filterRegions:null;
+      function _rMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        if(_flr && _flr.indexOf(r.lob)===-1) return false;
+        if(_fzr){var _hc=_fzr.indexOf('Cross Sales')>-1; if(_hc&&!r._zone){}else if(r._zone&&_fzr.indexOf(r._zone)>-1){}else return false;}
+        if(_fregr){var _rg=(r._zone&&window._zoneRegionMap)?(window._zoneRegionMap[r._zone]||''):''; if(_fregr.indexOf(_rg)===-1) return false;}
+        if(_frr && (!r._sp||_frr.indexOf(r._sp)===-1)) return false;
+        return true;
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _rMatch(r,k,true);}).reduce(function(s,r){return s+(r.r||0);},0);
+        return sum(repsRaw.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].rev)||0;}));
+      });
+      return idxs.map(function(i){var _ml=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _rMatch(r,_ml,false);}).reduce(function(s,r){return s+(r.r||0);},0);
+        return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].rev)||0);},0);})) : sum(repsRaw.map(function(r){return (r.rev&&r.rev[i])||0;}));
+      });
+    })(),
+    revBilled: (function(){
+      var _flrb=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+      var _fzrb=state.filterZones&&state.filterZones.length>0?state.filterZones:null;
+      var _frrb=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null;
+      var _fregrb=state.filterRegions&&state.filterRegions.length>0?state.filterRegions:null;
+      function _rbMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        if(_flrb && _flrb.indexOf(r.lob)===-1) return false;
+        if(_fzrb){var _hc=_fzrb.indexOf('Cross Sales')>-1; if(_hc&&!r._zone){}else if(r._zone&&_fzrb.indexOf(r._zone)>-1){}else return false;}
+        if(_fregrb){var _rg=(r._zone&&window._zoneRegionMap)?(window._zoneRegionMap[r._zone]||''):''; if(_fregrb.indexOf(_rg)===-1) return false;}
+        if(_frrb && (!r._sp||_frrb.indexOf(r._sp)===-1)) return false;
+        return !r.prov; // NOT provisional == locked/billed — fixed from raw jobRevRecogDate check which ignored Air's Financial Lock rule
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _rbMatch(r,k,true);}).reduce(function(s,r){return s+(r.billedRevenue||0);},0);
+        return sum(repsRaw.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].revBilled)||0;}));
+      });
+      return idxs.map(function(i){var _ml=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _rbMatch(r,_ml,false);}).reduce(function(s,r){return s+(r.billedRevenue||0);},0);
+        return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].revBilled)||0);},0);})) : sum(repsRaw.map(function(r){return (r.revBilled&&r.revBilled[i])||0;}));
+      });
+    })(),
+    revProv:   (function(){
+      var _flrp=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+      var _fzrp=state.filterZones&&state.filterZones.length>0?state.filterZones:null;
+      var _frrp=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null;
+      var _fregrp=state.filterRegions&&state.filterRegions.length>0?state.filterRegions:null;
+      function _rpMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        if(_flrp && _flrp.indexOf(r.lob)===-1) return false;
+        if(_fzrp){var _hc=_fzrp.indexOf('Cross Sales')>-1; if(_hc&&!r._zone){}else if(r._zone&&_fzrp.indexOf(r._zone)>-1){}else return false;}
+        if(_fregrp){var _rg=(r._zone&&window._zoneRegionMap)?(window._zoneRegionMap[r._zone]||''):''; if(_fregrp.indexOf(_rg)===-1) return false;}
+        if(_frrp && (!r._sp||_frrp.indexOf(r._sp)===-1)) return false;
+        return !!r.prov; // provisional — fixed from raw jobRevRecogDate check
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _rpMatch(r,k,true);}).reduce(function(s,r){return s+(r.provRevenue||0);},0);
+        return sum(repsRaw.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].revProv)||0;}));
+      });
+      return idxs.map(function(i){var _ml=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _rpMatch(r,_ml,false);}).reduce(function(s,r){return s+(r.provRevenue||0);},0);
+        return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].revProv)||0);},0);})) : sum(repsRaw.map(function(r){return (r.revProv&&r.revProv[i])||0;}));
+      });
+    })(),
+    gpProv:   (function(){
+      var _flgp=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+      var _fzgp=state.filterZones&&state.filterZones.length>0?state.filterZones:null;
+      var _frgp=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null;
+      var _freggp=state.filterRegions&&state.filterRegions.length>0?state.filterRegions:null;
+      function _gpMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        if(_flgp && _flgp.indexOf(r.lob)===-1) return false;
+        if(_fzgp){var _hc=_fzgp.indexOf('Cross Sales')>-1; if(_hc&&!r._zone){}else if(r._zone&&_fzgp.indexOf(r._zone)>-1){}else return false;}
+        if(_freggp){var _rg=(r._zone&&window._zoneRegionMap)?(window._zoneRegionMap[r._zone]||''):''; if(_freggp.indexOf(_rg)===-1) return false;}
+        if(_frgp && (!r._sp||_frgp.indexOf(r._sp)===-1)) return false;
+        return r.prov===1;
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _gpMatch(r,k,true);}).reduce(function(s,r){return s+(r.g||0);},0);
+        return sum(repsRaw.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].gpProv)||0;}));
+      });
+      return idxs.map(function(i){var _ml=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _gpMatch(r,_ml,false);}).reduce(function(s,r){return s+(r.g||0);},0);
+        return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].gpProv)||0);},0);})) : sum(repsRaw.map(function(r){return (r.gpProv&&r.gpProv[i])||0;}));
+      });
+    })(),
+    gpActual: (function(){
+      var _flga=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+      var _fzga=state.filterZones&&state.filterZones.length>0?state.filterZones:null;
+      var _frga=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null;
+      var _fregga=state.filterRegions&&state.filterRegions.length>0?state.filterRegions:null;
+      function _gaMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        if(_flga && _flga.indexOf(r.lob)===-1) return false;
+        if(_fzga){var _hc=_fzga.indexOf('Cross Sales')>-1; if(_hc&&!r._zone){}else if(r._zone&&_fzga.indexOf(r._zone)>-1){}else return false;}
+        if(_fregga){var _rg=(r._zone&&window._zoneRegionMap)?(window._zoneRegionMap[r._zone]||''):''; if(_fregga.indexOf(_rg)===-1) return false;}
+        if(_frga && (!r._sp||_frga.indexOf(r._sp)===-1)) return false;
+        return !r.prov;
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _gaMatch(r,k,true);}).reduce(function(s,r){return s+(r.g||0);},0);
+        return sum(repsRaw.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].gpActual)||0;}));
+      });
+      return idxs.map(function(i){var _ml=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _gaMatch(r,_ml,false);}).reduce(function(s,r){return s+(r.g||0);},0);
+        return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(repsRaw.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].gpActual)||0);},0);})) : sum(repsRaw.map(function(r){return (r.gpActual&&r.gpActual[i])||0;}));
+      });
+    })(),
     tank: (isWeekly ? wkeys : idxs).map(function(){return 0;}),
     tgt:  (function(){
       var v = state.reportView;
@@ -2280,107 +2390,157 @@ function zoneEntity(zoneName){
     isZone: true, zone: zoneName,
     ship: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0);})
                    : idxs.map(function(i){ var _ml=months26[i]; if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null; var _isCross=zoneName==='Cross Sales'; var _fr3=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl||_fl.indexOf(r.lob)>-1)&&(_isCross?!r._zone:r._zone===zoneName)&&(!_fr3||(_fr3.indexOf(r._sp)>-1));}).length;} return sum(zReps.map(function(r){return r.ship[i]||0;})); }),
-    gp:   isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
-                   : idxs.map(function(i){var m=months26[i]; var _ml=months26[i];
-                     if(allDrillRows&&allDrillRows.length>0){
-                       var _flZg=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
-                       var _isCrossZg=zoneName==='Cross Sales';
-                       return allDrillRows.filter(function(r){
-                         if(r._ml!==_ml) return false;
-                         if(_flZg && _flZg.indexOf(r.lob)===-1) return false;
-                         return _isCrossZg ? !r._zone : r._zone===zoneName;
-                       }).reduce(function(s,r){return s+(r.g||0);},0);
-                     }
-                     return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gp)||0);},0);})) : sum(zReps.map(function(r){return (r.gp&&r.gp[i])||0;}));}),
-    tons: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);})
-                   : idxs.map(function(i){var m=months26[i]; var _ml=months26[i];
-                     if(allDrillRows&&allDrillRows.length>0){
-                       var _flZt=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
-                       var _isCrossZt=zoneName==='Cross Sales';
-                       return allDrillRows.filter(function(r){
-                         if(r._ml!==_ml) return false;
-                         if(_flZt && _flZt.indexOf(r.lob)===-1) return false;
-                         return _isCrossZt ? !r._zone : r._zone===zoneName;
-                       }).reduce(function(s,r){return s+(r.tons||0);},0);
-                     }
-                     return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].tons)||0);},0);})) : sum(zReps.map(function(r){return (r.tons&&r.tons[i])||0;}));}),
-    teu:  isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0);},0);})
-                   : idxs.map(function(i){var m=months26[i]; var _ml=months26[i];
-                     if(allDrillRows&&allDrillRows.length>0){
-                       var _flZte=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
-                       var _isCrossZte=zoneName==='Cross Sales';
-                       return allDrillRows.filter(function(r){
-                         if(r._ml!==_ml) return false;
-                         if(_flZte && _flZte.indexOf(r.lob)===-1) return false;
-                         if((r.cargoType||'').toUpperCase().trim()==='LCL') return false;
-                         return _isCrossZte ? !r._zone : r._zone===zoneName;
-                       }).reduce(function(s,r){return s+(r.teu||0);},0);
-                     }
-                     return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].teu)||0);},0);})) : sum(zReps.map(function(r){return (r.teu&&r.teu[i])||0;}));}),
-    lcl:  isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].lcl)||0);},0);})
-                   : idxs.map(function(i){var m=months26[i]; var _ml=months26[i];
-                     if(allDrillRows&&allDrillRows.length>0){
-                       var _flZlc=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
-                       var _isCrossZlc=zoneName==='Cross Sales';
-                       return allDrillRows.filter(function(r){
-                         if(r._ml!==_ml) return false;
-                         if(_flZlc && _flZlc.indexOf(r.lob)===-1) return false;
-                         if((r.cargoType||'').toUpperCase().trim()!=='LCL') return false;
-                         return _isCrossZlc ? !r._zone : r._zone===zoneName;
-                       }).reduce(function(s,r){return s+(r.volume||0);},0);
-                     }
-                     return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].lcl)||0);},0);})) : sum(zReps.map(function(r){return (r.lcl&&r.lcl[i])||0;}));}),
-    rev:       isWeekly ? wkeys.map(function(k){return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].rev)||0;}));}) : idxs.map(function(i){var m=months26[i]; var _ml=months26[i];
-                     if(allDrillRows&&allDrillRows.length>0){
-                       var _flZr=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
-                       var _isCrossZr=zoneName==='Cross Sales';
-                       return allDrillRows.filter(function(r){
-                         if(r._ml!==_ml) return false;
-                         if(_flZr && _flZr.indexOf(r.lob)===-1) return false;
-                         return _isCrossZr ? !r._zone : r._zone===zoneName;
-                       }).reduce(function(s,r){return s+(r.r||0);},0);
-                     }
-                     return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].rev)||0);},0);})) : sum(zReps.map(function(r){return (r.rev&&r.rev[i])||0;}));}),
-    revBilled: isWeekly ? wkeys.map(function(k){return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].revBilled)||0;}));}) : idxs.map(function(i){var m=months26[i]; var _ml=months26[i];
-                     if(allDrillRows&&allDrillRows.length>0){
-                       var _flZrb=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
-                       var _isCrossZrb=zoneName==='Cross Sales';
-                       return allDrillRows.filter(function(r){
-                         if(r._ml!==_ml) return false;
-                         if(_flZrb && _flZrb.indexOf(r.lob)===-1) return false;
-                         return _isCrossZrb ? !r._zone : r._zone===zoneName;
-                       }).reduce(function(s,r){return s+(r.prov?0:(r.r||0));},0);
-                     }
-                     return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].revBilled)||0);},0);})) : sum(zReps.map(function(r){return (r.revBilled&&r.revBilled[i])||0;}));}),
-    revProv:   isWeekly ? wkeys.map(function(k){return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].revProv)||0;}));}) : idxs.map(function(i){var m=months26[i]; var _ml=months26[i];
-                     if(allDrillRows&&allDrillRows.length>0){
-                       var _flZrp=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
-                       var _isCrossZrp=zoneName==='Cross Sales';
-                       return allDrillRows.filter(function(r){
-                         if(r._ml!==_ml) return false;
-                         if(_flZrp && _flZrp.indexOf(r.lob)===-1) return false;
-                         return _isCrossZrp ? !r._zone : r._zone===zoneName;
-                       }).reduce(function(s,r){return s+(r.prov?(r.r||0):0);},0);
-                     }
-                     return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].revProv)||0);},0);})) : sum(zReps.map(function(r){return (r.revProv&&r.revProv[i])||0;}));}),
-    gpProv:   isWeekly ? wkeys.map(function(k){return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].gpProv)||0;}));}) : idxs.map(function(i){ var _ml=months26[i];
-                     if(allDrillRows&&allDrillRows.length>0){
-                       var _isCrossZgp=zoneName==='Cross Sales';
-                       return allDrillRows.filter(function(r){
-                         if(r._ml!==_ml) return false;
-                         return _isCrossZgp ? !r._zone : r._zone===zoneName;
-                       }).reduce(function(s,r){return s+(r.prov?(r.g||0):0);},0);
-                     }
-                     return sum(zReps.map(function(r){ return (r.gpProv&&r.gpProv[i])||0; })); }),
-    gpActual: isWeekly ? wkeys.map(function(k){return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].gpActual)||0;}));}) : idxs.map(function(i){ var _ml=months26[i];
-                     if(allDrillRows&&allDrillRows.length>0){
-                       var _isCrossZga=zoneName==='Cross Sales';
-                       return allDrillRows.filter(function(r){
-                         if(r._ml!==_ml) return false;
-                         return _isCrossZga ? !r._zone : r._zone===zoneName;
-                       }).reduce(function(s,r){return s+(r.prov?0:(r.g||0));},0);
-                     }
-                     return sum(zReps.map(function(r){ return (r.gpActual&&r.gpActual[i])||0; })); }),
+    gp:   (function(){
+      var _flZg=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+      var _isCrossZg=zoneName==='Cross Sales';
+      function _zgMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        if(_flZg && _flZg.indexOf(r.lob)===-1) return false;
+        return _isCrossZg ? !r._zone : r._zone===zoneName;
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _zgMatch(r,k,true);}).reduce(function(s,r){return s+(r.g||0);},0);
+        return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);
+      });
+      return idxs.map(function(i){var m=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _zgMatch(r,m,false);}).reduce(function(s,r){return s+(r.g||0);},0);
+        return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gp)||0);},0);})) : sum(zReps.map(function(r){return (r.gp&&r.gp[i])||0;}));
+      });
+    })(),
+    tons: (function(){
+      var _flZt=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+      var _isCrossZt=zoneName==='Cross Sales';
+      function _ztMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        if(_flZt && _flZt.indexOf(r.lob)===-1) return false;
+        return _isCrossZt ? !r._zone : r._zone===zoneName;
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _ztMatch(r,k,true);}).reduce(function(s,r){return s+(r.tons||0);},0);
+        return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);
+      });
+      return idxs.map(function(i){var m=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _ztMatch(r,m,false);}).reduce(function(s,r){return s+(r.tons||0);},0);
+        return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].tons)||0);},0);})) : sum(zReps.map(function(r){return (r.tons&&r.tons[i])||0;}));
+      });
+    })(),
+    teu:  (function(){
+      var _flZte=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+      var _isCrossZte=zoneName==='Cross Sales';
+      function _zteMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        if(_flZte && _flZte.indexOf(r.lob)===-1) return false;
+        if((r.cargoType||'').toUpperCase().trim()==='LCL') return false;
+        return _isCrossZte ? !r._zone : r._zone===zoneName;
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _zteMatch(r,k,true);}).reduce(function(s,r){return s+(r.teu||0);},0);
+        return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0);},0);
+      });
+      return idxs.map(function(i){var m=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _zteMatch(r,m,false);}).reduce(function(s,r){return s+(r.teu||0);},0);
+        return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].teu)||0);},0);})) : sum(zReps.map(function(r){return (r.teu&&r.teu[i])||0;}));
+      });
+    })(),
+    lcl:  (function(){
+      var _flZlc=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+      var _isCrossZlc=zoneName==='Cross Sales';
+      function _zlcMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        if(_flZlc && _flZlc.indexOf(r.lob)===-1) return false;
+        if((r.cargoType||'').toUpperCase().trim()!=='LCL') return false;
+        return _isCrossZlc ? !r._zone : r._zone===zoneName;
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _zlcMatch(r,k,true);}).reduce(function(s,r){return s+(r.volume||0);},0);
+        return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].lcl)||0);},0);
+      });
+      return idxs.map(function(i){var m=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _zlcMatch(r,m,false);}).reduce(function(s,r){return s+(r.volume||0);},0);
+        return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].lcl)||0);},0);})) : sum(zReps.map(function(r){return (r.lcl&&r.lcl[i])||0;}));
+      });
+    })(),
+    rev:       (function(){
+      var _flZr=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+      var _isCrossZr=zoneName==='Cross Sales';
+      function _zrMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        if(_flZr && _flZr.indexOf(r.lob)===-1) return false;
+        return _isCrossZr ? !r._zone : r._zone===zoneName;
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _zrMatch(r,k,true);}).reduce(function(s,r){return s+(r.r||0);},0);
+        return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].rev)||0;}));
+      });
+      return idxs.map(function(i){var m=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _zrMatch(r,m,false);}).reduce(function(s,r){return s+(r.r||0);},0);
+        return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].rev)||0);},0);})) : sum(zReps.map(function(r){return (r.rev&&r.rev[i])||0;}));
+      });
+    })(),
+    revBilled: (function(){
+      var _flZrb=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+      var _isCrossZrb=zoneName==='Cross Sales';
+      function _zrbMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        if(_flZrb && _flZrb.indexOf(r.lob)===-1) return false;
+        return _isCrossZrb ? !r._zone : r._zone===zoneName;
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _zrbMatch(r,k,true);}).reduce(function(s,r){return s+(r.prov?0:(r.r||0));},0);
+        return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].revBilled)||0;}));
+      });
+      return idxs.map(function(i){var m=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _zrbMatch(r,m,false);}).reduce(function(s,r){return s+(r.prov?0:(r.r||0));},0);
+        return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].revBilled)||0);},0);})) : sum(zReps.map(function(r){return (r.revBilled&&r.revBilled[i])||0;}));
+      });
+    })(),
+    revProv:   (function(){
+      var _flZrp=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;
+      var _isCrossZrp=zoneName==='Cross Sales';
+      function _zrpMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        if(_flZrp && _flZrp.indexOf(r.lob)===-1) return false;
+        return _isCrossZrp ? !r._zone : r._zone===zoneName;
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _zrpMatch(r,k,true);}).reduce(function(s,r){return s+(r.prov?(r.r||0):0);},0);
+        return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].revProv)||0;}));
+      });
+      return idxs.map(function(i){var m=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _zrpMatch(r,m,false);}).reduce(function(s,r){return s+(r.prov?(r.r||0):0);},0);
+        return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].revProv)||0);},0);})) : sum(zReps.map(function(r){return (r.revProv&&r.revProv[i])||0;}));
+      });
+    })(),
+    gpProv:   (function(){
+      var _isCrossZgp=zoneName==='Cross Sales';
+      function _zgpMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        return _isCrossZgp ? !r._zone : r._zone===zoneName;
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _zgpMatch(r,k,true);}).reduce(function(s,r){return s+(r.prov?(r.g||0):0);},0);
+        return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].gpProv)||0;}));
+      });
+      return idxs.map(function(i){var _ml=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _zgpMatch(r,_ml,false);}).reduce(function(s,r){return s+(r.prov?(r.g||0):0);},0);
+        return sum(zReps.map(function(r){ return (r.gpProv&&r.gpProv[i])||0; }));
+      });
+    })(),
+    gpActual: (function(){
+      var _isCrossZga=zoneName==='Cross Sales';
+      function _zgaMatch(r,key,isWk){
+        if(isWk?(r._wk!==key):(r._ml!==key)) return false;
+        return _isCrossZga ? !r._zone : r._zone===zoneName;
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _zgaMatch(r,k,true);}).reduce(function(s,r){return s+(r.prov?0:(r.g||0));},0);
+        return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].gpActual)||0;}));
+      });
+      return idxs.map(function(i){var _ml=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return _zgaMatch(r,_ml,false);}).reduce(function(s,r){return s+(r.prov?0:(r.g||0));},0);
+        return sum(zReps.map(function(r){ return (r.gpActual&&r.gpActual[i])||0; }));
+      });
+    })(),
     tank: (isWeekly ? wkeys : idxs).map(function(){ return 0; }),
     tgt:         zoneTgtForView(zData, zReps),
     weeklyTgt:   zData.weeklyTarget  || 0,
