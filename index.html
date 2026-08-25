@@ -7052,7 +7052,7 @@ function drawer(){
                 var checked = draft.indexOf(v) > -1;
                 var displayV = v === '' ? '(blank)' : v;
                 return '<div data-act="drillFilterToggleVal" data-col="'+esc(fCol.k)+'" data-val="'+esc(v)+'" data-search="'+esc(displayV.toLowerCase())+'" class="drill-filter-opt" style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:6px;" onmouseenter="this.style.background=\'#F4F7FC\'" onmouseleave="this.style.background=\'transparent\'">'
-                  +'<div style="width:15px;height:15px;border-radius:4px;border:1.5px solid '+(checked?BRAND_A1:'#C5D0E0')+';background:'+(checked?BRAND_A1:'#FFFFFF')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+                  +'<div class="drill-filter-checkbox" style="width:15px;height:15px;border-radius:4px;border:1.5px solid '+(checked?BRAND_A1:'#C5D0E0')+';background:'+(checked?BRAND_A1:'#FFFFFF')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
                     +(checked ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '')
                   +'</div>'
                   +'<span style="font-size:12px;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(displayV)+'</span>'
@@ -9600,12 +9600,16 @@ document.addEventListener('click', function(ev){
     if (!state.drill.filterDraft[fk]) state.drill.filterDraft[fk] = [];
     var draft = state.drill.filterDraft[fk];
     var idx = draft.indexOf(v);
-    if (idx > -1) { draft.splice(idx,1); } else { draft.push(v); }
+    var nowChecked;
+    if (idx > -1) { draft.splice(idx,1); nowChecked = false; }
+    else          { draft.push(v);       nowChecked = true;  }
     state.drill.filterDraft[fk] = draft;
-    // Full re-render of the drawer for guaranteed-correct checkbox visuals —
-    // safe now that the underlying table itself is cached (see bodyRows
-    // caching), so this stays fast even though it rebuilds the popup.
-    renderDrillOnly();
+    var box = el.querySelector('.drill-filter-checkbox');
+    if (box) {
+      box.style.borderColor = nowChecked ? BRAND_A1 : '#C5D0E0';
+      box.style.background  = nowChecked ? BRAND_A1 : '#FFFFFF';
+      box.innerHTML = nowChecked ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '';
+    }
   }
   else if(act==='drillFilterSelectAll'){
     ev.stopPropagation();
@@ -9614,7 +9618,7 @@ document.addEventListener('click', function(ev){
     var allVals = [];
     opts.forEach(function(o){
       allVals.push(o.getAttribute('data-val'));
-      var box = o.querySelector('div');
+      var box = o.querySelector('.drill-filter-checkbox');
       if (box) { box.style.borderColor = BRAND_A1; box.style.background = BRAND_A1;
         box.innerHTML = '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'; }
     });
@@ -9624,7 +9628,7 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation();
     state.drill.filterDraft[state.drill.openFilterCol] = [];
     document.querySelectorAll('#drill-colfilter-list .drill-filter-opt').forEach(function(o){
-      var box = o.querySelector('div');
+      var box = o.querySelector('.drill-filter-checkbox');
       if (box) { box.style.borderColor = '#C5D0E0'; box.style.background = '#FFFFFF'; box.innerHTML = ''; }
     });
   }
