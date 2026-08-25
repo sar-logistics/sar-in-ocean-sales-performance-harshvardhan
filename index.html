@@ -7344,8 +7344,23 @@ function positionViewDrop(){ positionAllDrops(); }
 // visible "blink": every filter click was needlessly repainting the entire
 // dashboard behind the overlay.
 function renderDrillOnly(){
+  // Remove any PREVIOUSLY re-parented popup first — it now lives outside
+  // drawer-slot, so the innerHTML replacement below would otherwise leave
+  // it orphaned on screen even after the filter/drill closes.
+  var _oldPopup = document.getElementById('drill-filter-popup');
+  if (_oldPopup && _oldPopup.parentElement === document.body) {
+    _oldPopup.remove();
+  }
   var drawerEl = document.getElementById('drawer-slot');
   if (drawerEl) drawerEl.innerHTML = drawer() + feedbackModal() + orgEditModal();
+  // Re-parent the freshly-built filter popup (if any) directly onto <body>
+  // — bypasses ANY possible ancestor CSS issue (transform/filter/
+  // perspective) that could break position:fixed containment, no matter
+  // how deeply nested the drawer markup is.
+  var _popupEl = document.getElementById('drill-filter-popup');
+  if (_popupEl && _popupEl.parentElement !== document.body) {
+    document.body.appendChild(_popupEl);
+  }
 }
 
 var _lastRenderHash = '';
@@ -7401,6 +7416,13 @@ function render(){
     // Region was cleared — remove the zones we auto-added for it
     state.filterZones = [];
     state._regionExpandedZones = false;
+  }
+  // Clean up any re-parented drill filter popup if it should no longer be
+  // showing (e.g. the whole drill drawer was closed via a path that calls
+  // render() directly rather than renderDrillOnly()).
+  if (!state.drill || !state.drill.openFilterCol) {
+    var _strayPopup = document.getElementById("drill-filter-popup");
+    if (_strayPopup && _strayPopup.parentElement === document.body) _strayPopup.remove();
   }
   computeFilteredRepsRaw();
   buildZoneAggregates(); // pre-compute once per render, used by grandEntity/zoneEntity
