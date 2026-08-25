@@ -7344,8 +7344,21 @@ function positionViewDrop(){ positionAllDrops(); }
 // visible "blink": every filter click was needlessly repainting the entire
 // dashboard behind the overlay.
 function renderDrillOnly(){
+  // If a stray popup from a previous open is still sitting on body (e.g.
+  // the whole drill closed via a path that didnt clean it up), remove it
+  // before rebuilding, so we never end up with a duplicate.
+  var _stray = document.body.querySelector(':scope > #drill-filter-popup');
+  if (_stray) _stray.remove();
   var drawerEl = document.getElementById('drawer-slot');
   if (drawerEl) drawerEl.innerHTML = drawer() + feedbackModal() + orgEditModal();
+  var _popupEl = document.getElementById('drill-filter-popup');
+  if (_popupEl && _popupEl.parentElement !== document.body) {
+    document.body.appendChild(_popupEl);
+  }
+}
+function _cleanupDrillFilterPopup(){
+  var _p = document.body.querySelector(':scope > #drill-filter-popup');
+  if (_p) _p.remove();
 }
 
 var _lastRenderHash = '';
@@ -8080,6 +8093,7 @@ function openInsightDrill(drillType, name, drillMonth) {
 }
 
 function openDrill(entity, metric, col, valueFmt){
+  _cleanupDrillFilterPopup(); // clear any stray popup from a previous drill session
   var cacheKey = CACHE_VERSION+'||'+entity+'||'+metric+'||'+col+'||'+(state.filterLobs||[]).join(',')+'||'+(state.filterZones||[]).join(',')+'||'+(state.filterReps||[]).join(',')+'||'+(currentUser?currentUser.email:'');
 
   // 1. In-memory cache — instant repeat clicks
@@ -9656,7 +9670,7 @@ document.addEventListener('click', function(ev){
     // overlay. Checking ev.target itself (not the resolved ancestor) fixes it.
     var clickedCloseButtonDirectly = ev.target.matches && ev.target.matches('[data-act="close"]');
     if (ev.target.closest('[data-stop]') && !clickedCloseButtonDirectly) return;
-    document.body.style.overflow=''; state.drill=null; render();
+    document.body.style.overflow=''; state.drill=null; _cleanupDrillFilterPopup(); render();
   }
 });
 document.addEventListener('keydown', function(e){ 
@@ -9665,7 +9679,7 @@ document.addEventListener('keydown', function(e){
       state.viewDropOpen=false; state.fromDropOpen=false; state.toDropOpen=false; state.weeklyDropOpen=false; render(); 
     } else if(state.filtersOpen){
       state.filtersOpen=false; state.filterLobDropOpen=false; state.filterRepDropOpen=false; render();
-    } else if(state.drill){ state.drill=null; render(); } 
+    } else if(state.drill){ state.drill=null; _cleanupDrillFilterPopup(); render(); } 
   } 
 });
 
