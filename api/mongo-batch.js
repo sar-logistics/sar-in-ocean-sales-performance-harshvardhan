@@ -457,7 +457,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v192-teu-consistent-non-lcl-rule-1787629756";
+const DEPLOY_TS = "2026-08-21T-ocean-v193-fix-customer-agent-date-fallback-direction-1787630727";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -1418,10 +1418,11 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
     const isExportColl = collName.includes("export");
     const isImportColl = collName.includes("import");
     const dateCol = isExportColl ? "ETD Loading Port" : isImportColl ? "ETA Discharge" : "Job Date";
+    const dateFallbackCol = isExportColl ? "ETD First Leg of Origin" : isImportColl ? "ETA Last Leg of Destination" : null;
     for (const job of jobs) {
-      // Date filter
+      // Date filter — direction-correct fallback chain (was mixing Export+Import fallbacks together)
       if (activeMonthSet) {
-        const rawDate = job[dateCol] || job["ETD First Leg of Origin"] || job["ETA Last Leg of Destination"] || job["Job Date"];
+        const rawDate = job[dateCol] || (dateFallbackCol ? job[dateFallbackCol] : null) || job["Job Date"];
         if (!rawDate) continue;
         const dObj = parseSheetDate(rawDate);
         if (!dObj) continue;
@@ -2352,10 +2353,11 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
     const jobs = await db.collection(collName).find({}, { projection }).toArray();
 
     const dateColA = isExport ? "ETD Loading Port" : isImport ? "ETA Discharge" : "Job Date";
+    const dateFallbackColA = isExport ? "ETD First Leg of Origin" : isImport ? "ETA Last Leg of Destination" : null;
     for (const job of jobs) {
-      // Date filter — full fallback chain
+      // Date filter — direction-correct fallback chain
       if (activeMonthSet) {
-        const rawDate = job[dateColA] || job["ETD First Leg of Origin"] || job["ETA Last Leg of Destination"] || job["Job Date"];
+        const rawDate = job[dateColA] || (dateFallbackColA ? job[dateFallbackColA] : null) || job["Job Date"];
         if (!rawDate) continue;
         const dObj = parseSheetDate(rawDate);
         if (!dObj) continue;
