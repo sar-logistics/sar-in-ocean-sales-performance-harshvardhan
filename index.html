@@ -7051,7 +7051,7 @@ function drawer(){
             + uniqueVals.map(function(v){
                 var checked = draft.indexOf(v) > -1;
                 var displayV = v === '' ? '(blank)' : v;
-                return '<div data-act="drillFilterToggleVal" data-val="'+esc(v)+'" data-search="'+esc(displayV.toLowerCase())+'" class="drill-filter-opt" style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:6px;" onmouseenter="this.style.background=\'#F4F7FC\'" onmouseleave="this.style.background=\'transparent\'">'
+                return '<div data-act="drillFilterToggleVal" data-col="'+esc(fCol.k)+'" data-val="'+esc(v)+'" data-search="'+esc(displayV.toLowerCase())+'" class="drill-filter-opt" style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:6px;" onmouseenter="this.style.background=\'#F4F7FC\'" onmouseleave="this.style.background=\'transparent\'">'
                   +'<div style="width:15px;height:15px;border-radius:4px;border:1.5px solid '+(checked?BRAND_A1:'#C5D0E0')+';background:'+(checked?BRAND_A1:'#FFFFFF')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
                     +(checked ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '')
                   +'</div>'
@@ -9595,9 +9595,10 @@ document.addEventListener('click', function(ev){
     // at all needed. This is what eliminates the blink entirely: clicking a
     // checkbox used to rebuild the whole drill table underneath the popup.
     ev.stopPropagation();
-    var fk = state.drill.openFilterCol;
+    var fk = el.getAttribute('data-col') || state.drill.openFilterCol;
     var v = el.getAttribute('data-val');
-    var draft = state.drill.filterDraft[fk] || [];
+    if (!state.drill.filterDraft[fk]) state.drill.filterDraft[fk] = [];
+    var draft = state.drill.filterDraft[fk];
     var idx = draft.indexOf(v);
     var nowChecked;
     if (idx > -1) { draft.splice(idx,1); nowChecked = false; }
@@ -9634,7 +9635,10 @@ document.addEventListener('click', function(ev){
   else if(act==='drillFilterApply'){
     ev.stopPropagation();
     var fk3 = state.drill.openFilterCol;
-    state.drill.columnFilters[fk3] = (state.drill.filterDraft[fk3] || []).slice();
+    var newFilterVals = (state.drill.filterDraft[fk3] || []).slice();
+    if (!state.drill.columnFilters) state.drill.columnFilters = {};
+    state.drill.columnFilters = Object.assign({}, state.drill.columnFilters);
+    state.drill.columnFilters[fk3] = newFilterVals;
     // Keep popup open so user can see filter applied — they can click outside to close
     renderDrillOnly();
   }
