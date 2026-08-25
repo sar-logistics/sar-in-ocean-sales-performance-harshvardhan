@@ -312,6 +312,7 @@ function getDateValueFor(job, cls) {
   }
   if (cls.direction === "IMPORT") {
     return job["ETA Discharge"]
+        || job["ETA Last Leg of Destination"]
         || job["Job Date"]
         || null;
   }
@@ -457,7 +458,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v197-fix-missing-cargotype-projection-1787632675";
+const DEPLOY_TS = "2026-08-21T-ocean-v198-CRITICAL-fix-import-date-fallback-missing-step-1787634331";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2626,7 +2627,7 @@ async function computeBothPendency(db) {
       const rawDate = isExport
         ? (job["ETD Loading Port"] || job["ETD First Leg of Origin"] || job["Job Date"])
         : isImport
-          ? (job["ETA Discharge"] || job["Job Date"])
+          ? (job["ETA Discharge"] || job["ETA Last Leg of Destination"] || job["Job Date"])
           : job["Job Date"];
       if (!rawDate) continue;
       const d = parseSheetDate(rawDate);
