@@ -3418,7 +3418,7 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
       var ships = zRows.length;
       var gp = zRows.reduce(function(s,r){ return s + (r.g||r.actualProfit||r.provisionalProfit||0); }, 0);
       var rev = zRows.reduce(function(s,r){ return s + (r.r||r.billedRevenue||r.provRevenue||0); }, 0);
-      var teu = zRows.reduce(function(s,r){ return s + (r.teu||0); }, 0);
+      var teu = zRows.reduce(function(s,r){ return (r.cargoType||'').toUpperCase().trim()==='LCL' ? s : s + (r.teu||0); }, 0);
       var tons = zRows.reduce(function(s,r){ return s + (r.tons||0); }, 0);
       var reps = [...new Set(zRows.map(function(r){ return r._dn || r._sp; }).filter(Boolean))];
       return Object.assign({}, c, {shipments: ships, gp: gp, revenue: rev, teu: teu, tons: tons, salesReps: reps, gpPct: rev > 0 ? Math.round(gp/rev*100) : 0});
