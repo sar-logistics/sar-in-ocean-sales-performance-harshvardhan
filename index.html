@@ -9527,7 +9527,10 @@ document.addEventListener('click', function(ev){
     if(el.checked && vidx === -1) cur.push(val);
     else if(!el.checked && vidx > -1) cur.splice(vidx,1);
     state.pendencyDrill.colFilters[col] = cur.length === allVals.length ? [] : cur;
-    render();
+    // Targeted update — same anti-blink pattern as pendDrillFilterSearch,
+    // avoids rebuilding the whole page (sidebar/topbar/etc) on every click.
+    var drawerElT = document.getElementById('drawer-slot');
+    if(drawerElT) drawerElT.innerHTML = drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'');
   }
   else if(act==='pendDrillFilterAll'){
     ev.stopPropagation();
@@ -9535,7 +9538,8 @@ document.addEventListener('click', function(ev){
     var col = el.getAttribute('data-col');
     if(!state.pendencyDrill.colFilters) state.pendencyDrill.colFilters = {};
     state.pendencyDrill.colFilters[col] = [];
-    render();
+    var drawerElA = document.getElementById('drawer-slot');
+    if(drawerElA) drawerElA.innerHTML = drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'');
   }
   else if(act==='pendDrillFilterNone'){
     ev.stopPropagation();
@@ -9543,7 +9547,8 @@ document.addEventListener('click', function(ev){
     var col = el.getAttribute('data-col');
     if(!state.pendencyDrill.colFilters) state.pendencyDrill.colFilters = {};
     state.pendencyDrill.colFilters[col] = ['__none__'];
-    render();
+    var drawerElN = document.getElementById('drawer-slot');
+    if(drawerElN) drawerElN.innerHTML = drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'');
   }
   else if(act==='clearPendDrillFilters'){
     ev.stopPropagation();
