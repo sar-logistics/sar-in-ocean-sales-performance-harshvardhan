@@ -7518,7 +7518,20 @@ function render(){
     // the user) — otherwise switching from Region=North to Region=Corporate
     // left North's stale auto-expanded zones in place since filterZones
     // was no longer empty.
-    state.filterZones = getZones().filter(function(z){
+    // IMPORTANT: search the FULL, unrestricted zone universe (derived from
+    // repsRawOriginal) — NOT getZones()/repsRaw, which are themselves
+    // already narrowed by whatever filter was active in the PREVIOUS
+    // render cycle. Using the already-narrowed list here meant adding a
+    // second Region could never find that regions zones if they weren't
+    // already part of the prior (smaller) selection.
+    var _allPossibleZones = [];
+    if (repsRawOriginal) {
+      var _seenZ = {};
+      repsRawOriginal.forEach(function(r){
+        if (r.zone && r.zone !== 'Others' && !_seenZ[r.zone]) { _seenZ[r.zone] = true; _allPossibleZones.push(r.zone); }
+      });
+    }
+    state.filterZones = _allPossibleZones.filter(function(z){
       return state.filterRegions.indexOf(window._zoneRegionMap[z] || '') > -1;
     });
     state._regionExpandedZones = true;
