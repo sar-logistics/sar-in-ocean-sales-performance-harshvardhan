@@ -8268,6 +8268,7 @@ var allPendencyDrillRows = null; // loaded once with opData, filtered client-sid
 var _pendencyDrillLoading = false; // prevents infinite render loop while fetching weekly drill rows
 
 function openPendencyDrill(rep, col, status, lock, type){
+  _cleanupPendFilterPopup(); // clear any stray popup from a previous pendency drill session
   state.pendencyDrill = { rep:rep, col:col, status:status, lock:lock, type:type||'rep', loading:true, rows:null, error:null, columnFilters:{}, openFilterCol:null };
   render(); // show loading spinner immediately
 
