@@ -7357,6 +7357,43 @@ function _cleanupDrillFilterPopup(){
   var _p = document.body.querySelector(':scope > #drill-filter-popup');
   if (_p) _p.remove();
 }
+// Pendency equivalents of the SP anti-blink functions above.
+function _cleanupPendFilterPopup(){
+  var _p = document.body.querySelector(':scope > #pend-filter-popup');
+  if (_p) _p.remove();
+}
+function renderPendPopupOnly(){
+  _cleanupPendFilterPopup();
+  var drawerEl = document.getElementById('drawer-slot');
+  var freshHtml = pendencyDrillDrawer();
+  var tempEl = document.createElement('div');
+  tempEl.innerHTML = freshHtml;
+  var freshPopup = tempEl.querySelector('#pend-filter-popup');
+  if (freshPopup) document.body.appendChild(freshPopup);
+}
+function renderPendDataOnly(){
+  _cleanupPendFilterPopup();
+  var freshHtml = pendencyDrillDrawer();
+  var tempEl = document.createElement('div');
+  tempEl.innerHTML = freshHtml;
+
+  var freshTbody = tempEl.querySelector('#pend-drill-tbody');
+  var liveTbody = document.querySelector('#drawer-slot #pend-drill-tbody');
+  if (freshTbody && liveTbody) liveTbody.innerHTML = freshTbody.innerHTML;
+
+  var freshSubtitle = tempEl.querySelector('#pend-drill-subtitle');
+  var liveSubtitle = document.querySelector('#drawer-slot #pend-drill-subtitle');
+  if (freshSubtitle && liveSubtitle) liveSubtitle.innerHTML = freshSubtitle.innerHTML;
+
+  var freshBanner = tempEl.querySelector('#pend-clear-filters-banner');
+  var liveBanner = document.querySelector('#drawer-slot #pend-clear-filters-banner');
+  if (freshBanner && liveBanner) liveBanner.innerHTML = freshBanner.innerHTML;
+
+  if (!(freshTbody && liveTbody)) {
+    var drawerEl = document.getElementById('drawer-slot');
+    if (drawerEl) drawerEl.innerHTML = pendencyDrillDrawer()+feedbackModal()+orgEditModal()+addUserModal();
+  }
+}
 // Anti-blink version for opening/closing JUST the filter popup — builds
 // fresh HTML (cheap, table itself is cached) but ONLY ever touches the
 // popup element on body, never replaces drawer-slots innerHTML, so the
@@ -8547,7 +8584,7 @@ function pendencyDrillDrawer(){
     var clearFiltersBtn = hasPdColFilters
       ? '<div style="padding:6px 14px;background:#FEF3C7;border-bottom:1px solid #FDE68A;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;">'          +'<span style="font-size:11px;color:#92400E;font-weight:600;">Column filters active — showing '+visibleRows.length.toLocaleString()+' of '+pd.rows.length.toLocaleString()+' jobs</span>'          +'<button data-act="clearPendDrillFilters" style="background:#F59E0B;border:none;border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700;color:#FFFFFF;cursor:pointer;">Clear filters</button>'        +'</div>'
       : '';
-    bodyContent = clearFiltersBtn+'<div style="flex:1;overflow:auto;position:relative;-webkit-overflow-scrolling:touch;contain:paint;">'      +filterPopup      +'<table style="width:100%;border-collapse:collapse;min-width:1400px;font-variant-numeric:tabular-nums;">'        +'<thead style="position:sticky;top:0;z-index:4;"><tr>'+COLS.map(th).join('')+'</tr></thead>'        +'<tbody>'+bodyRows        +(hiddenCount>0          ? '<tr><td colspan="'+COLS.length+'" style="text-align:center;padding:14px;background:#F8FAFC;">'            +'<button data-act="pendencyDrillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">Show all '+visibleRows.length.toLocaleString()+' rows ('+hiddenCount.toLocaleString()+' more)</button>'            +'</td></tr>'          : '')        +'</tbody>'      +'</table>'    +'</div>';
+    bodyContent = '<div id="pend-clear-filters-banner">'+clearFiltersBtn+'</div>'+'<div style="flex:1;overflow:auto;position:relative;-webkit-overflow-scrolling:touch;contain:paint;">'      +filterPopup      +'<table style="width:100%;border-collapse:collapse;min-width:1400px;font-variant-numeric:tabular-nums;">'        +'<thead style="position:sticky;top:0;z-index:4;"><tr>'+COLS.map(th).join('')+'</tr></thead>'        +'<tbody id="pend-drill-tbody">'+bodyRows        +(hiddenCount>0          ? '<tr><td colspan="'+COLS.length+'" style="text-align:center;padding:14px;background:#F8FAFC;">'            +'<button data-act="pendencyDrillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">Show all '+visibleRows.length.toLocaleString()+' rows ('+hiddenCount.toLocaleString()+' more)</button>'            +'</td></tr>'          : '')        +'</tbody>'      +'</table>'    +'</div>';
   }
 
   var pdFilteredCount = visibleRows ? visibleRows.length : (pd.count || 0);
@@ -8567,7 +8604,7 @@ function pendencyDrillDrawer(){
         +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">'
           +'<div>'
             +'<div style="font-size:19px;font-weight:800;color:#0D2B5E;letter-spacing:-0.02em;">'+(function(){ if(pd.type==='jobowner'&&pd.rep&&pd.rep.indexOf('||')>-1){ var p=pd.rep.split('||'); return esc(p[0])+' <span style="font-size:14px;font-weight:600;color:#64748B;">(under '+esc(p[1])+')</span>'; } return esc(pd.rep); }())+' \u2014 '+esc(statusLabel)+' \u2014 '+esc(colLabel)+'</div>'
-            +'<div style="font-size:12px;color:#64748B;font-weight:500;margin-top:4px;">'+subtitle+'</div>'
+            +'<div id="pend-drill-subtitle" style="font-size:12px;color:#64748B;font-weight:500;margin-top:4px;">'+subtitle+'</div>'
           +'</div>'
           +'<button data-act="closePendencyDrill" style="border:none;background:#F4F7FB;width:34px;height:34px;border-radius:8px;cursor:pointer;color:#5B6678;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;">\u2715</button>'
         +'</div>'
@@ -9480,15 +9517,16 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation();
     if(!state.pendencyDrill) return;
     var col = el.getAttribute('data-col');
-    var rect = el.getBoundingClientRect();
+    var thEl = el.closest('th') || el;
+    var rect = thEl.getBoundingClientRect();
     state.pendencyDrill.openFilterCol = state.pendencyDrill.openFilterCol === col ? null : col;
     state.pendencyDrill.filterAnchor = { top: rect.bottom+4, left: Math.min(rect.left, window.innerWidth-270) };
-    render();
+    renderPendPopupOnly();
   }
   else if(act==='closePendDrillFilter'){
     ev.stopPropagation();
     if(state.pendencyDrill) { state.pendencyDrill.openFilterCol = null; }
-    render();
+    renderPendPopupOnly();
   }
   else if(act==='pendDrillFilterToggle'){
     ev.stopPropagation();
@@ -9505,10 +9543,7 @@ document.addEventListener('click', function(ev){
     if(el.checked && vidx === -1) cur.push(val);
     else if(!el.checked && vidx > -1) cur.splice(vidx,1);
     state.pendencyDrill.colFilters[col] = cur.length === allVals.length ? [] : cur;
-    // Targeted update — same anti-blink pattern as pendDrillFilterSearch,
-    // avoids rebuilding the whole page (sidebar/topbar/etc) on every click.
-    var drawerElT = document.getElementById('drawer-slot');
-    if(drawerElT) drawerElT.innerHTML = drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'');
+    renderPendDataOnly();
   }
   else if(act==='pendDrillFilterAll'){
     ev.stopPropagation();
@@ -9516,8 +9551,7 @@ document.addEventListener('click', function(ev){
     var col = el.getAttribute('data-col');
     if(!state.pendencyDrill.colFilters) state.pendencyDrill.colFilters = {};
     state.pendencyDrill.colFilters[col] = [];
-    var drawerElA = document.getElementById('drawer-slot');
-    if(drawerElA) drawerElA.innerHTML = drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'');
+    renderPendDataOnly();
   }
   else if(act==='pendDrillFilterNone'){
     ev.stopPropagation();
@@ -9525,13 +9559,12 @@ document.addEventListener('click', function(ev){
     var col = el.getAttribute('data-col');
     if(!state.pendencyDrill.colFilters) state.pendencyDrill.colFilters = {};
     state.pendencyDrill.colFilters[col] = ['__none__'];
-    var drawerElN = document.getElementById('drawer-slot');
-    if(drawerElN) drawerElN.innerHTML = drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'');
+    renderPendDataOnly();
   }
   else if(act==='clearPendDrillFilters'){
     ev.stopPropagation();
     if(state.pendencyDrill) { state.pendencyDrill.colFilters = {}; state.pendencyDrill.openFilterCol = null; }
-    render();
+    renderPendDataOnly();
   }
   else if(act==='pendDrillFilterSearch'){
     ev.stopPropagation();
