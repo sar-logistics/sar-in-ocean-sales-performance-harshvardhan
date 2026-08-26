@@ -7003,7 +7003,7 @@ function drawer(){
     totalRow = '<tfoot style="position:sticky;bottom:0;z-index:5;">'+totalRow+'</tfoot>';
 
     // ── LOB tab bar ──
-    var tabBar = '<div style="padding:10px 28px;border-bottom:1px solid #EEF2F8;background:#FFFFFF;flex-shrink:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+    var tabBar = '<div id="drill-tab-bar" style="padding:10px 28px;border-bottom:1px solid #EEF2F8;background:#FFFFFF;flex-shrink:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
       + lobTabs.map(function(tab){
           var active = tab === activeLobTab;
           var inFilter = !active && activeLobTab === 'ALL' && tab !== 'ALL' && (state.filterLobs||[]).indexOf(tab) > -1;
@@ -7088,7 +7088,7 @@ function drawer(){
   var footer = '';
 
   return '<div data-act="close" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px;animation:ovFade 0.16s ease;">'
-    +'<div data-stop="1" style="width:min(1200px,96vw);height:min(88vh,900px);background:#FFFFFF;border-radius:16px;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(15,23,40,0.22);animation:fadeUp 0.2s cubic-bezier(0.22,1,0.36,1);overflow:hidden;">'
+    +'<div id="drill-modal-box" data-stop="1" style="width:min(1200px,96vw);height:min(88vh,900px);background:#FFFFFF;border-radius:16px;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(15,23,40,0.22);animation:fadeUp 0.2s cubic-bezier(0.22,1,0.36,1);overflow:hidden;">'
       // ── Header ──
       +'<div style="padding:18px 24px 14px;border-bottom:1.5px solid #E8EDF6;flex-shrink:0;background:#FFFFFF;">'
         +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">'
@@ -7107,7 +7107,7 @@ function drawer(){
               }
               return col;
             })(d.col)+'</div>'
-            +'<div style="font-size:12px;color:#64748B;font-weight:500;margin-top:4px;">'+subtitle+'</div>'
+            +'<div id="drill-subtitle" style="font-size:12px;color:#64748B;font-weight:500;margin-top:4px;">'+subtitle+'</div>'
           +'</div>'
           +'<button data-act="close" style="border:none;background:#F4F7FB;width:34px;height:34px;border-radius:8px;cursor:pointer;color:#5B6678;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;">✕</button>'
         +'</div>'
@@ -7368,6 +7368,33 @@ function renderDrillPopupOnly(){
   tempEl.innerHTML = freshHtml;
   var freshPopup = tempEl.querySelector('#drill-filter-popup');
   if (freshPopup) document.body.appendChild(freshPopup);
+}
+// Anti-blink version for Apply / Clear filters — the actual FILTERED DATA
+// changes here (unlike open/close), so the rows genuinely need to update.
+// But everything else — title, close button, table headers, sticky shell —
+// stays completely untouched, only patching: table rows+total, the
+// "N jobs matching" count, and the LOB tab counts. Also closes the popup.
+function renderDrillDataOnly(){
+  _cleanupDrillFilterPopup();
+  var freshHtml = drawer();
+  var tempEl = document.createElement('div');
+  tempEl.innerHTML = freshHtml;
+
+  var freshTbody = tempEl.querySelector('#drill-tbody');
+  var liveTbody = document.querySelector('#drawer-slot #drill-tbody');
+  if (freshTbody && liveTbody) liveTbody.innerHTML = freshTbody.innerHTML;
+
+  var freshSubtitle = tempEl.querySelector('#drill-subtitle');
+  var liveSubtitle = document.querySelector('#drawer-slot #drill-subtitle');
+  if (freshSubtitle && liveSubtitle) liveSubtitle.innerHTML = freshSubtitle.innerHTML;
+
+  var freshTabBar = tempEl.querySelector('#drill-tab-bar');
+  var liveTabBar = document.querySelector('#drawer-slot #drill-tab-bar');
+  if (freshTabBar && liveTabBar) liveTabBar.innerHTML = freshTabBar.innerHTML;
+
+  // If none of the targeted pieces were found (e.g. structure changed),
+  // fall back to a full render rather than silently showing stale data.
+  if (!(freshTbody && liveTbody)) renderDrillOnly();
 }
 
 var _lastRenderHash = '';
@@ -9573,7 +9600,7 @@ document.addEventListener('click', function(ev){
   else if(act==='setDrillLobTab'){
     ev.stopPropagation();
     state.drill.lobTab = el.getAttribute('data-val');
-    renderDrillOnly();
+    renderDrillDataOnly();
   }
   else if(act==='toggleDrillColFilter'){
     ev.stopPropagation();
@@ -9649,13 +9676,14 @@ document.addEventListener('click', function(ev){
     state.drill.columnFilters = Object.assign({}, state.drill.columnFilters);
     state.drill.columnFilters[fk3] = newFilterVals;
     state.drill.openFilterCol = null; // close the popup after applying
-    renderDrillOnly();
+    renderDrillDataOnly();
   }
   else if(act==='clearDrillColFilters'){
     ev.stopPropagation();
     state.drill.columnFilters = {};
     state.drill.filterDraft = {};
-    renderDrillOnly();
+    state.drill.openFilterCol = null;
+    renderDrillDataOnly();
   }
   else if(act==='close'){
     // Only close the overlay if the click landed OUTSIDE any data-stop panel
