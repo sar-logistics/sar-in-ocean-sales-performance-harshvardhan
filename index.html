@@ -3033,11 +3033,18 @@ function topbar(){
             if(r.zone && r.zone !== 'Others') z[r.zone]=true;
           }); return z; }()));
           var zoneOpen = state.filterZoneDropOpen;
-          // Build regions list from _zoneRegionMap
+          // Build regions list ONLY from zones the current user is actually
+// permitted to see (getZones() already respects RLS via the filtered
+// repsRaw) — prevents a Regional/Zonal Manager from being shown filter
+// options for regions they have no access to.
 var _allRegions = [];
 if (window._zoneRegionMap) {
   var _regSet = {};
-  Object.values(window._zoneRegionMap).forEach(function(r){ if(r) _regSet[r]=true; });
+  var _permittedZones = getZones();
+  _permittedZones.forEach(function(z){
+    var reg = window._zoneRegionMap[z];
+    if (reg) _regSet[reg] = true;
+  });
   _allRegions = Object.keys(_regSet).sort();
 }
 var regionOpen = state.filterRegionDropOpen;
