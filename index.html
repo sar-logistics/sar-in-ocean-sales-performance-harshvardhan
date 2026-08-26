@@ -9692,7 +9692,7 @@ document.addEventListener('click', function(ev){
   else if(act==='setDrillLobTab'){
     ev.stopPropagation();
     state.drill.lobTab = el.getAttribute('data-val');
-    renderDrillDataOnly();
+    renderDrillOnly();
   }
   else if(act==='toggleDrillColFilter'){
     ev.stopPropagation();
@@ -9768,14 +9768,14 @@ document.addEventListener('click', function(ev){
     state.drill.columnFilters = Object.assign({}, state.drill.columnFilters);
     state.drill.columnFilters[fk3] = newFilterVals;
     state.drill.openFilterCol = null; // close the popup after applying
-    renderDrillDataOnly();
+    renderDrillOnly();
   }
   else if(act==='clearDrillColFilters'){
     ev.stopPropagation();
     state.drill.columnFilters = {};
     state.drill.filterDraft = {};
     state.drill.openFilterCol = null;
-    renderDrillDataOnly();
+    renderDrillOnly();
   }
   else if(act==='close'){
     // Only close the overlay if the click landed OUTSIDE any data-stop panel
