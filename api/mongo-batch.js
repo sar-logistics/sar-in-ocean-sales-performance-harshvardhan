@@ -411,10 +411,13 @@ async function _getRLSReps(db, currentUser) {
   }
 
   if (role === "regional manager") {
-    if (!region) return null; // no region set → see everything
+    // Supports multiple regions — stored as a comma-separated string
+    // (e.g. "North,South") for a manager who oversees more than one.
+    const regions = region.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+    if (regions.length === 0) return null; // no region set → see everything
     const allowedZones = new Set(
       Object.entries(zoneRegionMap)
-        .filter(([,reg]) => reg.toLowerCase() === region.toLowerCase())
+        .filter(([,reg]) => regions.indexOf(reg.toLowerCase()) > -1)
         .map(([z]) => z)
     );
     if (allowedZones.size === 0) return null; // no mapping yet → fallback
