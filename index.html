@@ -6790,6 +6790,7 @@ function drawer(){
   if (d.isTlDrill) {
     _activeDrillCols = [
       { k:'tradelane', l:'Tradelane', t:'text', truncate:130 },
+      { k:'srrLoadingCountry', l:'Loading Country', t:'text', truncate:130 },
       { k:'dischargeCountry', l:'Discharge Country', t:'text', truncate:130 },
       { k:'loadingPort', l:'Loading Port', t:'text', truncate:130 },
       { k:'dischargePort', l:'Discharge Port', t:'text', truncate:130 },
@@ -8154,7 +8155,6 @@ function openInsightDrill(drillType, name, drillMonth) {
   if (drillType === 'tradelane') {
     matched.forEach(function(r){
       r.tradelane = r._tg;
-      if (!r.loadingPort && r.srrLoadingCountry) r.loadingPort = r.srrLoadingCountry;
     });
   }
   var _iResult = {
