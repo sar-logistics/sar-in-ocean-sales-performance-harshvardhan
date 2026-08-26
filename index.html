@@ -9642,8 +9642,8 @@ document.addEventListener('click', function(ev){
     state.drill.filterDraft[fk] = draft;
     var box = el.querySelector('.drill-filter-checkbox');
     if (box) {
-      box.style.borderColor = nowChecked ? BRAND_A1 : '#C5D0E0';
-      box.style.background  = nowChecked ? BRAND_A1 : '#FFFFFF';
+      box.style.borderColor = nowChecked ? '#1D5FCC' : '#C5D0E0';
+      box.style.background  = nowChecked ? '#1D5FCC' : '#FFFFFF';
       box.innerHTML = nowChecked ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '';
     }
   }
@@ -9655,7 +9655,7 @@ document.addEventListener('click', function(ev){
     opts.forEach(function(o){
       allVals.push(o.getAttribute('data-val'));
       var box = o.querySelector('.drill-filter-checkbox');
-      if (box) { box.style.borderColor = BRAND_A1; box.style.background = BRAND_A1;
+      if (box) { box.style.borderColor = '#1D5FCC'; box.style.background = '#1D5FCC';
         box.innerHTML = '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'; }
     });
     state.drill.filterDraft[fk2] = allVals;
