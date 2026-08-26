@@ -7344,9 +7344,6 @@ function positionViewDrop(){ positionAllDrops(); }
 // visible "blink": every filter click was needlessly repainting the entire
 // dashboard behind the overlay.
 function renderDrillOnly(){
-  // If a stray popup from a previous open is still sitting on body (e.g.
-  // the whole drill closed via a path that didnt clean it up), remove it
-  // before rebuilding, so we never end up with a duplicate.
   var _stray = document.body.querySelector(':scope > #drill-filter-popup');
   if (_stray) _stray.remove();
   var drawerEl = document.getElementById('drawer-slot');
@@ -7359,6 +7356,18 @@ function renderDrillOnly(){
 function _cleanupDrillFilterPopup(){
   var _p = document.body.querySelector(':scope > #drill-filter-popup');
   if (_p) _p.remove();
+}
+// Anti-blink version for opening/closing JUST the filter popup — builds
+// fresh HTML (cheap, table itself is cached) but ONLY ever touches the
+// popup element on body, never replaces drawer-slots innerHTML, so the
+// visible table never flashes/rebuilds.
+function renderDrillPopupOnly(){
+  _cleanupDrillFilterPopup();
+  var freshHtml = drawer();
+  var tempEl = document.createElement('div');
+  tempEl.innerHTML = freshHtml;
+  var freshPopup = tempEl.querySelector('#drill-filter-popup');
+  if (freshPopup) document.body.appendChild(freshPopup);
 }
 
 var _lastRenderHash = '';
@@ -9587,7 +9596,7 @@ document.addEventListener('click', function(ev){
       if (left < 8) left = 8;
       state.drill.filterAnchor = { top: top, left: left };
     }
-    renderDrillOnly();
+    renderDrillPopupOnly();
   }
   else if(act==='drillFilterToggleVal'){
     // Checkbox toggles only affect the STAGED draft (not yet applied to the
