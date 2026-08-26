@@ -9526,7 +9526,7 @@ document.addEventListener('click', function(ev){
   else if(act==='drill'){ ev.stopPropagation(); openDrill(el.getAttribute('data-entity'),el.getAttribute('data-metric'),el.getAttribute('data-col'),el.getAttribute('data-val')); }
   else if(act==='insightDrill'){ ev.stopPropagation(); openInsightDrill(el.getAttribute('data-drill-type'), el.getAttribute('data-drill-name'), el.getAttribute('data-drill-month')); }
   else if(act==='pendencyDrill'){ ev.stopPropagation(); openPendencyDrill(el.getAttribute('data-rep'),el.getAttribute('data-col'),el.getAttribute('data-status'),el.getAttribute('data-lock'),el.getAttribute('data-type')||'rep'); }
-  else if(act==='closePendencyDrill'){ if(el.getAttribute('data-stop')) return; state.pendencyDrill=null; render(); }
+  else if(act==='closePendencyDrill'){ if(el.getAttribute('data-stop')) return; state.pendencyDrill=null; _cleanupPendFilterPopup(); render(); }
   else if(act==='openPendDrillFilter'){
     ev.stopPropagation();
     if(!state.pendencyDrill) return;
@@ -9781,7 +9781,8 @@ document.addEventListener('keydown', function(e){
       state.viewDropOpen=false; state.fromDropOpen=false; state.toDropOpen=false; state.weeklyDropOpen=false; render(); 
     } else if(state.filtersOpen){
       state.filtersOpen=false; state.filterLobDropOpen=false; state.filterRepDropOpen=false; render();
-    } else if(state.drill){ state.drill=null; _cleanupDrillFilterPopup(); render(); } 
+    } else if(state.drill){ state.drill=null; _cleanupDrillFilterPopup(); render(); }
+    else if(state.pendencyDrill){ state.pendencyDrill=null; _cleanupPendFilterPopup(); render(); }
   } 
 });
 
