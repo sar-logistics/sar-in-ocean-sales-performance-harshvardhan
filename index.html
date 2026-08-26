@@ -795,28 +795,46 @@ function computeFilteredRepsRaw(){
         base = base.filter(function(r){ return r.zone === userZone; });
       }
     } else if (role === 'regional manager') {
-      var userRegion2 = (currentUser.region || '').trim().toLowerCase();
-      if (userRegion2 && window._zoneRegionMap) {
+      // Supports multiple regions (comma-separated), matching _getRLSReps().
+      var userRegions2 = (currentUser.region || '').split(',')
+        .map(function(s){ return s.trim().toLowerCase(); }).filter(Boolean);
+      if (userRegions2.length > 0 && window._zoneRegionMap) {
         var allowedZones2 = Object.keys(window._zoneRegionMap).filter(function(z){
-          return (window._zoneRegionMap[z]||'').toLowerCase() === userRegion2;
+          return userRegions2.indexOf((window._zoneRegionMap[z]||'').toLowerCase()) > -1;
         });
-        if (allowedZones2.length > 0) {
-          base = base.filter(function(r){ return allowedZones2.indexOf(r.zone) > -1; });
+        var _rmIncludesCrossSales = userRegions2.indexOf('cross sales') > -1;
+        if (allowedZones2.length > 0 || _rmIncludesCrossSales) {
+          base = base.filter(function(r){
+            if (allowedZones2.indexOf(r.zone) > -1) return true;
+            if (_rmIncludesCrossSales && !r.zone) return true;
+            return false;
+          });
         }
       }
     }
   }
 
-  // Zone filter — expand selected zones to rep names, then intersect with rep filter
+  // Zone filter — expand selected zones to rep names, then intersect with rep filter.
+  // 'Cross Sales' is a special value (reps with NO zone at all) — a real
+  // rep never literally has r.zone === 'Cross Sales', so it needs its own
+  // check rather than a plain indexOf match.
   var filterZones = state.filterZones || [];
   if (filterZones.length > 0) {
-    base = base.filter(function(r){ return filterZones.indexOf(r.zone) > -1; });
+    var _fzIncludesCrossSales = filterZones.indexOf('Cross Sales') > -1;
+    base = base.filter(function(r){
+      if (filterZones.indexOf(r.zone) > -1) return true;
+      if (_fzIncludesCrossSales && !r.zone) return true;
+      return false;
+    });
   }
   var filterRegions = state.filterRegions || [];
   if (filterRegions.length > 0 && window._zoneRegionMap) {
+    var _frIncludesCrossSales = filterRegions.indexOf('Cross Sales') > -1;
     base = base.filter(function(r){
       var reg = window._zoneRegionMap[r.zone] || '';
-      return filterRegions.indexOf(reg) > -1;
+      if (filterRegions.indexOf(reg) > -1) return true;
+      if (_frIncludesCrossSales && !r.zone) return true;
+      return false;
     });
   }
 
@@ -2319,9 +2337,12 @@ function sortZones(arr){
 function getZones(){
   var seen = {}, zones = [];
   var _excludeZones = ['Others'];
+  var _hasCrossSalesReps = false;
   repsRaw.forEach(function(r){
+    if (!r.zone) { _hasCrossSalesReps = true; return; } // unmapped rep — surfaced as the synthesized 'Cross Sales' zone below, not its own blank entry
     if (!seen[r.zone] && _excludeZones.indexOf(r.zone) === -1) { seen[r.zone] = true; zones.push(r.zone); }
   });
+  if (_hasCrossSalesReps) zones.push('Cross Sales');
   return sortZones(zones);
 }
 
