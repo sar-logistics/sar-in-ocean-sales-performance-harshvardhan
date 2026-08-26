@@ -8039,6 +8039,7 @@ function _defaultDrillLobTab() {
 }
 
 function openInsightDrill(drillType, name, drillMonth) {
+  _cleanupDrillFilterPopup(); // clear any stray popup from a previous drill session
   // Show loading drawer immediately — gives instant visual feedback
   document.body.style.overflow = 'hidden'; // prevent bg scroll when drill open
   state.drill = { entity: name, metric: 'Shipments', col: 'FY Total', valueFmt: null,
