@@ -9562,7 +9562,11 @@ document.addEventListener('click', function(ev){
     if(!state.pendencyDrill) return;
     var col = el.getAttribute('data-col');
     if(!state.pendencyDrill.colFilters) state.pendencyDrill.colFilters = {};
-    state.pendencyDrill.colFilters[col] = ['__none__'];
+    // Matches SP's Clear All behavior — clearing a column's selections
+    // removes the restriction entirely (shows everything for that column)
+    // rather than matching a sentinel value that shows nothing, which
+    // could trap the user in a confusing "0 jobs" state.
+    state.pendencyDrill.colFilters[col] = [];
     renderPendDataOnly();
   }
   else if(act==='clearPendDrillFilters'){
