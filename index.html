@@ -6682,10 +6682,10 @@ function salesTable(M){
         // Split "INAZ01 (Enterprises) - Niranjan" into a prominent code
         // ("INAZ01") and the rest of the description, which wraps in full
         // below it — nothing is ever truncated or hidden.
-        var zoneParts = /^(\S+)\s*(.*)$/.exec(ri.name) || [null, ri.name, ''];
+        var zoneParts = ri.name === 'Cross Sales' ? [null, 'Cross Sales', ''] : (/^(\S+)\s*(.*)$/.exec(ri.name) || [null, ri.name, '']);
         var zoneCode = zoneParts[1];
         var zoneDesc = zoneParts[2];
-        var _zReg = window._zoneRegionMap && window._zoneRegionMap[ri.name] ? window._zoneRegionMap[ri.name] : '';
+        var _zReg = ri.name === 'Cross Sales' ? 'Cross Sales' : (window._zoneRegionMap && window._zoneRegionMap[ri.name] ? window._zoneRegionMap[ri.name] : '');
         nameLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px;">'
           +'<div style="display:flex;align-items:center;gap:6px;">'
             +'<span style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5678C2;text-transform:uppercase;">ZONE</span>'
