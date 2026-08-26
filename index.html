@@ -5901,6 +5901,8 @@ function teamsPage(){
   +'</div>';
 }
 
+window._orgEditDraftUpdate = function(val){ state.orgEditDraftName = val; };
+
 function orgEditModal(){
   if (!orgEditTarget || !orgDataReady) return '';
   var allPeople = (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]);
@@ -5953,7 +5955,7 @@ function orgEditModal(){
       '<div style="display:flex;flex-direction:column;gap:14px;">'+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Name</label>'+
-          '<input type="text" id="org-edit-name" value="'+esc(person.name)+'" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;box-sizing:border-box;" />'+
+          '<input type="text" id="org-edit-name" value="'+esc(state.orgEditDraftName!==undefined?state.orgEditDraftName:person.name)+'" oninput="window._orgEditDraftUpdate(this.value)" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;box-sizing:border-box;" />'+
         '</div>'+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Role</label>'+
@@ -5996,6 +5998,14 @@ function orgEditModal(){
 }
 
 
+// Keeps Name/Email typed values alive across re-renders (e.g. opening the
+// Region checklist) since these plain inputs are not otherwise tied to
+// state and would be wiped when addUserModal() rebuilds fresh HTML.
+window._addUserDraftUpdate = function(field, val){
+  if (field === 'name') state.addUserDraftName = val;
+  else if (field === 'email') state.addUserDraftEmail = val;
+};
+
 function addUserModal(){
   if (!state.addUserOpen) return '';
   var ROLES = ['Admin','HR','Regional Manager','Zonal Manager','Sales Rep'];
@@ -6019,11 +6029,11 @@ function addUserModal(){
       '<div style="display:flex;flex-direction:column;gap:14px;">'+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Full Name *</label>'+
-          '<input type="text" id="add-user-name" placeholder="e.g. Rahul Sharma" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;box-sizing:border-box;" />'+
+          '<input type="text" id="add-user-name" value="'+esc(state.addUserDraftName||'')+'" oninput="window._addUserDraftUpdate(&#39;name&#39;,this.value)" placeholder="e.g. Rahul Sharma" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;box-sizing:border-box;" />'+
         '</div>'+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Email *</label>'+
-          '<input type="email" id="add-user-email" placeholder="rahul@sarlogistics.com" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;box-sizing:border-box;" />'+
+          '<input type="email" id="add-user-email" value="'+esc(state.addUserDraftEmail||'')+'" oninput="window._addUserDraftUpdate(&#39;email&#39;,this.value)" placeholder="rahul@sarlogistics.com" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;box-sizing:border-box;" />'+
         '</div>'+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Role *</label>'+
@@ -8984,6 +8994,8 @@ document.addEventListener('click', function(ev){
     state.addUserDefaultRole = el.getAttribute('data-role') || '';
     state.addUserRegionDropOpen = false;
     state.addUserSelectedRegionCount = 0;
+    state.addUserDraftName = '';
+    state.addUserDraftEmail = '';
     render();
   }
   else if(act==='addUserClose'){
@@ -9070,6 +9082,7 @@ document.addEventListener('click', function(ev){
     orgEditTarget = el.getAttribute('data-email');
     state.orgEditError='';
     state.orgEditRegionDropOpen = false;
+    state.orgEditDraftName = undefined;
     render();
   }
   else if(act==='orgEditClose'){
