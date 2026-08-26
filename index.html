@@ -6815,7 +6815,7 @@ function drawer(){
       for (var colKey in columnFilters) {
         var allowed = columnFilters[colKey];
         if (!allowed || allowed.length === 0) continue; // no restriction
-        var col = COLS.filter(function(c){ return c.k === colKey; })[0];
+        var col = _activeDrillCols.filter(function(c){ return c.k === colKey; })[0];
         if (!col) continue;
         var v = String(cellVal(col, s) == null ? '' : cellVal(col, s));
         if (allowed.indexOf(v) === -1) return false;
@@ -7023,7 +7023,7 @@ function drawer(){
     // ── Column filter dropdown popup (only one open at a time) ──
     var filterPopup = '';
     if (state.drill.openFilterCol) {
-      var fCol = COLS.filter(function(c){ return c.k === state.drill.openFilterCol; })[0];
+      var fCol = _activeDrillCols.filter(function(c){ return c.k === state.drill.openFilterCol; })[0];
       if (fCol) {
         var uniqueVals = Array.from(new Set(d.rows.map(function(s){
           var v = cellVal(fCol, s);
