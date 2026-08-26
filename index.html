@@ -5965,7 +5965,13 @@ function orgEditModal(){
         '</div>'+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Region</label>'+
-          '<div style="border:1.5px solid #E3E9F2;border-radius:8px;padding:6px;max-height:160px;overflow-y:auto;background:#FFFFFF;">'+regionChecklistHtml+'</div>'+
+          '<button type="button" data-act="toggleOrgEditRegionDrop" style="width:100%;text-align:left;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;background:#FFFFFF;cursor:pointer;display:flex;align-items:center;justify-content:space-between;box-sizing:border-box;">'
+            +'<span>'+(_personRegions.length>0?(_personRegions.length+' region'+(_personRegions.length===1?'':'s')+' selected'):'Select regions...')+'</span>'
+            +'<span style="color:#9AAFC8;">'+(state.orgEditRegionDropOpen?'▲':'▼')+'</span>'
+          +'</button>'+
+          (state.orgEditRegionDropOpen
+            ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 8px 8px;padding:6px;max-height:160px;overflow-y:auto;background:#FFFFFF;margin-top:-1px;">'+regionChecklistHtml+'</div>'
+            : '')+
           '<div style="font-size:10.5px;color:#9AAFC8;margin-top:4px;">Only used for the Regional Manager role — select one or more regions this person can see.</div>'+
         '</div>'+
         '<div>'+
@@ -6033,14 +6039,20 @@ function addUserModal(){
         '</div>'+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Region</label>'+
-          '<div style="border:1.5px solid #E3E9F2;border-radius:8px;padding:6px;max-height:160px;overflow-y:auto;background:#FFFFFF;">'+
-            REGIONS.map(function(r){
-              return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;font-size:12.5px;color:#374151;border-radius:6px;">'
-                +'<input type="checkbox" class="add-user-region-cb" value="'+esc(r)+'" style="cursor:pointer;"/>'
-                +esc(r)
-              +'</label>';
-            }).join('')+
-          '</div>'+
+          '<button type="button" data-act="toggleAddUserRegionDrop" style="width:100%;text-align:left;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;background:#FFFFFF;cursor:pointer;display:flex;align-items:center;justify-content:space-between;box-sizing:border-box;">'
+            +'<span>'+(state.addUserSelectedRegionCount>0?(state.addUserSelectedRegionCount+' region'+(state.addUserSelectedRegionCount===1?'':'s')+' selected'):'Select regions...')+'</span>'
+            +'<span style="color:#9AAFC8;">'+(state.addUserRegionDropOpen?'▲':'▼')+'</span>'
+          +'</button>'+
+          (state.addUserRegionDropOpen
+            ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 8px 8px;padding:6px;max-height:160px;overflow-y:auto;background:#FFFFFF;margin-top:-1px;">'+
+              REGIONS.map(function(r){
+                return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;font-size:12.5px;color:#374151;border-radius:6px;">'
+                  +'<input type="checkbox" data-act="toggleAddUserRegionCb" class="add-user-region-cb" value="'+esc(r)+'" style="cursor:pointer;"/>'
+                  +esc(r)
+                +'</label>';
+              }).join('')+
+            '</div>'
+            : '')+
           '<div style="font-size:10.5px;color:#9AAFC8;margin-top:4px;">Only used for the Regional Manager role — assigns which region this person can see.</div>'+
         '</div>'+
         '<div>'+
@@ -8970,6 +8982,8 @@ document.addEventListener('click', function(ev){
     state.addUserOpen = true;
     state.addUserError = '';
     state.addUserDefaultRole = el.getAttribute('data-role') || '';
+    state.addUserRegionDropOpen = false;
+    state.addUserSelectedRegionCount = 0;
     render();
   }
   else if(act==='addUserClose'){
@@ -8993,6 +9007,17 @@ document.addEventListener('click', function(ev){
       if (data.success) fetchOrgData(function(){ render(); }, true);
       else alert('Failed: ' + (data.error||'Unknown error'));
     }).catch(function(e){ alert('Error: ' + e.message); });
+  }
+  else if(act==='toggleAddUserRegionDrop'){ ev.stopPropagation(); state.addUserRegionDropOpen = !state.addUserRegionDropOpen; render(); }
+  else if(act==='toggleAddUserRegionCb'){
+    ev.stopPropagation();
+    // Don't re-render the whole dropdown (would lose focus/collapse it) —
+    // just recompute the live count for the toggle button's label text
+    // and patch that one span directly.
+    var _checkedCount = document.querySelectorAll('.add-user-region-cb:checked').length;
+    state.addUserSelectedRegionCount = _checkedCount;
+    var _btn = document.querySelector('[data-act="toggleAddUserRegionDrop"] span');
+    if (_btn) _btn.textContent = _checkedCount>0 ? (_checkedCount+' region'+(_checkedCount===1?'':'s')+' selected') : 'Select regions...';
   }
   else if(act==='addUserSave'){
     ev.stopPropagation();
@@ -9044,6 +9069,7 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation();
     orgEditTarget = el.getAttribute('data-email');
     state.orgEditError='';
+    state.orgEditRegionDropOpen = false;
     render();
   }
   else if(act==='orgEditClose'){
@@ -9052,6 +9078,7 @@ document.addEventListener('click', function(ev){
     state.orgEditError='';
     render();
   }
+  else if(act==='toggleOrgEditRegionDrop'){ ev.stopPropagation(); state.orgEditRegionDropOpen = !state.orgEditRegionDropOpen; render(); }
   else if(act==='orgEditSave'){
     ev.stopPropagation();
     var email = el.getAttribute('data-email');
