@@ -9807,7 +9807,7 @@ document.addEventListener('click', function(e){
     var isToggleBtn  = e.target.closest('[data-act="toggleDrillColFilter"]');
     if (!insidePopup && !isToggleBtn) {
       state.drill.openFilterCol = null;
-      renderDrillOnly();
+      renderDrillPopupOnly();
       return;
     }
   }
