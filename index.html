@@ -7067,7 +7067,7 @@ function drawer(){
     bodyContent = tabBar
       + '<div id="drill-scroll-area" style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;position:relative;contain:paint;">'
       +'<table style="width:100%;border-collapse:collapse;min-width:3800px;">'
-        +'<thead style="position:sticky;top:0;z-index:4;"><tr>'+headCells+'</tr></thead>'
+        +'<thead id="drill-thead" style="position:sticky;top:0;z-index:4;"><tr>'+headCells+'</tr></thead>'
         +'<tbody id="drill-tbody">'+bodyRows+totalRow
         +'</tbody>'      +'</table>'      + filterPopup    +'</div>'    +(hiddenCount > 0      ? '<div style="position:sticky;bottom:0;background:#F8FAFC;border-top:1.5px solid #E3EAF3;padding:10px;text-align:center;z-index:10;transition:opacity 0.2s;display:none;" id="drill-load-more-banner">'        +'<button data-act="drillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">'          +'Showing '+renderRows.length.toLocaleString()+' of '+visibleRows.length.toLocaleString()+' rows — Load more (+2,000)'        +'</button>'        +'</div>'      : '');
   }
@@ -7416,6 +7416,10 @@ function renderDrillDataOnly(){
   var freshHtml = drawer();
   var tempEl = document.createElement('div');
   tempEl.innerHTML = freshHtml;
+
+  var freshThead = tempEl.querySelector('#drill-thead');
+  var liveThead = document.querySelector('#drawer-slot #drill-thead');
+  if (freshThead && liveThead) liveThead.innerHTML = freshThead.innerHTML;
 
   var freshTbody = tempEl.querySelector('#drill-tbody');
   var liveTbody = document.querySelector('#drawer-slot #drill-tbody');
@@ -8176,7 +8180,7 @@ function openDrill(entity, metric, col, valueFmt){
       rows:mem.rows, count:mem.count, totalMetric:mem.totalMetric, totalGP:mem.totalGP,
       totalProvGP:mem.totalProvGP||0, totalActualGP:mem.totalActualGP||0,
       totalRevenue:mem.totalRevenue||0, totalCost:mem.totalCost||0,
-      lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
+      lobTab:_defaultDrillLobTab(), columnFilters:{}, openFilterCol:null, filterDraft:{} };
     render(); return;
   }
 
@@ -8189,14 +8193,14 @@ function openDrill(entity, metric, col, valueFmt){
         rows:result.rows, count:result.count, totalMetric:result.totalMetric, totalGP:result.totalGP,
         totalProvGP:result.totalProvGP||0, totalActualGP:result.totalActualGP||0,
         totalRevenue:result.totalRevenue||0, totalCost:result.totalCost||0,
-        lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
+        lobTab:_defaultDrillLobTab(), columnFilters:{}, openFilterCol:null, filterDraft:{} };
       render(); return;
     }
   }
 
   // 3. Fallback: allDrillRows not loaded yet — show loading, fetch, then compute client-side
   state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:true, rows:null,
-    lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
+    lobTab:_defaultDrillLobTab(), columnFilters:{}, openFilterCol:null, filterDraft:{} };
   render();
   // Load drill rows then compute client-side (only if already loaded to avoid race with server fetch)
   if (allDrillRows && allDrillRows.length > 0) {
@@ -8207,7 +8211,7 @@ function openDrill(entity, metric, col, valueFmt){
         rows:result2.rows, count:result2.count, totalMetric:result2.totalMetric, totalGP:result2.totalGP,
         totalProvGP:result2.totalProvGP||0, totalActualGP:result2.totalActualGP||0,
         totalRevenue:result2.totalRevenue||0, totalCost:result2.totalCost||0,
-        lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
+        lobTab:_defaultDrillLobTab(), columnFilters:{}, openFilterCol:null, filterDraft:{} };
       render(); return;
     }
   }
