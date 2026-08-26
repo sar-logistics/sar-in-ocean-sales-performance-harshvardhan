@@ -415,6 +415,13 @@ async function _getRLSReps(db, currentUser) {
     // (e.g. "North,South") for a manager who oversees more than one.
     const regions = region.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
     if (regions.length === 0) return null; // no region set → see everything
+    // NOTE: "Cross Sales" (unmapped reps, no zone in the mapping sheet) is
+    // NOT supported here — this function only knows about reps present in
+    // the mapping sheet by definition. The client-side equivalent handles
+    // it correctly via allDrillRows zone resolution, which this function
+    // does not have access to. Not an issue today since this function is
+    // currently unused (see earlier note), but flag this if it is ever
+    // wired up for real server-side enforcement.
     const allowedZones = new Set(
       Object.entries(zoneRegionMap)
         .filter(([,reg]) => regions.indexOf(reg.toLowerCase()) > -1)
