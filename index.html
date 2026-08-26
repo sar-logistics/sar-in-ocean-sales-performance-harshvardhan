@@ -663,6 +663,7 @@ function _getRLSReps() {
       .map(function(s){ return s.trim().toLowerCase(); })
       .filter(Boolean);
     if (userRegions.length === 0) return []; // no region set — unrestricted
+    var _includesCrossSales = userRegions.indexOf('cross sales') > -1;
     var allowedZones = [];
     if (window._zoneRegionMap) {
       Object.keys(window._zoneRegionMap).forEach(function(z) {
@@ -671,11 +672,18 @@ function _getRLSReps() {
         }
       });
     }
+    // 'Cross Sales' isn't a real region in _zoneRegionMap (it's reps with NO
+    // zone at all) — zoneToRawSPs() already special-cases this exact string.
+    if (_includesCrossSales) allowedZones.push('Cross Sales');
     if (allowedZones.length === 0) return []; // no mapping yet — unrestricted
     var regionSPs = zoneToRawSPs(allowedZones);
     if (regionSPs && regionSPs.length > 0) return regionSPs;
     return repsRawOriginal
-      .filter(function(r){ return !r.isBranch && allowedZones.indexOf(r.zone) > -1; })
+      .filter(function(r){
+        if (!r.isBranch && allowedZones.indexOf(r.zone) > -1) return true;
+        if (_includesCrossSales && !r.isBranch && !r.zone) return true; // unmapped rep, Cross Sales bucket
+        return false;
+      })
       .map(function(r){ return r.name; });
   }
   return []; // admin / hr — unrestricted
@@ -5916,7 +5924,9 @@ function orgEditModal(){
     if (window._zoneRegionMap) {
       Object.values(window._zoneRegionMap).forEach(function(r){ if (r && !seen[r]) { seen[r]=true; list.push(r); } });
     }
-    return list.sort();
+    list.sort();
+    list.push('Cross Sales'); // special bucket for reps with no zone mapping — not a real region, added manually
+    return list;
   })();
 
   var roleOptsHtml = ROLES.map(function(r){
@@ -6015,7 +6025,9 @@ function addUserModal(){
     if (window._zoneRegionMap) {
       Object.values(window._zoneRegionMap).forEach(function(r){ if (r && !seen[r]) { seen[r]=true; list.push(r); } });
     }
-    return list.sort();
+    list.sort();
+    list.push('Cross Sales'); // special bucket for reps with no zone mapping — not a real region, added manually
+    return list;
   })();
   var allPeople = orgDataReady ? (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]) : [];
   var defaultRole = state.addUserDefaultRole || '';
