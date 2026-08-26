@@ -8574,14 +8574,24 @@ function pendencyDrillDrawer(){
           var v = r[pfCol.k];
           return (v === null || v === undefined || v === '') ? '(blank)' : String(v);
         }))).sort();
-        var pfActive = _pdColFilters[pfCol.k] && _pdColFilters[pfCol.k].length > 0 ? _pdColFilters[pfCol.k] : pfAllVals.slice();
+        if (!state.pendencyDrill.filterDraft) state.pendencyDrill.filterDraft = {};
+        if (!state.pendencyDrill.filterDraft[pfCol.k]) {
+          var pfInitActive = _pdColFilters[pfCol.k] && _pdColFilters[pfCol.k].length > 0 ? _pdColFilters[pfCol.k].slice() : pfAllVals.slice();
+          state.pendencyDrill.filterDraft[pfCol.k] = pfInitActive;
+        }
+        var pfActive = state.pendencyDrill.filterDraft[pfCol.k];
         var pfAnchor = state.pendencyDrill.filterAnchor || { top: 100, left: 200 };
         var pfSearch = (state.pendencyDrill.filterSearch && state.pendencyDrill.filterSearch[pfCol.k]) || '';
         var pfFiltered = pfSearch ? pfAllVals.filter(function(v){ return v.toLowerCase().indexOf(pfSearch.toLowerCase()) > -1; }) : pfAllVals;
-        filterPopup = '<div id="pend-filter-popup" data-stop="1" style="position:fixed;top:'+pfAnchor.top+'px;left:'+pfAnchor.left+'px;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.08);padding:14px;z-index:9999;min-width:220px;max-width:280px;">'          +'<div style="font-size:12px;font-weight:800;color:#0D2B5E;margin-bottom:8px;">Filter: '+esc(pfCol.l)+'</div>'          +'<input data-act="pendDrillFilterSearch" data-col="'+pfCol.k+'" value="'+esc(pfSearch)+'" placeholder="Search..." style="width:100%;box-sizing:border-box;border:1.5px solid #E3EAF3;border-radius:7px;padding:6px 10px;font-size:11px;color:#374151;margin-bottom:8px;outline:none;"/>'          +'<div style="display:flex;gap:6px;margin-bottom:8px;">'            +'<button data-act="pendDrillFilterAll" data-col="'+pfCol.k+'" style="flex:1;background:#F4F7FA;border:none;border-radius:6px;padding:5px;font-size:10px;font-weight:700;color:#374151;cursor:pointer;">All</button>'            +'<button data-act="pendDrillFilterNone" data-col="'+pfCol.k+'" style="flex:1;background:#F4F7FA;border:none;border-radius:6px;padding:5px;font-size:10px;font-weight:700;color:#374151;cursor:pointer;">None</button>'          +'</div>'          +'<div style="max-height:200px;overflow-y:auto;">'          +pfFiltered.map(function(v){
+        filterPopup = '<div id="pend-filter-popup" data-stop="1" style="position:fixed;top:'+pfAnchor.top+'px;left:'+pfAnchor.left+'px;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.08);padding:14px;z-index:9999;min-width:220px;max-width:280px;">'          +'<div style="font-size:12px;font-weight:800;color:#0D2B5E;margin-bottom:8px;">Filter: '+esc(pfCol.l)+'</div>'          +'<input data-act="pendDrillFilterSearch" data-col="'+pfCol.k+'" value="'+esc(pfSearch)+'" placeholder="Search..." style="width:100%;box-sizing:border-box;border:1.5px solid #E3EAF3;border-radius:7px;padding:6px 10px;font-size:11px;color:#374151;margin-bottom:8px;outline:none;"/>'          +'<div style="display:flex;gap:6px;margin-bottom:8px;">'            +'<button data-act="pendDrillFilterAll" data-col="'+pfCol.k+'" style="flex:1;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:6px;font-size:11px;font-weight:700;color:#374151;cursor:pointer;">Select All</button>'            +'<button data-act="pendDrillFilterNone" data-col="'+pfCol.k+'" style="flex:1;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:6px;font-size:11px;font-weight:700;color:#374151;cursor:pointer;">Clear All</button>'          +'</div>'          +'<div id="pend-colfilter-list" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;">'          +pfFiltered.map(function(v){
             var checked = pfActive.indexOf(v) > -1;
-            return '<label style="display:flex;align-items:center;gap:7px;padding:4px 2px;cursor:pointer;font-size:11px;color:#374151;">'              +'<input type="checkbox" data-act="pendDrillFilterToggle" data-col="'+pfCol.k+'" data-val="'+esc(v)+'" '+(checked?'checked':'')+' style="cursor:pointer;"/>'              +esc(v)            +'</label>';
-          }).join('')          +(pfFiltered.length===0 ? '<div style="color:#9AAFC8;font-size:11px;padding:4px 2px;">No results</div>' : '')          +'</div>'          +'<button data-act="closePendDrillFilter" style="margin-top:10px;width:100%;background:#1D5FCC;border:none;border-radius:7px;padding:7px;font-size:11px;font-weight:700;color:#FFFFFF;cursor:pointer;">Apply</button>'        +'</div>';
+            return '<div data-act="pendDrillFilterToggle" data-col="'+pfCol.k+'" data-val="'+esc(v)+'" data-search="'+esc(v.toLowerCase())+'" class="drill-filter-opt" style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:6px;" onmouseenter="this.style.background=\'#F4F7FC\'" onmouseleave="this.style.background=\'transparent\'">'
+              +'<div class="drill-filter-checkbox" style="width:15px;height:15px;border-radius:4px;border:1.5px solid '+(checked?'#1D5FCC':'#C5D0E0')+';background:'+(checked?'#1D5FCC':'#FFFFFF')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+                +(checked ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '')
+              +'</div>'
+              +'<span style="font-size:11px;color:#374151;">'+esc(v)+'</span>'
+            +'</div>';
+          }).join('')          +(pfFiltered.length===0 ? '<div style="color:#9AAFC8;font-size:11px;padding:4px 2px;">No results</div>' : '')          +'</div>'          +'<button data-act="pendDrillFilterApply" style="margin-top:10px;width:100%;background:#1D5FCC;border:none;border-radius:7px;padding:7px;font-size:11px;font-weight:700;color:#FFFFFF;cursor:pointer;">Apply</button>'        +'</div>';
       }
     }
         var hasPdColFilters = Object.keys(_pdColFilters).some(function(k){ return _pdColFilters[k] && _pdColFilters[k].length > 0; });
@@ -9523,7 +9533,10 @@ document.addEventListener('click', function(ev){
     var col = el.getAttribute('data-col');
     var thEl = el.closest('th') || el;
     var rect = thEl.getBoundingClientRect();
-    state.pendencyDrill.openFilterCol = state.pendencyDrill.openFilterCol === col ? null : col;
+    var wasOpen = state.pendencyDrill.openFilterCol === col;
+    state.pendencyDrill.openFilterCol = wasOpen ? null : col;
+    if (!state.pendencyDrill.filterDraft) state.pendencyDrill.filterDraft = {};
+    delete state.pendencyDrill.filterDraft[col]; // re-init fresh each time it's opened
     state.pendencyDrill.filterAnchor = { top: rect.bottom+4, left: Math.min(rect.left, window.innerWidth-270) };
     renderPendPopupOnly();
   }
@@ -9533,45 +9546,68 @@ document.addEventListener('click', function(ev){
     renderPendPopupOnly();
   }
   else if(act==='pendDrillFilterToggle'){
+    // Staged-draft checkbox toggle, matching SP exactly — only updates the
+    // checkbox's own visual state and the draft, no table refresh, no
+    // colFilters change until Apply is clicked.
     ev.stopPropagation();
     if(!state.pendencyDrill) return;
     var col = el.getAttribute('data-col');
     var val = el.getAttribute('data-val');
-    if(!state.pendencyDrill.colFilters) state.pendencyDrill.colFilters = {};
-    var allVals = Array.from(new Set(state.pendencyDrill.rows.map(function(r){
-      var v = r[col]; return (v===null||v===undefined||v==='') ? '(blank)' : String(v);
-    }))).sort();
-    var cur = state.pendencyDrill.colFilters[col] && state.pendencyDrill.colFilters[col].length > 0
-      ? state.pendencyDrill.colFilters[col].slice() : allVals.slice();
-    var vidx = cur.indexOf(val);
-    if(el.checked && vidx === -1) cur.push(val);
-    else if(!el.checked && vidx > -1) cur.splice(vidx,1);
-    state.pendencyDrill.colFilters[col] = cur.length === allVals.length ? [] : cur;
-    renderPendDataOnly();
+    if(!state.pendencyDrill.filterDraft) state.pendencyDrill.filterDraft = {};
+    if(!state.pendencyDrill.filterDraft[col]) state.pendencyDrill.filterDraft[col] = [];
+    var draft = state.pendencyDrill.filterDraft[col];
+    var vidx = draft.indexOf(val);
+    var nowChecked;
+    if (vidx > -1) { draft.splice(vidx,1); nowChecked = false; }
+    else            { draft.push(val);      nowChecked = true;  }
+    state.pendencyDrill.filterDraft[col] = draft;
+    var box = el.querySelector('.drill-filter-checkbox');
+    if (box) {
+      box.style.borderColor = nowChecked ? '#1D5FCC' : '#C5D0E0';
+      box.style.background  = nowChecked ? '#1D5FCC' : '#FFFFFF';
+      box.innerHTML = nowChecked ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '';
+    }
   }
   else if(act==='pendDrillFilterAll'){
     ev.stopPropagation();
     if(!state.pendencyDrill) return;
     var col = el.getAttribute('data-col');
-    if(!state.pendencyDrill.colFilters) state.pendencyDrill.colFilters = {};
-    state.pendencyDrill.colFilters[col] = [];
-    renderPendDataOnly();
+    var opts = document.querySelectorAll('#pend-colfilter-list .drill-filter-opt');
+    var allVals = [];
+    opts.forEach(function(o){
+      allVals.push(o.getAttribute('data-val'));
+      var box = o.querySelector('.drill-filter-checkbox');
+      if (box) { box.style.borderColor = '#1D5FCC'; box.style.background = '#1D5FCC';
+        box.innerHTML = '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'; }
+    });
+    if(!state.pendencyDrill.filterDraft) state.pendencyDrill.filterDraft = {};
+    state.pendencyDrill.filterDraft[col] = allVals;
   }
   else if(act==='pendDrillFilterNone'){
     ev.stopPropagation();
     if(!state.pendencyDrill) return;
     var col = el.getAttribute('data-col');
+    if(!state.pendencyDrill.filterDraft) state.pendencyDrill.filterDraft = {};
+    state.pendencyDrill.filterDraft[col] = [];
+    document.querySelectorAll('#pend-colfilter-list .drill-filter-opt').forEach(function(o){
+      var box = o.querySelector('.drill-filter-checkbox');
+      if (box) { box.style.borderColor = '#C5D0E0'; box.style.background = '#FFFFFF'; box.innerHTML = ''; }
+    });
+  }
+  else if(act==='pendDrillFilterApply'){
+    ev.stopPropagation();
+    if(!state.pendencyDrill) return;
+    var col = state.pendencyDrill.openFilterCol;
+    var newVals = (state.pendencyDrill.filterDraft[col] || []).slice();
     if(!state.pendencyDrill.colFilters) state.pendencyDrill.colFilters = {};
-    // Matches SP's Clear All behavior — clearing a column's selections
-    // removes the restriction entirely (shows everything for that column)
-    // rather than matching a sentinel value that shows nothing, which
-    // could trap the user in a confusing "0 jobs" state.
-    state.pendencyDrill.colFilters[col] = [];
+    state.pendencyDrill.colFilters = Object.assign({}, state.pendencyDrill.colFilters);
+    state.pendencyDrill.colFilters[col] = newVals;
+    state.pendencyDrill.openFilterCol = null;
     renderPendDataOnly();
   }
   else if(act==='clearPendDrillFilters'){
     ev.stopPropagation();
-    if(state.pendencyDrill) { state.pendencyDrill.colFilters = {}; state.pendencyDrill.openFilterCol = null; }
+    if(state.pendencyDrill) { state.pendencyDrill.colFilters = {}; state.pendencyDrill.filterDraft = {}; state.pendencyDrill.openFilterCol = null; }
     renderPendDataOnly();
   }
   else if(act==='pendDrillFilterSearch'){
