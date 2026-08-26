@@ -8970,10 +8970,12 @@ document.addEventListener('click', function(ev){
     // Clear session
     try { localStorage.removeItem('sar_user_session'); } catch(e) {}
     currentUser = null;
-    // Revoke Google token if available
-    if (window.google && google.accounts && google.accounts.oauth2) {
-      try { google.accounts.oauth2.revoke(undefined, function(){}); } catch(e) {}
-    }
+    // NOTE: previously called google.accounts.oauth2.revoke(undefined, ...)
+    // here, but no access token is ever actually stored for later use — it
+    // only exists briefly inside the login callback — so this ALWAYS sent
+    // revoke(undefined), guaranteed to fail with a 400 from Google's server.
+    // Removed entirely: local session clearing above is what actually signs
+    // the user out; this revoke call was not required for that to work.
     // Show login screen
     var app = document.getElementById('app');
     var login = document.getElementById('login-screen');
