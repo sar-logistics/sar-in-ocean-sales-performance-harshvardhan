@@ -657,24 +657,16 @@ function _getRLSReps() {
       .map(function(r){ return r.name; });
   }
   if (role === 'regional manager') {
-    var userRegion = (currentUser.region || '').trim().toLowerCase();
-    if (!userRegion) return []; // no region set — unrestricted
-    // Collect all zones whose region matches this user's region
-    var regionZones = [];
-    if (repsRawOriginal) {
-      // Build zone→region from zonesData if available
-      var _seenZones = {};
-      repsRawOriginal.forEach(function(r) {
-        if (!r.isBranch && r.zone && !_seenZones[r.zone]) {
-          _seenZones[r.zone] = true;
-        }
-      });
-    }
-    // Use zonesData region mapping (set during sales load from mapping_zone_targets)
+    // Supports multiple regions — stored as a comma-separated string
+    // (e.g. "North,South") for a manager who oversees more than one.
+    var userRegions = (currentUser.region || '').split(',')
+      .map(function(s){ return s.trim().toLowerCase(); })
+      .filter(Boolean);
+    if (userRegions.length === 0) return []; // no region set — unrestricted
     var allowedZones = [];
     if (window._zoneRegionMap) {
       Object.keys(window._zoneRegionMap).forEach(function(z) {
-        if ((window._zoneRegionMap[z]||'').toLowerCase() === userRegion) {
+        if (userRegions.indexOf((window._zoneRegionMap[z]||'').toLowerCase()) > -1) {
           allowedZones.push(z);
         }
       });
@@ -5933,8 +5925,13 @@ function orgEditModal(){
     return '<option value="'+esc(z)+'"'+(z===person.zone?' selected':'')+'>'+esc(z)+'</option>';
   }).join('');
 
-  var regionOptsHtml = '<option value="">None</option>' + REGIONS.map(function(r){
-    return '<option value="'+esc(r)+'"'+(r===person.region?' selected':'')+'>'+esc(r)+'</option>';
+  var _personRegions = (person.region||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
+  var regionChecklistHtml = REGIONS.map(function(r){
+    var checked = _personRegions.indexOf(r) > -1;
+    return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;font-size:12.5px;color:#374151;border-radius:6px;">'
+      +'<input type="checkbox" class="org-edit-region-cb" value="'+esc(r)+'" '+(checked?'checked':'')+' style="cursor:pointer;"/>'
+      +esc(r)
+    +'</label>';
   }).join('');
 
   var managerCandidates = allPeople.filter(function(p){
@@ -5968,8 +5965,8 @@ function orgEditModal(){
         '</div>'+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Region</label>'+
-          '<select id="org-edit-region" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+regionOptsHtml+'</select>'+
-          '<div style="font-size:10.5px;color:#9AAFC8;margin-top:4px;">Only used for the Regional Manager role — assigns which region this person can see.</div>'+
+          '<div style="border:1.5px solid #E3E9F2;border-radius:8px;padding:6px;max-height:160px;overflow-y:auto;background:#FFFFFF;">'+regionChecklistHtml+'</div>'+
+          '<div style="font-size:10.5px;color:#9AAFC8;margin-top:4px;">Only used for the Regional Manager role — select one or more regions this person can see.</div>'+
         '</div>'+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Reports To</label>'+
@@ -6036,9 +6033,14 @@ function addUserModal(){
         '</div>'+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Region</label>'+
-          '<select id="add-user-region" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
-            '<option value="">None</option>'+REGIONS.map(function(r){ return '<option value="'+esc(r)+'">'+esc(r)+'</option>'; }).join('')+
-          '</select>'+
+          '<div style="border:1.5px solid #E3E9F2;border-radius:8px;padding:6px;max-height:160px;overflow-y:auto;background:#FFFFFF;">'+
+            REGIONS.map(function(r){
+              return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;font-size:12.5px;color:#374151;border-radius:6px;">'
+                +'<input type="checkbox" class="add-user-region-cb" value="'+esc(r)+'" style="cursor:pointer;"/>'
+                +esc(r)
+              +'</label>';
+            }).join('')+
+          '</div>'+
           '<div style="font-size:10.5px;color:#9AAFC8;margin-top:4px;">Only used for the Regional Manager role — assigns which region this person can see.</div>'+
         '</div>'+
         '<div>'+
@@ -8998,17 +9000,17 @@ document.addEventListener('click', function(ev){
     var emailIn = document.getElementById('add-user-email');
     var roleSel = document.getElementById('add-user-role');
     var zoneSel = document.getElementById('add-user-zone');
-    var regionSel = document.getElementById('add-user-region');
+    var regionChecks = document.querySelectorAll('.add-user-region-cb:checked');
     var rtSel   = document.getElementById('add-user-reportsto');
     var newName  = nameIn  ? nameIn.value.trim()  : '';
     var newEmail = emailIn ? emailIn.value.trim()  : '';
     var newRole  = roleSel ? roleSel.value         : 'Sales Rep';
     var newZone  = zoneSel ? zoneSel.value         : '';
-    var newRegion = regionSel ? regionSel.value    : '';
+    var newRegion = Array.prototype.map.call(regionChecks, function(cb){ return cb.value; }).join(',');
     var newRT    = rtSel   ? rtSel.value           : '';
     if(!newName){ state.addUserError='Name is required.'; render(); return; }
     if(!newEmail){ state.addUserError='Email is required.'; render(); return; }
-    if(newRole === 'Regional Manager' && !newRegion){ state.addUserError='Please select a region for a Regional Manager.'; render(); return; }
+    if(newRole === 'Regional Manager' && !newRegion){ state.addUserError='Please select at least one region for a Regional Manager.'; render(); return; }
     el.disabled = true; el.textContent = 'Adding...';
     fetch('/api/mongo-batch?action=addUser', {
       method:'POST',
@@ -9056,17 +9058,17 @@ document.addEventListener('click', function(ev){
     var nameSel = document.getElementById('org-edit-name');
     var roleSel = document.getElementById('org-edit-role');
     var zoneSel = document.getElementById('org-edit-zone');
-    var regionSel = document.getElementById('org-edit-region');
+    var regionChecks = document.querySelectorAll('.org-edit-region-cb:checked');
     var reportsToSel = document.getElementById('org-edit-reportsto');
     var activeSel = document.getElementById('org-edit-active');
     var newName = nameSel ? nameSel.value.trim() : '';
     var newRole = roleSel ? roleSel.value : '';
     var newZone = zoneSel ? zoneSel.value : '';
-    var newRegion = regionSel ? regionSel.value : '';
+    var newRegion = Array.prototype.map.call(regionChecks, function(cb){ return cb.value; }).join(',');
     var newReportsTo = reportsToSel ? reportsToSel.value : '';
     var newActive = activeSel ? activeSel.value === 'true' : true;
     if(!newRole){ state.orgEditError='Please select a role.'; render(); return; }
-    if(newRole === 'Regional Manager' && !newRegion){ state.orgEditError='Please select a region for a Regional Manager.'; render(); return; }
+    if(newRole === 'Regional Manager' && !newRegion){ state.orgEditError='Please select at least one region for a Regional Manager.'; render(); return; }
     el.disabled = true;
     el.textContent = 'Saving...';
     updateUserField(email, { name:newName, role:newRole, zone:newZone, region:newRegion, reportsTo:newReportsTo, isActive:newActive }, function(result){
