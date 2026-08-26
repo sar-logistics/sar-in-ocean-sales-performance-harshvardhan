@@ -3040,6 +3040,7 @@ if (window._zoneRegionMap) {
   Object.values(window._zoneRegionMap).forEach(function(r){ if(r) _regSet[r]=true; });
   _allRegions = Object.keys(_regSet).sort();
 }
+_allRegions.push('Cross Sales'); // special bucket for reps with no zone mapping
 var regionOpen = state.filterRegionDropOpen;
 var _frPanel = state.filterRegions || [];
 var regionSection = sectionHeader('Regions', _frPanel.length, regionOpen, 'toggleFilterRegionDrop')
@@ -7570,6 +7571,12 @@ function render(){
     state.filterZones = _allPossibleZones.filter(function(z){
       return state.filterRegions.indexOf(window._zoneRegionMap[z] || '') > -1;
     });
+    // 'Cross Sales' isn't a real zone with a region in _zoneRegionMap (its
+    // reps have NO zone at all) — special-case it the same way the rest of
+    // the codebase already does (zoneToRawSPs, _getRLSReps).
+    if (state.filterRegions.indexOf('Cross Sales') > -1) {
+      state.filterZones.push('Cross Sales');
+    }
     state._regionExpandedZones = true;
   } else if (state._regionExpandedZones && (!state.filterRegions || state.filterRegions.length === 0)) {
     // Region was cleared — remove the zones we auto-added for it
