@@ -9526,7 +9526,16 @@ document.addEventListener('click', function(ev){
   else if(act==='drill'){ ev.stopPropagation(); openDrill(el.getAttribute('data-entity'),el.getAttribute('data-metric'),el.getAttribute('data-col'),el.getAttribute('data-val')); }
   else if(act==='insightDrill'){ ev.stopPropagation(); openInsightDrill(el.getAttribute('data-drill-type'), el.getAttribute('data-drill-name'), el.getAttribute('data-drill-month')); }
   else if(act==='pendencyDrill'){ ev.stopPropagation(); openPendencyDrill(el.getAttribute('data-rep'),el.getAttribute('data-col'),el.getAttribute('data-status'),el.getAttribute('data-lock'),el.getAttribute('data-type')||'rep'); }
-  else if(act==='closePendencyDrill'){ if(el.getAttribute('data-stop')) return; state.pendencyDrill=null; _cleanupPendFilterPopup(); render(); }
+  else if(act==='closePendencyDrill'){
+    // Check ev.target (the actual click origin) for a data-stop ancestor,
+    // not el (which is closest('[data-act]') from the click target — a
+    // plain click on a table cell with no nearby data-act would otherwise
+    // walk all the way up to the backdrops data-act=closePendencyDrill and
+    // incorrectly close the whole drill). Same fix already applied to SP.
+    var _clickedCloseDirectly = ev.target.matches && ev.target.matches('[data-act="closePendencyDrill"]');
+    if (ev.target.closest('[data-stop]') && !_clickedCloseDirectly) return;
+    state.pendencyDrill=null; _cleanupPendFilterPopup(); render();
+  }
   else if(act==='openPendDrillFilter'){
     ev.stopPropagation();
     if(!state.pendencyDrill) return;
