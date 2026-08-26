@@ -5924,6 +5924,13 @@ function orgEditModal(){
 
   var ROLES = ['Admin','HR','Regional Manager','Zonal Manager','Sales Rep'];
   var ZONES = sortZones([...new Set(repsRawOriginal.map(function(r){ return r.zone; }).filter(Boolean))]);
+  var REGIONS = (function(){
+    var seen = {}; var list = [];
+    if (window._zoneRegionMap) {
+      Object.values(window._zoneRegionMap).forEach(function(r){ if (r && !seen[r]) { seen[r]=true; list.push(r); } });
+    }
+    return list.sort();
+  })();
 
   var roleOptsHtml = ROLES.map(function(r){
     return '<option value="'+esc(r)+'"'+(r===person.role?' selected':'')+'>'+esc(r)+'</option>';
@@ -5931,6 +5938,10 @@ function orgEditModal(){
 
   var zoneOptsHtml = '<option value="">None</option>' + ZONES.map(function(z){
     return '<option value="'+esc(z)+'"'+(z===person.zone?' selected':'')+'>'+esc(z)+'</option>';
+  }).join('');
+
+  var regionOptsHtml = '<option value="">None</option>' + REGIONS.map(function(r){
+    return '<option value="'+esc(r)+'"'+(r===person.region?' selected':'')+'>'+esc(r)+'</option>';
   }).join('');
 
   var managerCandidates = allPeople.filter(function(p){
@@ -5963,6 +5974,11 @@ function orgEditModal(){
           '<select id="org-edit-zone" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+zoneOptsHtml+'</select>'+
         '</div>'+
         '<div>'+
+          '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Region</label>'+
+          '<select id="org-edit-region" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+regionOptsHtml+'</select>'+
+          '<div style="font-size:10.5px;color:#9AAFC8;margin-top:4px;">Only used for the Regional Manager role — assigns which region this person can see.</div>'+
+        '</div>'+
+        '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Reports To</label>'+
           '<select id="org-edit-reportsto" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+managerOptsHtml+'</select>'+
         '</div>'+
@@ -5988,6 +6004,13 @@ function addUserModal(){
   if (!state.addUserOpen) return '';
   var ROLES = ['Admin','HR','Regional Manager','Zonal Manager','Sales Rep'];
   var ZONES = sortZones([...new Set(repsRawOriginal.map(function(r){ return r.zone; }).filter(Boolean))]);
+  var REGIONS = (function(){
+    var seen = {}; var list = [];
+    if (window._zoneRegionMap) {
+      Object.values(window._zoneRegionMap).forEach(function(r){ if (r && !seen[r]) { seen[r]=true; list.push(r); } });
+    }
+    return list.sort();
+  })();
   var allPeople = orgDataReady ? (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]) : [];
   var defaultRole = state.addUserDefaultRole || '';
 
@@ -6017,6 +6040,13 @@ function addUserModal(){
           '<select id="add-user-zone" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
             '<option value="">None</option>'+ZONES.map(function(z){ return '<option value="'+esc(z)+'">'+esc(z)+'</option>'; }).join('')+
           '</select>'+
+        '</div>'+
+        '<div>'+
+          '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Region</label>'+
+          '<select id="add-user-region" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
+            '<option value="">None</option>'+REGIONS.map(function(r){ return '<option value="'+esc(r)+'">'+esc(r)+'</option>'; }).join('')+
+          '</select>'+
+          '<div style="font-size:10.5px;color:#9AAFC8;margin-top:4px;">Only used for the Regional Manager role — assigns which region this person can see.</div>'+
         '</div>'+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Reports To</label>'+
@@ -8962,19 +8992,22 @@ document.addEventListener('click', function(ev){
     var emailIn = document.getElementById('add-user-email');
     var roleSel = document.getElementById('add-user-role');
     var zoneSel = document.getElementById('add-user-zone');
+    var regionSel = document.getElementById('add-user-region');
     var rtSel   = document.getElementById('add-user-reportsto');
     var newName  = nameIn  ? nameIn.value.trim()  : '';
     var newEmail = emailIn ? emailIn.value.trim()  : '';
     var newRole  = roleSel ? roleSel.value         : 'Sales Rep';
     var newZone  = zoneSel ? zoneSel.value         : '';
+    var newRegion = regionSel ? regionSel.value    : '';
     var newRT    = rtSel   ? rtSel.value           : '';
     if(!newName){ state.addUserError='Name is required.'; render(); return; }
     if(!newEmail){ state.addUserError='Email is required.'; render(); return; }
+    if(newRole === 'Regional Manager' && !newRegion){ state.addUserError='Please select a region for a Regional Manager.'; render(); return; }
     el.disabled = true; el.textContent = 'Adding...';
     fetch('/api/mongo-batch?action=addUser', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name:newName, email:newEmail, role:newRole, zone:newZone, reportsTo:newRT })
+      body: JSON.stringify({ name:newName, email:newEmail, role:newRole, zone:newZone, region:newRegion, reportsTo:newRT })
     }).then(function(r){ return r.json(); })
     .then(function(data){
       if(!data.success){ state.addUserError = data.error||'Failed to add user.'; render(); return; }
@@ -9017,17 +9050,20 @@ document.addEventListener('click', function(ev){
     var nameSel = document.getElementById('org-edit-name');
     var roleSel = document.getElementById('org-edit-role');
     var zoneSel = document.getElementById('org-edit-zone');
+    var regionSel = document.getElementById('org-edit-region');
     var reportsToSel = document.getElementById('org-edit-reportsto');
     var activeSel = document.getElementById('org-edit-active');
     var newName = nameSel ? nameSel.value.trim() : '';
     var newRole = roleSel ? roleSel.value : '';
     var newZone = zoneSel ? zoneSel.value : '';
+    var newRegion = regionSel ? regionSel.value : '';
     var newReportsTo = reportsToSel ? reportsToSel.value : '';
     var newActive = activeSel ? activeSel.value === 'true' : true;
     if(!newRole){ state.orgEditError='Please select a role.'; render(); return; }
+    if(newRole === 'Regional Manager' && !newRegion){ state.orgEditError='Please select a region for a Regional Manager.'; render(); return; }
     el.disabled = true;
     el.textContent = 'Saving...';
-    updateUserField(email, { name:newName, role:newRole, zone:newZone, reportsTo:newReportsTo, isActive:newActive }, function(result){
+    updateUserField(email, { name:newName, role:newRole, zone:newZone, region:newRegion, reportsTo:newReportsTo, isActive:newActive }, function(result){
       if(!result.success){
         state.orgEditError = result.error || 'Failed to save changes.';
         render();
