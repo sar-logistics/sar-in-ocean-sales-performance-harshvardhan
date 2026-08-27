@@ -239,6 +239,12 @@ function startGoogleSignIn() {
 }
 
 function handleTokenResponse(tokenResponse) {
+  // DIAGNOSTIC: this callback should only ever fire from an explicit user
+  // click on the Sign In button (see startGoogleSignIn -> requestAccessToken).
+  // If it is firing on its own, this trace will show exactly what called it.
+  console.log('%c[diagnostic] handleTokenResponse fired', 'color:#1D5FCC;font-weight:bold', new Date().toISOString());
+  console.trace();
+
   if (tokenResponse.error) {
     resetSignInButton();
     return;
@@ -247,12 +253,25 @@ function handleTokenResponse(tokenResponse) {
   var btn = document.getElementById('google-signin-btn');
   btn.innerHTML = '<div class="login-spinner"></div> Verifying…';
 
+  // Safety net: if verification hasn't completed within 15s (e.g. a hung
+  // network request that never resolves or rejects — see ERR_HTTP2_PING_FAILED
+  // incident), force the button back to its normal state instead of leaving
+  // it permanently stuck on Verifying with no way forward for the user.
+  var _verifyTimedOut = false;
+  var _verifyTimeout = setTimeout(function(){
+    _verifyTimedOut = true;
+    showLoginError('This is taking longer than expected. Please try again.');
+    resetSignInButton();
+  }, 15000);
+
   // Get userinfo from Google using the access token
   fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
     headers: { Authorization: 'Bearer ' + tokenResponse.access_token }
   })
   .then(function(r) { return r.json(); })
   .then(function(userinfo) {
+    clearTimeout(_verifyTimeout);
+    if (_verifyTimedOut) return; // already reset — do not proceed
     if (!userinfo.email) {
       showLoginError('Could not retrieve your account info. Please try again.');
       resetSignInButton();
@@ -267,6 +286,16 @@ function handleTokenResponse(tokenResponse) {
 }
 
 function verifyWithBackend(userinfo) {
+  // Safety net: same reasoning as the timeout in handleTokenResponse — a
+  // hung network request (not a rejection, a request that never resolves
+  // OR rejects) would otherwise leave the button stuck on Verifying forever.
+  var _backendTimedOut = false;
+  var _backendTimeout = setTimeout(function(){
+    _backendTimedOut = true;
+    showLoginError('This is taking longer than expected. Please try again.');
+    resetSignInButton();
+  }, 15000);
+
   fetch('/api/mongo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -274,6 +303,8 @@ function verifyWithBackend(userinfo) {
   })
   .then(function(r) { return r.json().then(function(d){ return {ok: r.ok, data: d}; }); })
   .then(function(res) {
+    clearTimeout(_backendTimeout);
+    if (_backendTimedOut) return; // already reset — do not proceed
     if (!res.ok || !res.data.success) {
       var msg = res.data.message || res.data.error || 'Access denied.';
       showLoginError(msg);
@@ -286,6 +317,8 @@ function verifyWithBackend(userinfo) {
     showDashboard();
   })
   .catch(function(err) {
+    clearTimeout(_backendTimeout);
+    if (_backendTimedOut) return; // already reset — do not proceed
     console.error('Backend error:', err);
     showLoginError('Could not reach the server. Please check your connection and try again.');
     resetSignInButton();
