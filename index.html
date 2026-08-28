@@ -3122,6 +3122,15 @@ if (window._zoneRegionMap) {
   _allRegions = Object.keys(_regSet).sort();
 }
 _allRegions.push('Cross Sales'); // special bucket for reps with no zone mapping
+// Regional Manager only sees the region(s) actually assigned to them — a
+// single-region manager sees just that one, a multi-region manager sees
+// only their own set, never every region company-wide.
+if (currentUser && (currentUser.role||'').toLowerCase().trim()==='regional manager') {
+  var _myRegions = (currentUser.region||'').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+  if (_myRegions.length > 0) {
+    _allRegions = _allRegions.filter(function(r){ return _myRegions.indexOf(r) > -1; });
+  }
+}
 var regionOpen = state.filterRegionDropOpen;
 var _frPanel = state.filterRegions || [];
 // Zonal Manager is locked to a single zone regardless of any Zone/Region
