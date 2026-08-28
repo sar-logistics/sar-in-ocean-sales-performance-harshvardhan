@@ -887,6 +887,15 @@ function computeFilteredRepsRaw(){
     });
   }
 
+  // Snapshot the pool RIGHT HERE — after RLS + Zone/Region filters, but
+  // BEFORE the Rep filter itself narrows it further. This is what the Rep
+  // filter dropdown's own option list should be built from — using the
+  // fully-narrowed repsRaw instead created a circular problem where
+  // selecting one rep immediately hid every other option from the
+  // dropdown, since repsRaw itself had just been narrowed down to match
+  // that same selection.
+  window._repsRawForRepDropdown = base.slice();
+
   // Rep filter
   if (filterReps.length > 0) {
     base = base.filter(function(r){ return filterReps.indexOf(r.name) > -1; });
@@ -3030,7 +3039,7 @@ function topbar(){
             _panelRepNames = Object.keys(_panelRepSet);
           }
           var allRepEntries = Array.from(
-            new Map(repsRaw
+            new Map((window._repsRawForRepDropdown || repsRaw)
               .filter(function(r){
                 if (_fzPanel.length === 0) return true;
                 if (_panelRepNames) return _panelRepNames.some(function(n){ return normalizeName(n) === normalizeName(r.name); });
