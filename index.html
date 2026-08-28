@@ -5873,6 +5873,14 @@ function teamsPage(){
   });
   zonalManagers = zonalManagers.concat(managerAdmins);
 
+  // Sort by zone number (INZ01, INZ02, ... INZ12, ...) rather than
+  // whatever order the server happened to return them in.
+  function _zmZoneNum(u){
+    var m = (u.zone||'').match(/(\d+)/);
+    return m ? parseInt(m[1], 10) : 999999;
+  }
+  zonalManagers = zonalManagers.slice().sort(function(a,b){ return _zmZoneNum(a) - _zmZoneNum(b); });
+
   // ZM email → their reps
   var repsByZM = {};
   var zmEmailSet = {};
