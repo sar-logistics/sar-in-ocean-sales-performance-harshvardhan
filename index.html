@@ -5844,7 +5844,7 @@ function teamsPage(){
   function supportCard(u){
     var isYou = isYouEmail && u.email && u.email.toLowerCase().trim()===isYouEmail;
     var nameShort = (u.name||'').length>16 ? (u.name||'').slice(0,14)+'…' : (u.name||'');
-    return '<div style="background:#FFF;border:'+(isYou?'2px solid #2563EB':'1px solid #E7ECF3')+';border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+    return '<div style="background:#FFF;border:'+(isYou?'2px solid #2563EB':'1px solid #E7ECF3')+';border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;width:'+CARD_W+'px;box-sizing:border-box;flex-shrink:0;">'
       +'<div style="width:36px;height:36px;border-radius:50%;background:'+avBg(u.name)+';color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+initials(u.name)+'</div>'
       +'<div style="flex:1;min-width:0;">'
         +'<div style="font-size:12px;font-weight:700;color:#15233B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(u.name||'')+'">'+esc(nameShort)+'</div>'
@@ -5977,12 +5977,15 @@ function teamsPage(){
     +'</div>';
   }
 
-  // ── Support panel ─────────────────────────────────────────────────────────
-  var supportPanel = '';
+  // ── Support roles — now shown as a bottom section in the main scrollable
+  // area (matching Unassigned Reps), freeing up the side-panel width for
+  // the main hierarchy instead of a separate narrow sidebar.
   if(support.length>0){
-    supportPanel = '<div style="flex-shrink:0;width:272px;border-left:1.5px solid #EEF2F8;background:#FAFBFD;padding:20px 16px;overflow-y:auto;display:flex;flex-direction:column;">'
-      +'<div style="font-size:9.5px;font-weight:800;letter-spacing:0.1em;color:#9AAFC8;text-transform:uppercase;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #EEF2F8;">Support Roles</div>'
-      +support.map(function(u){ return supportCard(u); }).join('')
+    chartHtml += '<div style="margin-top:20px;">'
+      +'<div style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:#94A3B8;text-transform:uppercase;margin-bottom:10px;">Support Roles</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:10px;">'
+        +support.map(function(u){ return supportCard(u); }).join('')
+      +'</div>'
     +'</div>';
   }
 
@@ -6006,7 +6009,6 @@ function teamsPage(){
       +'<div style="flex:1;min-width:0;overflow-y:auto;overflow-x:hidden;padding:32px 32px 48px;">'
         +chartHtml
       +'</div>'
-      +supportPanel
     +'</div>'
   +'</div>';
 }
