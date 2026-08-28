@@ -2391,7 +2391,16 @@ function zoneEntity(zoneName){
   var idxs = filteredMonthIndices();
   var wkeys = isWeekly ? filteredWeekKeys() : null;
   var _zeFr = state.filterReps && state.filterReps.length > 0 ? state.filterReps.map(function(x){ return normalizeName(x); }) : null;
-  var zReps = repsRaw.filter(function(r){
+  // Cross Sales specifically: the fallback sum below (from each branchs own
+  // pre-computed server-side values) is documented elsewhere in this file
+  // as able to drift from the correct allDrillRows-based total. Rather than
+  // briefly showing that drifted number before allDrillRows finishes loading
+  // and the correct value takes over (a visible flash from wrong to right),
+  // treat Cross Sales as having no reps to fall back to until allDrillRows
+  // is ready — every metric below correctly resolves to 0 in the meantime
+  // instead of a temporarily-wrong number.
+  var _crossSalesNotReady = zoneName === 'Cross Sales' && !(allDrillRows && allDrillRows.length > 0);
+  var zReps = _crossSalesNotReady ? [] : repsRaw.filter(function(r){
     if (r.zone !== zoneName) return false;
     if (_zeFr && _zeFr.indexOf(normalizeName(r.name)) === -1) return false;
     return true;
@@ -2634,6 +2643,24 @@ function repEntity(r){
       gpProv: _branchGpProv, gpActual: _branchGpActual,
       rev: _branchRev, revBilled: _branchRevBilled, revProv: _branchRevProv,
       tank: idxs.map(function(){ return 0; }),
+      tgt: 0, dailyTgt: 0, joinDate: null, exitDate: null
+    };
+  }
+
+  // Cross Sales branches, allDrillRows not ready yet: same reasoning as the
+  // guard in zoneEntity() — r.ship/r.gp etc below are the server-side
+  // values documented elsewhere as able to drift from the correct total.
+  // Show 0 rather than briefly flashing that drifted number.
+  if (r.isBranch && !(allDrillRows && allDrillRows.length > 0) && !isWeekly) {
+    var _zeroArr = idxs.map(function(){ return 0; });
+    return {
+      name: r.name, initials: ini,
+      avatarBg: 'oklch(0.6 0.12 ' + r.hue + ')',
+      isRep: true, isBranch: true, zone: r.zone,
+      ship: _zeroArr, gp: _zeroArr, tons: _zeroArr, teu: _zeroArr, lcl: _zeroArr,
+      gpProv: _zeroArr, gpActual: _zeroArr,
+      rev: _zeroArr, revBilled: _zeroArr, revProv: _zeroArr,
+      tank: _zeroArr,
       tgt: 0, dailyTgt: 0, joinDate: null, exitDate: null
     };
   }
