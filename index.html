@@ -738,11 +738,21 @@ function _getRLSReps() {
 // O(1) lookup afterward instead of re-scanning.
 var _zoneAgg = null;
 var _zoneAggKey = '';
+var _zoneAggRowsRef = null; // tracks the allDrillRows ARRAY ITSELF, not just its length
 function buildZoneAggregates(){
   var _flA = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
   var _frA = state.filterReps && state.filterReps.length > 0 ? state.filterReps.map(function(x){ return normalizeName(x); }) : null;
   var key = JSON.stringify(_flA) + '|' + JSON.stringify(_frA) + '|' + (allDrillRows ? allDrillRows.length : 0);
-  if (_zoneAgg && _zoneAggKey === key) return _zoneAgg;
+  // Row COUNT alone is not enough to detect a real data change — a zone
+  // rename (or any edit that changes content without changing row count,
+  // e.g. INZ17 renamed to INZ16 for the same jobs) would keep the same
+  // count, incorrectly reusing a stale cache still bucketed under the old
+  // zone name and silently showing 0 for the new one. allDrillRows is
+  // always replaced with a fresh array object (never mutated in place)
+  // whenever data is reloaded, so comparing the array reference itself
+  // catches this correctly.
+  if (_zoneAgg && _zoneAggKey === key && _zoneAggRowsRef === allDrillRows) return _zoneAgg;
+  _zoneAggRowsRef = allDrillRows;
 
   var agg = {}; // zoneKey -> monthLabel -> {metrics}; zoneKey null-zone uses '__CROSS__'
   var aggWk = {}; // zoneKey -> weekKey -> {metrics}
