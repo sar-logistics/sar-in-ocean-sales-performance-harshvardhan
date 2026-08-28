@@ -3125,6 +3125,17 @@ function topbar(){
           var allZoneNames = sortZones(Object.keys(function(){ var z={}; (window._repsRawPostRLS || repsRawOriginal).forEach(function(r){
             if(r.zone && r.zone !== 'Others') z[r.zone]=true;
           }); return z; }()));
+          // Further narrow the Zone dropdown's own OPTIONS (not just what's
+          // applied) to match whichever regions are currently checked —
+          // e.g. deselecting East should make INZ07 disappear from the
+          // list entirely, not just become unchecked while still shown.
+          if ((state.filterRegions||[]).length > 0 && window._zoneRegionMap) {
+            var _currentRegions = state.filterRegions;
+            allZoneNames = allZoneNames.filter(function(z){
+              if (z === 'Cross Sales') return _currentRegions.indexOf('Cross Sales') > -1;
+              return _currentRegions.indexOf(window._zoneRegionMap[z] || '') > -1;
+            });
+          }
           var zoneOpen = state.filterZoneDropOpen;
           // Build regions list from _zoneRegionMap
 var _allRegions = [];
