@@ -3432,9 +3432,21 @@ function customerPage(){
   var lobData = (d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d;
 
   // Apply filterReps / filterLobs to customer data
-  // RLS: auto-restrict reps based on user role
+  // RLS: auto-restrict reps based on user role, INTERSECTED with the users
+  // own manual Rep filter selection (if any) — not one replacing the
+  // other. Previously, having ANY RLS restriction (e.g. a Zonal Manager's
+  // whole team) always completely overrode whatever the user had manually
+  // selected in the dropdown, since RLS non-empty took priority outright.
   var _rlsReps = _getRLSReps();
-  var filterReps = _rlsReps.length > 0 ? _rlsReps : (state.filterReps || []);
+  var _manualReps = state.filterReps || [];
+  var filterReps;
+  if (_rlsReps.length > 0 && _manualReps.length > 0) {
+    filterReps = _manualReps.filter(function(n){ return _rlsReps.indexOf(n) > -1; });
+  } else if (_rlsReps.length > 0) {
+    filterReps = _rlsReps;
+  } else {
+    filterReps = _manualReps;
+  }
   // Derive LOB filter from the active tab — independent of state.filterLobs (Sales Performance)
   var _INSIGHT_LOB_MAP = {
     'Air':      ['AIR EXPORT','AIR IMPORT'],
@@ -3852,9 +3864,19 @@ function agentPage(){
   var lobData = (d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d;
 
   // Apply filterReps / filterLobs
-  // RLS: auto-restrict reps based on user role
+  // RLS: auto-restrict reps based on user role, INTERSECTED with the users
+  // own manual Rep filter selection (if any) — not one replacing the
+  // other. Same fix as Customer Insights above.
   var _rlsReps = _getRLSReps();
-  var filterReps = _rlsReps.length > 0 ? _rlsReps : (state.filterReps || []);
+  var _manualReps = state.filterReps || [];
+  var filterReps;
+  if (_rlsReps.length > 0 && _manualReps.length > 0) {
+    filterReps = _manualReps.filter(function(n){ return _rlsReps.indexOf(n) > -1; });
+  } else if (_rlsReps.length > 0) {
+    filterReps = _rlsReps;
+  } else {
+    filterReps = _manualReps;
+  }
   // Derive LOB filter from the active tab — independent of state.filterLobs (Sales Performance)
   var _INSIGHT_LOB_MAP = {
     'Air':      ['AIR EXPORT','AIR IMPORT'],
