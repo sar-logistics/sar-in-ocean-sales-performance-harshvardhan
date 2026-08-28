@@ -6740,15 +6740,15 @@ function salesTable(M){
           +'<div style="font-size:11px;font-weight:600;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(ri.name)+'">'+ri.name+'</div>'
         +'</div>';
       } else {
-        var dojStr = ri.joinDate ? (function(d){ var dt=new Date(d); return isNaN(dt)?null:dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'}); })(ri.joinDate) : null;
-        var doeStr = ri.exitDate ? (function(d){ var dt=new Date(d); return isNaN(dt)?null:dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'}); })(ri.exitDate) : null;
+        var dojStr = ri.joinDate ? (function(d){ var dt=new Date(d); return isNaN(dt)?null:dt.toLocaleDateString('en-GB',{month:'short',year:'numeric'}); })(ri.joinDate) : null;
+        var doeStr = ri.exitDate ? (function(d){ var dt=new Date(d); return isNaN(dt)?null:dt.toLocaleDateString('en-GB',{month:'short',year:'numeric'}); })(ri.exitDate) : null;
         nameLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:1px;">'
           +'<div style="font-size:11px;font-weight:600;color:#1E3A66;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(ri.name)+'">'+esc(ri.name)+'</div>'
           +(dojStr||doeStr
             ? '<div style="font-size:9px;color:#94A3B8;font-weight:500;white-space:nowrap;display:flex;align-items:center;gap:4px;">'
-              +(dojStr ? '<span title="Date of Joining" style="color:#10875A;">&#x2794; '+esc(dojStr)+'</span>' : '')
+              +(dojStr ? '<span title="Date of Joining" style="color:#10875A;">DOJ: '+esc(dojStr)+'</span>' : '')
               +(dojStr && doeStr ? '<span style="color:#CBD5E1;">·</span>' : '')
-              +(doeStr ? '<span title="Date of Exit" style="color:#DC2626;">&#x2715; '+esc(doeStr)+'</span>' : '')
+              +(doeStr ? '<span title="Date of Exit" style="color:#DC2626;">DOE: '+esc(doeStr)+'</span>' : '')
             +'</div>'
             : '')
         +'</div>';
