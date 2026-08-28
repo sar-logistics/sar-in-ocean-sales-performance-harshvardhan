@@ -7700,6 +7700,26 @@ function render(){
     state.zoneOpen[currentUser.zone] = true;
     state.pendencyZoneOpen[currentUser.zone] = true;
   }
+  // ROOT-CAUSE FIX: RLS role defaults now write directly into the SAME
+  // filterZones/filterRegions state the rest of the app already reads
+  // everywhere (KPIs, table, Customer/Agent Insights, the Filters panel
+  // itself). Previously RLS only restricted data quietly in the background
+  // via separate ad-hoc checks scattered across many different functions —
+  // any place that forgot its own check (like a KPI card) showed
+  // unrestricted data, AND the Filters panel never visually reflected what
+  // was actually being shown. Runs once per logged-in user (tracked by
+  // email) so it does not repeatedly fight a user's own later manual
+  // changes within the same session.
+  if (currentUser && currentUser.email && state._roleDefaultsAppliedFor !== currentUser.email) {
+    state._roleDefaultsAppliedFor = currentUser.email;
+    var _rdRole = (currentUser.role||'').toLowerCase().trim();
+    if (_rdRole === 'zonal manager' && currentUser.zone) {
+      state.filterZones = [currentUser.zone];
+    } else if (_rdRole === 'regional manager' && currentUser.region) {
+      state.filterRegions = currentUser.region.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+      state._regionExpandedZones = false; // let the existing expansion logic below populate filterZones fresh
+    }
+  }
   var _tRender = performance.now();
   // PERMANENT FIX: when Region filter is active but Zone filter is empty,
   // expand Region -> matching zones and write directly into state.filterZones.
