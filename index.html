@@ -3364,9 +3364,15 @@ function adminPage(){
   '</div>'+
   sections+
   '</div>'+
+  (state.syncUsersMessage
+    ? '<div data-act="dismissSyncMessage" style="position:fixed;bottom:90px;right:28px;z-index:100;background:#0D2B5E;color:#FFFFFF;border-radius:10px;padding:12px 18px;font-size:12.5px;font-weight:600;max-width:320px;box-shadow:0 8px 24px rgba(13,43,94,0.3);cursor:pointer;">'+esc(state.syncUsersMessage)+'<div style="font-size:10px;color:#94A9C9;margin-top:4px;font-weight:500;">Click to dismiss</div></div>'
+    : '')+
   (canEdit ?
     '<button data-act="addUserOpen" data-role="" style="position:fixed;bottom:28px;right:28px;z-index:100;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;padding:13px 22px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 4px 16px rgba(29,95,204,0.4),0 1px 4px rgba(29,95,204,0.25);">'+
       '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" pointer-events="none"><path d="M12 5v14M5 12h14"/></svg>Add User'+
+    '</button>'+
+    '<button data-act="syncNewUsersFromMapping" style="position:fixed;bottom:28px;right:150px;z-index:100;background:#FFFFFF;border:1.5px solid #E3E9F2;border-radius:999px;padding:13px 20px;font-size:13px;font-weight:700;color:#374151;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 4px 16px rgba(13,43,94,0.12);">'+
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>Sync New Users'+
     '</button>'
   :'');
 }
@@ -9071,6 +9077,64 @@ document.addEventListener('click', function(ev){
     pending++; fetchOpData(done, true);
     pending++; fetchOrgData(done, true);
     pending++; fetchUsageData(done, true);
+  }
+  else if(act==='dismissSyncMessage'){ ev.stopPropagation(); state.syncUsersMessage=''; render(); }
+  else if(act==='syncNewUsersFromMapping'){
+    ev.stopPropagation();
+    // Find reps in the Ocean mapping sheet who have a real email but no
+    // existing account (matched against orgData, which reflects the
+    // actual Admin Panel / ocean_users collection).
+    var existingEmails = {};
+    if (orgData) {
+      (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]).forEach(function(p){
+        if (p.email) existingEmails[p.email.toLowerCase().trim()] = true;
+      });
+    }
+    var candidates = [];
+    var seenCandidateEmails = {};
+    repsRawOriginal.forEach(function(r){
+      if (r.isBranch) return; // Cross Sales branch entries have no real email
+      var em = (r.email||'').toLowerCase().trim();
+      if (!em) return; // no email on this mapping sheet row — cannot create a login
+      if (existingEmails[em]) return; // already has an account
+      if (seenCandidateEmails[em]) return; // duplicate row in mapping sheet itself
+      seenCandidateEmails[em] = true;
+      candidates.push({ name: r.name, email: em, zone: r.zone || '' });
+    });
+    if (candidates.length === 0) {
+      state.syncUsersMessage = 'Everyone in the mapping sheet with an email already has an account — nothing to add.';
+      render();
+      return;
+    }
+    el.disabled = true;
+    var _origText = el.textContent;
+    el.textContent = 'Syncing...';
+    fetch('/api/mongo-batch?action=bulkSyncUsers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ candidates: candidates })
+    }).then(function(r){ return r.json(); })
+    .then(function(data){
+      el.disabled = false;
+      el.textContent = _origText;
+      if (!data.success) {
+        state.syncUsersMessage = 'Sync failed: ' + (data.error || 'unknown error');
+        render();
+        return;
+      }
+      if (data.org) orgData = data.org;
+      var r = data.results || { created: [], skipped: [], errors: [] };
+      state.syncUsersMessage = 'Added ' + r.created.length + ' new user' + (r.created.length===1?'':'s')
+        + (r.skipped.length ? ', skipped ' + r.skipped.length + ' (already existed)' : '')
+        + (r.errors.length ? ', ' + r.errors.length + ' failed' : '') + '.';
+      render();
+    })
+    .catch(function(err){
+      el.disabled = false;
+      el.textContent = _origText;
+      state.syncUsersMessage = 'Sync failed: could not reach the server.';
+      render();
+    });
   }
   else if(act==='addUserOpen'){
     ev.stopPropagation();
