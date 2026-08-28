@@ -9003,6 +9003,16 @@ document.addEventListener('click', function(ev){
     // Clear session
     try { localStorage.removeItem('sar_user_session'); } catch(e) {}
     currentUser = null;
+    // Re-create tokenClient fresh for the next sign-in attempt. Reusing the
+    // SAME tokenClient object across a logout->login cycle was leaving the
+    // second attempt permanently stuck on Verifying — the first sign-in
+    // after a fresh page load worked correctly, but signing in again after
+    // logout (same page, same tokenClient instance) did not, suggesting
+    // some internal state (e.g. a lingering popup window reference) does
+    // not cleanly support being reused for a second flow.
+    if (window.google && google.accounts && google.accounts.oauth2) {
+      try { initGoogleAuth(); } catch(e) { console.error('Failed to re-init Google auth on logout:', e); }
+    }
     // NOTE: previously called google.accounts.oauth2.revoke(undefined, ...)
     // here, but no access token is ever actually stored for later use — it
     // only exists briefly inside the login callback — so this ALWAYS sent
