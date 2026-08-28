@@ -3465,17 +3465,20 @@ function customerPage(){
   var _zoneRawSPs = _filterZones.length > 0 ? zoneToRawSPs(_filterZones) : null;
   var _selReps = (state.filterReps||[]).length > 0
     ? (state.filterReps||[]).map(function(x){ return normalizeName(x); }) : null;
+  // Combine every active restriction — RLS, Zone filter, and manual Rep
+  // filter selection — via intersection, not one replacing the others.
+  // Previously, having ANY RLS restriction (e.g. a Zonal Manager's whole
+  // team) unconditionally won outright, silently ignoring both the Zone
+  // filter and whatever specific rep the user had manually selected.
+  var _rlsRepsNorm = _rlsReps.length > 0 ? _rlsReps.map(function(x){ return normalizeName(x); }) : null;
+  var _restrictions = [_rlsRepsNorm, _zoneRawSPs, _selReps].filter(function(x){ return x !== null; });
   var _effectiveFilterReps;
-  if (_rlsReps.length > 0) {
-    _effectiveFilterReps = _rlsReps.map(function(x){ return normalizeName(x); });
-  } else if (_zoneRawSPs && _selReps) {
-    _effectiveFilterReps = _zoneRawSPs.filter(function(sp){ return _selReps.indexOf(sp) > -1; });
-  } else if (_zoneRawSPs) {
-    _effectiveFilterReps = _zoneRawSPs;
-  } else if (_selReps) {
-    _effectiveFilterReps = _selReps;
-  } else {
+  if (_restrictions.length === 0) {
     _effectiveFilterReps = null;
+  } else {
+    _effectiveFilterReps = _restrictions.reduce(function(acc, list){
+      return acc.filter(function(sp){ return list.indexOf(sp) > -1; });
+    });
   }
 
   var _rlsActiveC = _rlsReps && _rlsReps.length > 0;
@@ -3894,17 +3897,17 @@ function agentPage(){
   var _zoneRawSPsA = _filterZonesA.length > 0 ? zoneToRawSPs(_filterZonesA) : null;
   var _selRepsA = (state.filterReps||[]).length > 0
     ? (state.filterReps||[]).map(function(x){ return normalizeName(x); }) : null;
+  // Same fix as Customer Insights — combine RLS, Zone filter, and manual
+  // Rep filter selection via intersection, not one replacing the others.
+  var _rlsRepsNormA = _rlsReps.length > 0 ? _rlsReps.map(function(x){ return normalizeName(x); }) : null;
+  var _restrictionsA = [_rlsRepsNormA, _zoneRawSPsA, _selRepsA].filter(function(x){ return x !== null; });
   var _effectiveFilterRepsA;
-  if (_rlsReps.length > 0) {
-    _effectiveFilterRepsA = _rlsReps.map(function(x){ return normalizeName(x); });
-  } else if (_zoneRawSPsA && _selRepsA) {
-    _effectiveFilterRepsA = _zoneRawSPsA.filter(function(sp){ return _selRepsA.indexOf(sp) > -1; });
-  } else if (_zoneRawSPsA) {
-    _effectiveFilterRepsA = _zoneRawSPsA;
-  } else if (_selRepsA) {
-    _effectiveFilterRepsA = _selRepsA;
-  } else {
+  if (_restrictionsA.length === 0) {
     _effectiveFilterRepsA = null;
+  } else {
+    _effectiveFilterRepsA = _restrictionsA.reduce(function(acc, list){
+      return acc.filter(function(sp){ return list.indexOf(sp) > -1; });
+    });
   }
 
   var _rlsActiveA = _rlsReps.length > 0;
