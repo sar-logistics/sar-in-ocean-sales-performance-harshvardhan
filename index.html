@@ -3030,7 +3030,7 @@ function topbar(){
             _panelRepNames = Object.keys(_panelRepSet);
           }
           var allRepEntries = Array.from(
-            new Map(repsRawOriginal
+            new Map(repsRaw
               .filter(function(r){
                 if (_fzPanel.length === 0) return true;
                 if (_panelRepNames) return _panelRepNames.some(function(n){ return normalizeName(n) === normalizeName(r.name); });
