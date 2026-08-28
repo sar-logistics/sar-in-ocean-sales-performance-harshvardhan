@@ -2663,26 +2663,14 @@ async function computeBothPendency(db) {
       } else {
         zone = repZoneMap[norm] || "";
         displayName = repDisplayMap[norm] || cleanName;
-        // Try INZ code lookup from mapping sheet
-        if (!zone) {
-          for (const part of nameParts.slice(1)) {
-            const trimmed = part.toUpperCase();
-            if (inzCodeZoneMap[trimmed] && inzCodeZoneMap[trimmed] !== 'Unassigned') {
-              zone = inzCodeZoneMap[trimmed]; break;
-            }
-          }
-        }
-        // Last resort: match INZ code from pipe-suffix against real zone names
-        // Identical to SP's repsByZoneByFY["FY26"] zone name scan
-        if (!zone) {
-          for (const part of nameParts.slice(1)) {
-            const trimmed = part.toUpperCase();
-            if (/^IN[A-Z]?\d+$/.test(trimmed)) {
-              const matchedZone = realZoneNames.find(z => z.toUpperCase().startsWith(trimmed));
-              if (matchedZone) { zone = matchedZone; break; }
-            }
-          }
-        }
+        // Previously, a rep not found in the Ocean mapping sheet could still
+        // get attributed to a SPECIFIC zone if their raw name had a zone
+        // code tag like "| INZ17" attached (e.g. Ritika Saini, an Air-side
+        // rep). This has been removed per explicit decision — anyone not
+        // officially on the Ocean mapping sheet now always lands in the
+        // generic Cross Sales bucket (Unassigned), regardless of any zone
+        // code tagged in their raw name. Only the mapping sheet itself
+        // determines zone attribution now.
         if (!zone) zone = "Unassigned";
       }
 
