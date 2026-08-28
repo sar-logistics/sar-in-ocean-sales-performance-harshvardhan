@@ -857,6 +857,18 @@ function computeFilteredRepsRaw(){
     }
   }
 
+  // Snapshot the pool RIGHT HERE — after RLS restriction, but BEFORE any
+  // manual Zone/Region/LOB/Rep filter narrows it further. This is what the
+  // Zone filter dropdown's own option list (and similarly the Rep dropdown
+  // above) should be built from — using repsRaw (fully narrowed by
+  // whatever zone/region is currently selected) caused the same circular
+  // problem the Rep dropdown had earlier: a Regional Manager's zone list
+  // would correctly start restricted to their region, but once that
+  // region's zones got applied, the dropdown's own source had already
+  // narrowed to match, making it look like nothing was restricted at all
+  // (or conversely could hide options depending on selection state).
+  window._repsRawPostRLS = base.slice();
+
   // Zone filter — expand selected zones to rep names, then intersect with rep filter.
   // 'Cross Sales' is a special value (reps with NO zone at all) — a real
   // rep never literally has r.zone === 'Cross Sales', so it needs its own
@@ -3110,7 +3122,7 @@ function topbar(){
                 + '</div>'
               + '</div>' : '');
 
-          var allZoneNames = sortZones(Object.keys(function(){ var z={}; repsRawOriginal.forEach(function(r){
+          var allZoneNames = sortZones(Object.keys(function(){ var z={}; (window._repsRawPostRLS || repsRawOriginal).forEach(function(r){
             if(r.zone && r.zone !== 'Others') z[r.zone]=true;
           }); return z; }()));
           var zoneOpen = state.filterZoneDropOpen;
