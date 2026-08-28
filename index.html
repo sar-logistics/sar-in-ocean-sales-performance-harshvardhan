@@ -5856,6 +5856,21 @@ function teamsPage(){
   var regManagers   = hierarchy.filter(function(u){ return (u.role||'').toLowerCase()==='regional manager'; });
   var zonalManagers = hierarchy.filter(function(u){ var r=(u.role||'').toLowerCase(); return r==='zonal manager'||r==='manager'; });
 
+  // Admins who also have direct reports (e.g. someone doing double duty as
+  // both Admin and a zone's manager) get a manager card here too, alongside
+  // Zonal Managers — while staying listed under Support Roles as well,
+  // unchanged. This does not affect their actual Admin permissions in any
+  // way, only how the org chart visually groups their reports.
+  var adminEmailsWithReports = {};
+  directReports.forEach(function(u){
+    var rt = (u.reportsTo||'').toLowerCase().trim();
+    if (rt) adminEmailsWithReports[rt] = true;
+  });
+  var managerAdmins = support.filter(function(u){
+    return (u.role||'').toLowerCase() === 'admin' && u.email && adminEmailsWithReports[u.email.toLowerCase().trim()];
+  });
+  zonalManagers = zonalManagers.concat(managerAdmins);
+
   // ZM email → their reps
   var repsByZM = {};
   var zmEmailSet = {};
