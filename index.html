@@ -5815,10 +5815,12 @@ function teamsPage(){
     var isYou = isYouEmail && u.email && u.email.toLowerCase().trim()===isYouEmail;
     var nameShort = (u.name||'').length>18 ? (u.name||'').slice(0,16)+'…' : (u.name||'');
     var reportLine = u.reportCount>0 ? '<div style="font-size:10px;color:#94A3B8;margin-top:2px;">'+u.reportCount+' report'+(u.reportCount===1?'':'s')+'</div>' : '';
+    var zoneLine = u.zone ? '<div style="font-size:10.5px;color:#5678C2;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(u.zone)+'">'+esc(u.zone)+'</div>' : '';
     return '<div style="background:#FFF;border:'+(isYou?'2px solid #2563EB':'1px solid #E7ECF3')+';border-radius:10px;padding:12px 13px;display:flex;align-items:flex-start;gap:9px;width:'+CARD_W+'px;box-sizing:border-box;flex-shrink:0;">'
       +'<div style="width:38px;height:38px;border-radius:50%;background:'+avBg(u.name)+';color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+initials(u.name)+'</div>'
       +'<div style="flex:1;min-width:0;">'
         +'<div style="font-size:12.5px;font-weight:700;color:#15233B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(u.name||'')+'">'+esc(nameShort)+'</div>'
+        +zoneLine
         +'<div style="margin-top:3px;">'+roleBadge(u.role)+'</div>'
         +reportLine
       +'</div>'
