@@ -9685,7 +9685,19 @@ document.addEventListener('click', function(ev){
     }
     _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops);
   }
-  else if(act==='filterZoneAll'){ ev.stopPropagation(); state.filterZones=[]; state.filterRegions=[]; state._regionExpandedZones=false; _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterZoneAll'){
+    ev.stopPropagation();
+    state.filterZones=[];
+    // For a Regional Manager, filterRegions represents their actual RLS
+    // scope, not a manual filter choice — clearing it here would strip
+    // away their real permission boundary, not just reset a selection.
+    // Only clear it for roles where Region really is just a manual filter
+    // (Admin, HR).
+    var _zaRole = currentUser ? (currentUser.role||'').toLowerCase().trim() : '';
+    if (_zaRole !== 'regional manager') { state.filterRegions=[]; }
+    state._regionExpandedZones=false;
+    _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops);
+  }
   else if(act==='toggleFilterZone'){
     ev.stopPropagation();
     var zv = el.getAttribute('data-val');
@@ -9711,7 +9723,16 @@ document.addEventListener('click', function(ev){
           state.filterZones = []; state._regionExpandedZones = false;
           render(); }
         else if(act==='toggleFilterZoneDrop'){ ev.stopPropagation(); state.filterZoneDropOpen=!state.filterZoneDropOpen; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='filterResetAll'){ ev.stopPropagation(); state.filterLobs=[]; state.filterReps=[]; state.filterZones=[]; state.filterRegions=[]; state._regionExpandedZones=false; _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterResetAll'){
+    ev.stopPropagation();
+    state.filterLobs=[]; state.filterReps=[]; state.filterZones=[];
+    // Same reasoning as filterZoneAll above — do not strip a Regional
+    // Managers actual RLS scope, only reset manual choices for other roles.
+    var _raRole = currentUser ? (currentUser.role||'').toLowerCase().trim() : '';
+    if (_raRole !== 'regional manager') { state.filterRegions=[]; }
+    state._regionExpandedZones=false;
+    _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops);
+  }
   else if(act==='rateEdit'){ state.rateEditing=true; render(); setTimeout(function(){ var inp=document.getElementById('rate-input'); if(inp) inp.focus(); },50); }
   else if(act==='rateCommit'){ var v=parseFloat(document.getElementById('rate-input').value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
   else if(act==='feedbackOpen'){ ev.stopPropagation(); state.feedbackOpen=true; state.feedbackSent=false; state.feedbackText=''; render(); }
