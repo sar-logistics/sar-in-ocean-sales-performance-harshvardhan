@@ -615,20 +615,19 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
                           : (_metaFY27 && _metaFY27.zone && _metaFY27.zone !== 'Unassigned') ? _metaFY27
                           : null;
         const _meta = (_metaRaw && _metaRaw.zone && _metaRaw.zone !== 'Unassigned') ? _metaRaw : (_metaBetter || _metaRaw);
-        // If still no zone, try INZ code from pipe-suffix in Sales Person field
+        // Previously, if still no zone, this tried matching an INZ code
+        // from a pipe-suffix in the raw Sales Person field (e.g. Ritika
+        // Saini | INZ17) against real zone names — attributing the row to
+        // that specific zone even though the rep is not on the Ocean
+        // mapping sheet. Removed per explicit decision: anyone not
+        // officially on the Ocean mapping sheet now always falls through
+        // to Unassigned (Cross Sales), regardless of any zone code tagged
+        // in their raw name. This is the SAME fix already applied to the
+        // Pendency-specific zone resolution elsewhere in this file — this
+        // was a separate, duplicate implementation for the main drill-row
+        // dataset (allDrillRows) that had been missed.
         let _zone = _meta ? _meta.zone : null;
         let _dn   = _meta ? _meta.displayName : null;
-        if (!_zone || _zone === 'Unassigned') {
-          const _spRaw = String(job["Sales Person"] || "").trim();
-          const _spParts = _spRaw.split("|").map(s => s.trim());
-          for (const _part of _spParts.slice(1)) {
-            const _code = _part.toUpperCase();
-            if (/^IN[A-Z]?\d+$/.test(_code) && repsByZoneByFY["FY26"]) {
-              const _matchedZone = Object.keys(repsByZoneByFY["FY26"]).find(z => z !== 'Unassigned' && z.toUpperCase().startsWith(_code));
-              if (_matchedZone) { _zone = _matchedZone; break; }
-            }
-          }
-        }
 
         const { gp: rowGP, isProvisional } = pickGP(job, cls);
         const billedRevenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
