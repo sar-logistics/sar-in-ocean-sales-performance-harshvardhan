@@ -3307,6 +3307,45 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ success: true, org: updatedOrg });
     }
 
+    if (action === "bulkSyncUsers") {
+      // Manually triggered from Admin Panel — creates a Sales Rep account
+      // for each {name, email, zone} entry provided that does not already
+      // have an ocean_users account (matched by email). Never touches or
+      // overwrites an existing account. Intentionally NOT automatic on
+      // every data sync — a typo'd or placeholder email in the mapping
+      // sheet would otherwise silently create an unwanted account with no
+      // chance to review it first.
+      const { candidates } = req.body || {};
+      if (!Array.isArray(candidates) || candidates.length === 0) {
+        return res.status(400).json({ error: "candidates array required" });
+      }
+      const results = { created: [], skipped: [], errors: [] };
+      for (const c of candidates) {
+        const email = String(c.email || "").toLowerCase().trim();
+        const name  = String(c.name  || "").trim();
+        if (!email || !name) { results.errors.push({ name, email, reason: "missing name or email" }); continue; }
+        try {
+          const existing = await db.collection("ocean_users").findOne({ email });
+          if (existing) { results.skipped.push({ name, email, reason: "account already exists" }); continue; }
+          await db.collection("ocean_users").insertOne({
+            email, name,
+            role: "Sales Rep",
+            zone: String(c.zone || "").trim(),
+            region: "",
+            reportsTo: "",
+            isActive: true,
+            loginCount: 0,
+            createdAt: new Date(),
+          });
+          results.created.push({ name, email, zone: c.zone || "" });
+        } catch (err) {
+          results.errors.push({ name, email, reason: err.message });
+        }
+      }
+      const updatedOrg = await getOrgChart(db);
+      return res.status(200).json({ success: true, results, org: updatedOrg });
+    }
+
     if (action === "updateUser") {
       const { email, role, reportsTo, zone, region, isActive, name } = req.body || {};
       const result = await updateUserFields(db, email, { role, reportsTo, zone, region, isActive, name });
