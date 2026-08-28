@@ -6476,7 +6476,8 @@ function tableRows(){
       achFmt: e.tgt>0 ? achFy+'%' : '—',
       barWidth: Math.min(100,achFy)+'%',
       barColor: barColor, achColor: achColor,
-      isZone: isZone, isGrand: isGrand, isBranch: !!e.isBranch
+      isZone: isZone, isGrand: isGrand, isBranch: !!e.isBranch,
+      joinDate: e.joinDate || null, exitDate: e.exitDate || null
     };
 
     rows.push(metric('Shipments', 0, 'int', '#15233B', dispShip, sum(dispShip), 'ship', repInfo));
