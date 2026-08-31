@@ -5653,7 +5653,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       +'</div>'
       +'<span style="font-size:11px;color:#94A3B8;font-weight:500;">'+dateLabel+'</span>'
     +'</div>'
-    +'<div style="overflow-x:auto;">'
+    +'<div style="overflow-x:auto;max-height:calc(100vh - '+(_showKpi ? '260' : '150')+'px);overflow-y:auto;">'
       +'<table style="width:100%;border-collapse:collapse;min-width:700px;">'
         +thead
         +'<tbody>'+grandRows+bodyRows+'</tbody>'
