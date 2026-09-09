@@ -16,7 +16,7 @@ const { MongoClient } = require("mongodb");
 const HUB_ISSUER         = "sar-systems-hub";
 const DEFAULT_HUB_ORIGIN = "https://systems.sarlogisolutions.com";
 
-const KNOWN_DASHBOARD_SLUGS = ["ocean-sales-performance-test", "ocean-sales-performance"];
+const KNOWN_DASHBOARD_SLUGS = ["stspl-ocean-sales-test", "ocean-sales-performance"];
 const DEFAULT_DASHBOARD_SLUG = "ocean-sales-performance";
 
 const MONGO_URI        = process.env.MONGO_URI;
