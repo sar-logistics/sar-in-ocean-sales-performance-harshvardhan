@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "SAR India Ocean Sales Performance Dashboard",
   "dependencies": {
-    "mongodb": "^6.7.0"
+    "mongodb": "^6.7.0",
+    "jose": "^4.15.5"
   }
 }

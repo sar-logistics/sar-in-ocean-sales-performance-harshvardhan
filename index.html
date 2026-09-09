@@ -9164,6 +9164,12 @@ document.addEventListener('click', function(ev){
     // sign-in attempt instead of us needing to individually account for
     // every piece of state that a fresh load would have reset for free.
     try { localStorage.removeItem('sar_user_session'); } catch(e) {}
+    try {
+      sessionStorage.removeItem('sar_hub_widget_token');
+      sessionStorage.removeItem('sar_hub_current_slug');
+      sessionStorage.removeItem('sar_hub_origin');
+      sessionStorage.removeItem('sar_hub_pending_profile');
+    } catch(e) {}
     location.reload();
   }
   else if(act==='refreshData'){
@@ -10317,6 +10323,25 @@ window.addEventListener('load', function() {
   var loginLogo = document.getElementById('login-sar-logo');
   if (loginLogo) loginLogo.src = SAR_LOGO_URI;
 
+  // ── SAR Systems Hub SSO handoff ──────────────────────────────────────────
+  // If /api/sso-verify just wrote a pending profile (see api/sso-verify.js),
+  // consume it once and run it through the exact same verifyWithBackend()
+  // path a normal Google sign-in already uses — never a parallel session
+  // mechanism. This only ever happens right after the Hub SSO redirect;
+  // a direct/manual visit never sets this key.
+  var hubProfileRaw = null;
+  try { hubProfileRaw = sessionStorage.getItem('sar_hub_pending_profile'); } catch (e) {}
+  if (hubProfileRaw) {
+    try { sessionStorage.removeItem('sar_hub_pending_profile'); } catch (e) {}
+    try {
+      var hubProfile = JSON.parse(hubProfileRaw);
+      verifyWithBackend(hubProfile);
+      return; // skip the rest of the normal boot/login-restore checks below
+    } catch (e) {
+      console.error('SSO handoff error:', e);
+    }
+  }
+
   // ── Instant session restore ──────────────────────────────────────────────
   // If we have a cached user session, skip Google OAuth entirely and render
   // the dashboard immediately — zero network calls before first paint.
@@ -10423,6 +10448,23 @@ window.addEventListener('load', function() {
   setInterval(pingAPI, 2 * 60 * 1000); // ping every 2 minutes to keep container warm
 });
 
+</script>
+<script>
+(function () {
+  // Loads the Recent Dashboards widget from whichever Hub origin actually
+  // launched this session (production, or a staging/preview deployment
+  // during testing) instead of a hardcoded domain. Falls back to production
+  // if no origin was recorded (e.g. a direct, non-SSO login — where the
+  // widget will render nothing anyway per its own sar_hub_widget_token check).
+  var hubOrigin = 'https://systems.sarlogisolutions.com';
+  try {
+    hubOrigin = sessionStorage.getItem('sar_hub_origin') || hubOrigin;
+  } catch (e) {}
+  var s = document.createElement('script');
+  s.src = hubOrigin + '/widget.js';
+  s.setAttribute('data-hub-origin', hubOrigin);
+  document.body.appendChild(s);
+})();
 </script>
 </body>
 </html>
