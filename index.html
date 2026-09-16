@@ -313,7 +313,7 @@ function verifyWithBackend(userinfo) {
     }
     currentUser = res.data.user;
     // Cache session so next page load is instant (no Google OAuth round-trip)
-    try { localStorage.setItem('sar_user_session', JSON.stringify({ user: currentUser, _savedAt: Date.now() })); } catch(e) {}
+    try { localStorage.setItem('sar_oc_user_session', JSON.stringify({ user: currentUser, _savedAt: Date.now() })); } catch(e) {}
     showDashboard();
   })
   .catch(function(err) {
@@ -351,7 +351,7 @@ function _showDashboardBody() {
   // Clean up ALL stale cache keys from previous versions
   try {
     Object.keys(localStorage).filter(function(k){
-      return k.startsWith('sar_') && !k.includes(CACHE_VERSION) && k !== 'sar_user_session';
+      return k.startsWith('sar_oc_') && !k.includes(CACHE_VERSION) && k !== 'sar_oc_user_session';
     }).forEach(function(k){ localStorage.removeItem(k); });
   } catch(e) {}
   // ── Instant boot: identical to Op/Finance ────────────────────────────────
@@ -360,7 +360,7 @@ function _showDashboardBody() {
   console.log('[PERF] lsGet(sales) took', (performance.now()-_tSales).toFixed(1)+'ms, size='+(cached?JSON.stringify(cached).length:0)+' hit='+!!(cached&&cached.repsRaw));
   if (!cached) {
     try {
-      var oldRaw = localStorage.getItem('sar_sales_cache_' + CACHE_VERSION);
+      var oldRaw = localStorage.getItem('sar_oc_sales_cache_' + CACHE_VERSION);
       if (oldRaw) { cached = JSON.parse(oldRaw); }
     } catch(e) {}
   }
@@ -388,7 +388,7 @@ function _showDashboardBody() {
     } else {
       // Fallback: try dedicated lobData localStorage key
       try {
-        var _lobRaw = localStorage.getItem('sar_lobdata_' + CACHE_VERSION);
+        var _lobRaw = localStorage.getItem('sar_oc_lobdata_' + CACHE_VERSION);
         if (_lobRaw) {
           var _lobMap = JSON.parse(_lobRaw);
           repsRawOriginal.forEach(function(r){
@@ -980,15 +980,15 @@ var _liveDataRetryCount = 0;
 function fetchLiveData(callback, force){
   if (force) {
     try {
-      Object.keys(localStorage).filter(function(k){ return k.startsWith('sar_'); })
+      Object.keys(localStorage).filter(function(k){ return k.startsWith('sar_oc_'); })
         .forEach(function(k){ localStorage.removeItem(k); });
-      localStorage.removeItem('sar_user_session');
+      localStorage.removeItem('sar_oc_user_session');
       _weekDataFetched = false;
       _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {}; _customerPivotCache = {}; _agentPivotCache = {};
       allDrillRows = null;
 
       try {
-        Object.keys(sessionStorage).filter(function(k){ return k.startsWith('sar_drill_'); })
+        Object.keys(sessionStorage).filter(function(k){ return k.startsWith('sar_oc_drill_'); })
           .forEach(function(k){ sessionStorage.removeItem(k); });
       } catch(e){}
     } catch(e){}
@@ -1083,7 +1083,7 @@ function fetchWeekDataIfNeeded(callback){
     return;
   }
   try {
-    var lsCached = localStorage.getItem('sar_week_cache_v3');
+    var lsCached = localStorage.getItem('sar_oc_week_cache_v3');
     if (lsCached) {
       var parsed = JSON.parse(lsCached);
       // Support both old array format and new {data,_cachedAt} format
@@ -1113,7 +1113,7 @@ function fetchWeekDataIfNeeded(callback){
         try {
           var toStore = repsRawOriginal.filter(function(r){ return r.weekData && Object.keys(r.weekData).length > 0; })
             .map(function(r){ return {name:r.name, zone:r.zone, weekData:r.weekData}; });
-          localStorage.setItem('sar_week_cache_v3', JSON.stringify({data:toStore, _cachedAt:Date.now()}));
+          localStorage.setItem('sar_oc_week_cache_v3', JSON.stringify({data:toStore, _cachedAt:Date.now()}));
         } catch(e){}
       }
       if (callback) callback();
@@ -1156,7 +1156,7 @@ function fetchLobDataIfNeeded(callback){
           });
           var serialized = JSON.stringify(lobStore);
           if (serialized.length < 2000000) { // only save if under 2MB
-            localStorage.setItem('sar_lobdata_' + CACHE_VERSION, serialized);
+            localStorage.setItem('sar_oc_lobdata_' + CACHE_VERSION, serialized);
             console.log('[LOB] lobData saved, size='+serialized.length);
           } else {
             console.warn('[LOB] lobData too large to cache:', serialized.length);
@@ -1173,7 +1173,7 @@ var _dbLastUpdated = 0; // set once after meta check — used to detect stale ca
 
 function lsGet(key) {
   try {
-    var raw = localStorage.getItem('sar_' + key + '_' + CACHE_VERSION);
+    var raw = localStorage.getItem('sar_oc_' + key + '_' + CACHE_VERSION);
     if (!raw) return null;
     var d = JSON.parse(raw);
     // Treat as stale after TTL but still return it (caller decides to background-refresh)
@@ -1191,15 +1191,15 @@ function lsSet(key, data) {
       _saveData = Object.assign({}, _saveData, { allCustomers: _saveData.allCustomers.slice(0, 50) });
     }
     var serialized = JSON.stringify(_saveData);
-    localStorage.setItem('sar_' + key + '_' + CACHE_VERSION, serialized);
+    localStorage.setItem('sar_oc_' + key + '_' + CACHE_VERSION, serialized);
   } catch(e) {
     // Quota exceeded — try clearing old keys first then retry
     try {
       Object.keys(localStorage).filter(function(k){
-        return k.startsWith('sar_') && !k.includes('_' + CACHE_VERSION) && !k.includes('user_session');
+        return k.startsWith('sar_oc_') && !k.includes('_' + CACHE_VERSION) && !k.includes('user_session');
       }).forEach(function(k){ localStorage.removeItem(k); });
       data._cachedAt = Date.now();
-      localStorage.setItem('sar_' + key + '_' + CACHE_VERSION, JSON.stringify(data));
+      localStorage.setItem('sar_oc_' + key + '_' + CACHE_VERSION, JSON.stringify(data));
     } catch(e2) { console.warn('lsSet quota exceeded for key:', key, 'size:', JSON.stringify(data).length); }
   }
 }
@@ -1214,13 +1214,13 @@ function lsSetDrill(key, data) {
       totalCost: data.totalCost, totalMetric: data.totalMetric,
       _cachedAt: Date.now(), _summaryOnly: true
     };
-    localStorage.setItem('sar_' + key + '_' + CACHE_VERSION, JSON.stringify(summary));
+    localStorage.setItem('sar_oc_' + key + '_' + CACHE_VERSION, JSON.stringify(summary));
   } catch(e) {}
 }
 
 function lsGetDrill(key, entity, metric, col) {
   try {
-    var raw = localStorage.getItem('sar_' + key + '_' + CACHE_VERSION);
+    var raw = localStorage.getItem('sar_oc_' + key + '_' + CACHE_VERSION);
     if (!raw) return null;
     var d = JSON.parse(raw);
     if (!d || !d.success) return null;
@@ -1516,7 +1516,7 @@ function prefetchAgentRanges() {
 // ── Tradelane Insights fetch ──────────────────────────────────────────────────
 // Clear stale tradelane cache synchronously before anything else
 var _tradelaneCache = {};
-(function(){ var v = 'ocean-v164'; if (localStorage.getItem('sar_tl_cache_ver') !== v) { Object.keys(localStorage).forEach(function(k){ if(k.startsWith('tradelane_')) localStorage.removeItem(k); }); localStorage.setItem('sar_tl_cache_ver', v); _tradelaneCache = {}; } })();
+(function(){ var v = 'ocean-v164'; if (localStorage.getItem('sar_oc_tl_cache_ver') !== v) { Object.keys(localStorage).forEach(function(k){ if(k.startsWith('tradelane_')) localStorage.removeItem(k); }); localStorage.setItem('sar_oc_tl_cache_ver', v); _tradelaneCache = {}; } })();
 var _tradelaneFetchTimer = null;
 var _tradelanePrefetchDone = false;
 
@@ -8561,7 +8561,7 @@ function loadMoreDrillRows(entity, metric, col, baseQs) {
 // ── Pendency Drill-through ────────────────────────────────────────────────────
 var _pendencyDrillCache = {};
 // Clear pendency drill cache on every deploy so stale 0-row results don't persist
-(function(){ try { var _pdc_ts = localStorage.getItem('_pdc_ts'); if(_pdc_ts !== DEPLOY_TS) { _pendencyDrillCache={}; localStorage.setItem('_pdc_ts', DEPLOY_TS); } } catch(e){} })(); // rep||month||status||lock → rows
+(function(){ try { var _pdc_ts = localStorage.getItem('sar_oc__pdc_ts'); if(_pdc_ts !== DEPLOY_TS) { _pendencyDrillCache={}; localStorage.setItem('sar_oc__pdc_ts', DEPLOY_TS); } } catch(e){} })(); // rep||month||status||lock → rows
 var allPendencyDrillRows = null; // loaded once with opData, filtered client-side
 var _pendencyDrillLoading = false; // prevents infinite render loop while fetching weekly drill rows
 
@@ -9163,7 +9163,7 @@ document.addEventListener('click', function(ev){
     // logout genuinely be one, guaranteeing identical clean state on every
     // sign-in attempt instead of us needing to individually account for
     // every piece of state that a fresh load would have reset for free.
-    try { localStorage.removeItem('sar_user_session'); } catch(e) {}
+    try { localStorage.removeItem('sar_oc_user_session'); } catch(e) {}
     try {
       sessionStorage.removeItem('sar_hub_widget_token');
       sessionStorage.removeItem('sar_hub_current_slug');
@@ -9194,7 +9194,7 @@ document.addEventListener('click', function(ev){
 
     // Clear ALL local caches before force-fetching fresh data
     try {
-      Object.keys(localStorage).filter(function(k){ return k.startsWith('sar_'); })
+      Object.keys(localStorage).filter(function(k){ return k.startsWith('sar_oc_'); })
         .forEach(function(k){ localStorage.removeItem(k); });
     } catch(e){}
     _weekDataFetched = false;
@@ -10346,7 +10346,7 @@ window.addEventListener('load', function() {
   // If we have a cached user session, skip Google OAuth entirely and render
   // the dashboard immediately — zero network calls before first paint.
   try {
-    var savedSession = localStorage.getItem('sar_user_session');
+    var savedSession = localStorage.getItem('sar_oc_user_session');
     if (savedSession) {
       var sess = JSON.parse(savedSession);
       // Session valid for 8 hours
@@ -10361,7 +10361,7 @@ window.addEventListener('load', function() {
         }, 100);
         return; // dashboard already showing — skip login screen flow
       } else {
-        localStorage.removeItem('sar_user_session'); // expired
+        localStorage.removeItem('sar_oc_user_session'); // expired
       }
     }
   } catch(e) {}
@@ -10439,7 +10439,7 @@ window.addEventListener('load', function() {
           var opToSave = Object.assign({}, d.op);
           delete opToSave.allDrillJobRows;
           lsSet('op', opToSave);
-          try { localStorage.removeItem(CACHE_VERSION+'_pendencyDrillRows'); localStorage.removeItem('pendencyDrillRows'); } catch(e){}
+          try { localStorage.removeItem(CACHE_VERSION+'_pendencyDrillRows'); localStorage.removeItem('sar_oc_pendencyDrillRows'); } catch(e){}
         }
       })
       .catch(function(){});
