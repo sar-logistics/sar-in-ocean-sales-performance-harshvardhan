@@ -442,9 +442,16 @@ async function _getRLSReps(db, currentUser) {
 
   if (role === "zonal manager") {
     if (!zone) return null;
+    // A Zonal Manager can hold several zones as a comma-separated list (same
+    // convention as region). A single zone whose own name contains a comma is
+    // kept intact when it exactly matches a known zone in the mapping sheet.
+    const _isKnownSingleZone = mappingRows.some(r => String(r["Zone"]||"").trim() === zone);
+    const zones = (zone.indexOf(",") === -1 || _isKnownSingleZone)
+      ? [zone]
+      : zone.split(",").map(s => s.trim()).filter(Boolean);
     const allowedReps = new Set();
     for (const row of mappingRows) {
-      if (String(row["Zone"]||"").trim() === zone) {
+      if (zones.indexOf(String(row["Zone"]||"").trim()) > -1) {
         const norm = normalizeName(row["Sales Rep Name"]);
         const dn   = normalizeName(row["Display Name"] || row["Sales Rep Name"]);
         if (norm) allowedReps.add(norm);
