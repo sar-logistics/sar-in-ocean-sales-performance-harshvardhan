@@ -2220,7 +2220,16 @@ function model(){
     var gpGrand   = sum(filteredRepsForModel.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0;}));}));
     var shipGrand = sum(filteredRepsForModel.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0;}));}));
     var tonsGrand = sum(filteredRepsForModel.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0;}));}));
-    var teusGrand = sum(filteredRepsForModel.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0;}));}));
+    // TEU must come from the SAME source as the table's Grand Total (grandEntity -> _aggSumGT over
+    // allDrillRows). The per-rep r.weekData[k].teu arrays only know about zone/rep, so the card
+    // ignored the LOB filter and drifted from the table (22,797 vs 21,881).
+    var teusGrand;
+    if (allDrillRows && allDrillRows.length > 0) {
+      buildZoneAggregates();
+      teusGrand = sum(wkeys.map(function(k){ return _aggSumGT(k, true, 'teu'); }));
+    } else {
+      teusGrand = sum(filteredRepsForModel.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0;}));}));
+    }
     var tgtGrand  = (_mRole === 'sales rep' || _frNorm)
       ? sum(filteredRepsForModel.map(function(r){ return r.weeklyTgt||r.tgt||0; }))
       : sum(realZones.map(function(z){ return z.weeklyTarget||0; }));
@@ -2262,7 +2271,16 @@ function model(){
     ? sum(filteredRepsForModel.map(function(r){ return (r.tgt||0) * idxs.length; }))
     : sum(realZones.map(function(z){ return (z.monthlyTarget||0) * idxs.length; }));
   var achGrand  = tgtGrand > 0 ? Math.round(gpGrand / tgtGrand * 100) : 0;
-  var teusGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return (r.teu&&r.teu[i])||0;}));}));
+  // Same source as the table's Grand Total (see weekly path above) — keeps the card in lock-step
+  // with every filter the table honours (LOB, zone, rep). Falls back to the per-rep arrays only
+  // while the job-level rows haven't loaded yet.
+  var teusGrand;
+  if (allDrillRows && allDrillRows.length > 0) {
+    buildZoneAggregates();
+    teusGrand = sum(idxs.map(function(i){ return _aggSumGT(months26[i], false, 'teu'); }));
+  } else {
+    teusGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return (r.teu&&r.teu[i])||0;}));}));
+  }
   var revGrand;
   if (allDrillRows&&allDrillRows.length>0) {
     revGrand = allDrillRows.filter(_kpiDrillFilter).reduce(function(s,r){return s+(r.r||0);},0);
@@ -3268,9 +3286,13 @@ function kpiRow(M){
   var shipData  = isWeeklyView
     ? wkeys.map(function(k){ if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;return allDrillRows.filter(function(r){return r._wk===k&&(!_fl||_fl.indexOf(r.lob)>-1);}).length;} return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0); })
     : idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+(r.ship[i]||0);},0); });
+  // Delta series for the TEU card — same filter-aware source as the value itself, otherwise the
+  // up/down arrow could contradict the (now corrected) number beside it.
+  var _teuFromAgg = !!(allDrillRows && allDrillRows.length > 0);
+  if (_teuFromAgg) buildZoneAggregates();
   var teuData   = isWeeklyView
-    ? wkeys.map(function(k){ return repsRaw.reduce(function(s,r){ return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0); },0); })
-    : idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0); });
+    ? wkeys.map(function(k){ return _teuFromAgg ? _aggSumGT(k, true, 'teu') : repsRaw.reduce(function(s,r){ return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0); },0); })
+    : idxs.map(function(i){ return _teuFromAgg ? _aggSumGT(months26[i], false, 'teu') : repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0); });
   var revData   = isWeeklyView
     ? wkeys.map(function(k){ return repsRaw.reduce(function(s,r){ return s+((r.weekData&&r.weekData[k]&&r.weekData[k].rev)||0); },0); })
     : idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+((r.rev&&r.rev[i])||0);},0); });
