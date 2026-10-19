@@ -677,11 +677,41 @@ var repsRaw  = [];         // filtered view — recomputed every render() based 
 // Sales Rep    → [their own name]
 // Zonal Manager → all reps in their zone (currentUser.zone must match r.zone)
 // Regional Manager / Admin / HR / null → [] (no restriction)
+// ─────────────────────────────────────────────────────────────────────────
+// Which name does the SALES DATA know this sales rep by?
+//
+// Rep data is tagged with the raw mapping-sheet name (e.g. an account is named
+// "Chittranjan Parihar | INZ06"), and sales-rep RLS compared the logged-in
+// ACCOUNT name to it by exact match. An account created by hand under a human
+// name ("Sini Thampy") never matched her mapping row ("Sini - Corporate
+// Sales"), so RLS filtered out EVERYTHING and she saw a blank dashboard.
+//
+// Resolve by email instead (the mapping sheet carries each rep's Email ID, the
+// same identity they log in with). Behaviour is unchanged whenever the account
+// name already matches a rep. The email is trusted ONLY if it identifies
+// exactly ONE person — a shared mailbox on several reps' rows must never widen
+// access, so that case falls back to the account name (fails closed).
+function _myRepName(){
+  if (!currentUser) return '';
+  var acct = (currentUser.name || '').trim();
+  var rows = (typeof repsRawOriginal !== 'undefined' ? repsRawOriginal : []).filter(function(r){ return !r.isBranch && r.name; });
+  var lc = acct.toLowerCase();
+  if (!acct || rows.some(function(r){ return r.name.toLowerCase() === lc; })) return acct;
+  var email = (currentUser.email || '').toLowerCase().trim();
+  if (!email) return acct;
+  var people = {};
+  rows.forEach(function(r){
+    if ((r.email || '').toLowerCase().trim() === email) people[normalizeName(r.name)] = r.name;
+  });
+  var keys = Object.keys(people);
+  return keys.length === 1 ? people[keys[0]] : acct;
+}
+
 function _getRLSReps() {
   if (!currentUser) return [];
   var role = (currentUser.role || '').toLowerCase().trim();
   if (role === 'sales rep') {
-    return [currentUser.name];
+    return [_myRepName()];
   }
   if (role === 'zonal manager') {
     var userZones = _userZones(currentUser);
@@ -832,8 +862,9 @@ function computeFilteredRepsRaw(){
   if (currentUser) {
     var role = (currentUser.role || '').toLowerCase().trim();
     if (role === 'sales rep') {
+      var _mineName = _myRepName().toLowerCase();
       base = base.filter(function(r){
-        return r.name && currentUser.name && r.name.toLowerCase() === currentUser.name.toLowerCase();
+        return r.name && _mineName && r.name.toLowerCase() === _mineName;
       });
     } else if (role === 'zonal manager') {
       var userZones = _userZones(currentUser);
@@ -8271,7 +8302,7 @@ function computeDrillResult(entity, metric, month){
   }
   // For RLS: use zoneToRawSPs on the user's zone — gives exact _sp values matching allDrillRows
   var _rlsZones = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'zonal manager') ? _userZones(currentUser) : [];
-  var _rlsName = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') ? normalizeName(currentUser.name||'') : '';
+  var _rlsName = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') ? normalizeName(_myRepName()) : '';
   if (_rlsZones.length > 0) {
     _spFilter = zoneToRawSPs(_rlsZones) || [];
   } else if (_rlsName) {
@@ -8705,7 +8736,7 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
   // Pre-build zone/rep/RLS SP filter for grand total
   var _pSpFilter = null;
   var _pRlsZones = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'zonal manager') ? _userZones(currentUser) : [];
-  var _pRlsName = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') ? normalizeName(currentUser.name||'') : '';
+  var _pRlsName = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') ? normalizeName(_myRepName()) : '';
   if (_pRlsZones.length > 0) {
     _pSpFilter = zoneToRawSPs(_pRlsZones);
   } else if (_pRlsName) {
