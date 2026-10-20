@@ -6663,7 +6663,9 @@ function tableRows(){
     var tgtArr  = dispTgt;
     var achArr  = dispAch;
 
-    function metric(label, indent, type, color, vals, fy, toggleType, repInfo){
+    function metric(label, indent, type, color, vals, fy, toggleType, repInfo, drillName){
+      // drillName (optional): full metric name sent to the drill-down / used as its title when the row's
+      // visible label is deliberately short (e.g. 'FL Done' under its 'Revenue' parent row).
       var isShip = toggleType === 'ship';
       var isGP   = toggleType === 'gp';
       var isRev  = toggleType === 'rev';
@@ -6697,7 +6699,7 @@ function tableRows(){
         labelWeight:indent?500:600, labelStyle:indent?'italic':'normal',
         caret:arrowChar, toggleType:toggleType||false, entityName: isZone ? e.zone : e.name,
         repInfo:repInfo||null, rowBg: groupBg, isZoneBlock: isZone, isGrandBlock: isGrand,
-        cells:buildCells(fy, vals, type, color, isZone ? e.zone : e.name, label, colLabels, noTarget, rawColKeys)
+        cells:buildCells(fy, vals, type, color, isZone ? e.zone : e.name, (drillName || label), colLabels, noTarget, rawColKeys)
       };
     }
 
@@ -6727,15 +6729,18 @@ function tableRows(){
 
     rows.push(metric('Revenue', 0, 'cur', '#2563EB', dispRev || dispGp.map(function(){return 0;}), sum(dispRev||[]), 'rev'));
     if (revOpen) {
-      rows.push(metric('Billed Revenue',      1, 'cur', '#1D5FCC', dispRevBilled || dispGp.map(function(){return 0;}), sum(dispRevBilled||[]), false));
-      rows.push(metric('Provisional Revenue', 1, 'cur', '#475569', dispRevProv   || dispGp.map(function(){return 0;}), sum(dispRevProv||[]),   false));
+      // Financial Lock split (same rule as the Detailed View columns). The visible label stays short - it sits
+      // directly under its 'Revenue' parent row and the metric column is only 140px wide - while the drill-down
+      // still gets the full name ('Revenue (FL Done)').
+      rows.push(metric('FL Done',     1, 'cur', '#1D5FCC', dispRevBilled || dispGp.map(function(){return 0;}), sum(dispRevBilled||[]), false, null, 'Revenue (FL Done)'));
+      rows.push(metric('FL Not Done', 1, 'cur', '#475569', dispRevProv   || dispGp.map(function(){return 0;}), sum(dispRevProv||[]),   false, null, 'Revenue (FL Not Done)'));
     }
 
     rows.push(metric('GP', 0, 'cur', '#059669', dispGp, sum(dispGp), 'gp'));
 
     if (gpOpen) {
-      rows.push(metric('Actual Profit',      1, 'cur', '#1D5FCC', dispGpActual, sum(dispGpActual), false));
-      rows.push(metric('Provisional Profit', 1, 'cur', '#10875A', dispGpProv,   sum(dispGpProv),   false));
+      rows.push(metric('FL Done',     1, 'cur', '#1D5FCC', dispGpActual, sum(dispGpActual), false, null, 'GP (FL Done)'));
+      rows.push(metric('FL Not Done', 1, 'cur', '#10875A', dispGpProv,   sum(dispGpProv),   false, null, 'GP (FL Not Done)'));
     }
 
     rows.push(metric('Target',        0, 'cur', '#0D2B5E', tgtArr,  sum(tgtArr), false));
