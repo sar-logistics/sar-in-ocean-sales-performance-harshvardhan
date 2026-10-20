@@ -7099,27 +7099,10 @@ function drawer(){
       { k:'shipmentNo', l:'Shipment No', t:'mono', color:'#2563EB', sticky:0,   width:130 },
       { k:'jobDate', l:'Job Date', t:'date', sticky:130, width:105 },
       { k:'lob', l:'LOB', t:'badge', sticky:235, width:105 },
-      { k:'masterNo', l:'Master No.', t:'text' },
-      { k:'houseNo', l:'House No.', t:'text' },
-      { k:'consolNo', l:'Consol No.', t:'text' },
-      { k:'cargoType', l:'Cargo Type', t:'text' },
-      { k:'carrier', l:'Carrier', t:'text', truncate:130 },
-      { k:'gp', l:'GP', t:'cur', signed:true, derived:function(s){ return s.g; } },
-      // Financial Lock rule (all LOBs): FL Done -> GP = Billed (C) - Posted Cost (G); FL Not Done ->
-      // MAX(C,A) - MAX(G,E). The server computes that once as s.g, so these two columns simply split s.g
-      // by lock status - the drill-down always reconciles with the grid.
-      { k:'gpOlDone', l:'Actual GP', t:'cur', signed:true, derived:function(s){
-          return String(s.financialLock||'').trim() !== '' ? s.g : null;
-        } },
-      { k:'gpOlNotDone', l:'Provisional GP', t:'cur', signed:true, derived:function(s){
-          return String(s.financialLock||'').trim() === '' ? s.g : null;
-        } },
-      { k:'firstOlStatus', l:'Lock Status', t:'olbadge', derived:function(s){
-          return String(s.financialLock||'').trim() !== '';
-        } },
-      // Revenue and Cost split by Financial Lock - the same rule the grid uses. s.r and s.x are the server's
-      // finMetrics revenue and cost: FL Done -> Billed (C) / Posted (G); FL Not Done -> MAX(C,A) / MAX(G,E).
-      // Each pair adds up to the job's revenue / cost, and Revenue - Cost inside a bucket equals that bucket's GP.
+      // Financial Lock split - Revenue, Cost and GP, FL Done then FL Not Done, straight after the three
+      // identifying columns. s.r / s.x / s.g are the server's finMetrics revenue, cost and GP (the same rule
+      // the grid uses): FL Done -> Billed (C) / Posted (G) / C-G; FL Not Done -> MAX(C,A) / MAX(G,E) / MAX(C,A)-MAX(G,E).
+      // Exactly one of each pair is filled per job; Revenue - Cost = GP inside each bucket.
       { k:'revFlDone',     l:'Revenue (FL Done)',     t:'cur', color:'#2563EB', derived:function(s){
           return String(s.financialLock||'').trim() !== '' ? s.r : null;
         } },
@@ -7131,6 +7114,21 @@ function drawer(){
         } },
       { k:'costFlNotDone', l:'Cost (FL Not Done)',    t:'cur', color:'#DC2626', derived:function(s){
           return String(s.financialLock||'').trim() === '' ? s.x : null;
+        } },
+      { k:'gpFlDone',      l:'GP (FL Done)',          t:'cur', signed:true, derived:function(s){
+          return String(s.financialLock||'').trim() !== '' ? s.g : null;
+        } },
+      { k:'gpFlNotDone',   l:'GP (FL Not Done)',      t:'cur', signed:true, derived:function(s){
+          return String(s.financialLock||'').trim() === '' ? s.g : null;
+        } },
+      { k:'masterNo', l:'Master No.', t:'text' },
+      { k:'houseNo', l:'House No.', t:'text' },
+      { k:'consolNo', l:'Consol No.', t:'text' },
+      { k:'cargoType', l:'Cargo Type', t:'text' },
+      { k:'carrier', l:'Carrier', t:'text', truncate:130 },
+      { k:'gp', l:'GP', t:'cur', signed:true, derived:function(s){ return s.g; } },
+      { k:'firstOlStatus', l:'Lock Status', t:'olbadge', derived:function(s){
+          return String(s.financialLock||'').trim() !== '';
         } },
       { k:'provRevenue', l:'Provisional Revenue (A)', t:'cur' },
       { k:'billedRevenue', l:'Billed Revenue (C)', t:'cur', color:'#2563EB' },
@@ -7345,8 +7343,8 @@ function drawer(){
           }
         });
       });
-      colSums['gpOlDone']    = dActualGpSum;
-      colSums['gpOlNotDone'] = dProvGpSum;
+      colSums['gpFlDone']    = dActualGpSum;
+      colSums['gpFlNotDone'] = dProvGpSum;
 
       window._drillColSums = JSON.parse(JSON.stringify(colSums));
       window._drillActiveDrillCols = _activeDrillCols;
