@@ -188,7 +188,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v164';
+var CACHE_VERSION = 'ocean-v165';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region.
@@ -7105,16 +7105,17 @@ function drawer(){
       { k:'cargoType', l:'Cargo Type', t:'text' },
       { k:'carrier', l:'Carrier', t:'text', truncate:130 },
       { k:'gp', l:'GP', t:'cur', signed:true, derived:function(s){ return s.g; } },
+      // Financial Lock rule (all LOBs): FL Done -> GP = Billed (C) - Posted Cost (G); FL Not Done ->
+      // MAX(C,A) - MAX(G,E). The server computes that once as s.g, so these two columns simply split s.g
+      // by lock status - the drill-down always reconciles with the grid.
       { k:'gpOlDone', l:'Actual GP', t:'cur', signed:true, derived:function(s){
-          var locked = (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.operationLock;
-          return locked ? s.actualProfit : null;
+          return String(s.financialLock||'').trim() !== '' ? s.g : null;
         } },
       { k:'gpOlNotDone', l:'Provisional GP', t:'cur', signed:true, derived:function(s){
-          var locked = (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.operationLock;
-          return !locked ? s.provisionalProfit : null;
+          return String(s.financialLock||'').trim() === '' ? s.g : null;
         } },
       { k:'firstOlStatus', l:'Lock Status', t:'olbadge', derived:function(s){
-          return (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.jobRevRecogDate;
+          return String(s.financialLock||'').trim() !== '';
         } },
       { k:'provRevenue', l:'Provisional Revenue (A)', t:'cur' },
       { k:'billedRevenue', l:'Billed Revenue (C)', t:'cur', color:'#2563EB' },
@@ -7318,9 +7319,9 @@ function drawer(){
       colSums = {};
       var dActualGpSum = 0, dProvGpSum = 0;
       visibleRows.forEach(function(r){
-        var _locked = (r.lob==='AIR EXPORT'||r.lob==='AIR IMPORT') ? !!r.financialLock : !!r.operationLock;
-        if (_locked) dActualGpSum += (r.actualProfit || 0);
-        else dProvGpSum += (r.provisionalProfit || 0);
+        var _locked = String(r.financialLock||'').trim() !== '';   // Financial Lock rule, all LOBs
+        if (_locked) dActualGpSum += (r.g || 0);
+        else dProvGpSum += (r.g || 0);
         _activeDrillCols.forEach(function(c){
           if (c.t !== 'cur' && c.t !== 'num') return;
           var v = c.derived ? c.derived(r) : r[c.k];

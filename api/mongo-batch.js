@@ -259,23 +259,29 @@ function calculateAirTons(job, cls) {
   return rawWeight / 1000;
 }
 
-// Pick the correct GP field based on lock status
-// Air (Import/Export): if "Financial Lock" is empty → Provisional; else Actual
-// All others:          if "Operation Lock" is empty → Provisional; else Actual
-function pickGP(job, cls) {
-  const isAir = cls.kind === "AIR";
-  // Air: Financial Lock; Sea/ISO Tank: Job Rev Recognition Date (Ocean OL)
-  let isLocked;
-  if (isAir) {
-    const fl = job["Financial Lock"];
-    isLocked = fl !== undefined && fl !== null && String(fl).trim() !== "";
-  } else {
-    const rl = job["Job Rev Recognition Date"];
-    isLocked = rl !== undefined && rl !== null && String(rl).trim() !== "";
-  }
-  const actual      = parseFloat(job["Actual Profit (J=C-G)"]     || 0) || 0;
-  const provisional = parseFloat(job["Provisional Profit (I=A-E)"] || 0) || 0;
-  return { gp: isLocked ? actual : provisional, isProvisional: !isLocked };
+// ── FINANCIAL-LOCK REVENUE / COST / GP RULE — the single source of truth, applies to ALL LOBs ──
+// "FL Done" = the job's Financial Lock column is not blank. Job Rev Recognition Date plays NO role.
+//   FL Done:     Revenue = Billed Revenue (C)                 Cost = Posted Cost (G)
+//                GP = Billed Revenue (C) - Posted Cost (G)
+//   FL Not Done: Revenue = MAX(Billed Revenue C, Prov. Rev A)  Cost = MAX(Posted Cost G, Prov. Cost E)
+//                GP = MAX(C, A) - MAX(G, E)
+// Both buckets add up to the total Revenue / GP. Cost is computed (it drives GP) but is not displayed.
+function finMetrics(job) {
+  const num = v => parseFloat(v || 0) || 0;
+  const fl = job["Financial Lock"];
+  const flDone = fl !== undefined && fl !== null && String(fl).trim() !== "";
+  const billedRev = num(job["Billed Revenue (C)"]);
+  const provRev   = num(job["Provisional Revenue (A)"]);
+  const provCost  = num(job["Provisional Cost (E)"]);
+  // Posted Cost (G): when the cell is blank, derive it as C - J (Actual Profit) - the same fallback the
+  // drill rows have always used - so a job with no G column keeps GP = Actual Profit instead of GP = C.
+  const g = job["Posted Cost (G)"];
+  const postedCost = (g !== undefined && g !== null && String(g).trim() !== "")
+    ? num(g)
+    : (billedRev - num(job["Actual Profit (J=C-G)"]));
+  const revenue = flDone ? billedRev : Math.max(billedRev, provRev);
+  const cost    = flDone ? postedCost : Math.max(postedCost, provCost);
+  return { flDone, isProvisional: !flDone, revenue, cost, gp: revenue - cost, billedRev, provRev, postedCost, provCost };
 }
 
 // TEU and LCL(CBM) metrics are calculated only for SEA and ISOTANK rows
@@ -475,7 +481,7 @@ async function _getRLSReps(db, currentUser) {
   return selfSet;
 }
 
-const DEPLOY_TS = "2026-08-21T-ocean-v201-fix-tons-teu-lcl-premature-rounding-1787647718";
+const DEPLOY_TS = "2026-10-20T-ocean-v202-financial-lock-revenue-cost-gp-rule";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -636,7 +642,9 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         let _zone = _meta ? _meta.zone : null;
         let _dn   = _meta ? _meta.displayName : null;
 
-        const { gp: rowGP, isProvisional } = pickGP(job, cls);
+        const _fm = finMetrics(job);
+        const rowGP = _fm.gp;
+        const isProvisional = _fm.isProvisional;
         const billedRevenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
         const provRevenue   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
         const provCost      = parseFloat(job["Provisional Cost (E)"] || 0) || 0;
@@ -719,7 +727,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           volumeUnit:   job["Volume Unit"]         || "",
           operationLock: job["Operation Lock"]     || "",
           financialLock: job["Financial Lock"]     || "",
-          g: rowGP, r: isProvisional ? provRevenue : billedRevenue, x: postedCost, // FIXED: was checking Job Rev Recognition Date directly regardless of LOB, causing Air rows Revenue to be inconsistent with their own GP lock status
+          g: rowGP, r: _fm.revenue, x: _fm.cost, // Financial-Lock rule (finMetrics): GP, revenue and cost all come from one function. x (cost) drives GP but is not displayed anywhere.
           t: parseFloat(job["Container TEU"] || 0) || 0,
           chargeableWeight,
           chargeableWeightUnit,
@@ -969,8 +977,9 @@ async function computeSalesAggregate(db) {
   const allJobResults = await Promise.all(JOB_COLLECTIONS.map(cn =>
     db.collection(cn).find({}, { projection: {
       "Sales Person":1, "Job Date":1, "LOB":1, "Location":1, "Customer":1,
-      "Actual Profit (J=C-G)":1, "Provisional Profit (I=A-E)":1, "Job Rev Recognition Date":1,
-      "Billed Revenue (C)":1, "Provisional Revenue (A)":1, "Job Rev Recognition Date":1,
+      "Actual Profit (J=C-G)":1, "Provisional Profit (I=A-E)":1,
+      "Billed Revenue (C)":1, "Provisional Revenue (A)":1,
+      "Posted Cost (G)":1, "Provisional Cost (E)":1,
       "Financial Lock":1, "Operation Lock":1,
       "ETD Loading Port":1, "ETD First Leg of Origin":1, "ETA Discharge":1, "ETA Last Leg of Destination":1,
       "Chargeable Weight":1, "Chargeable Weight Unit":1,
@@ -1010,19 +1019,17 @@ async function computeSalesAggregate(db) {
                           : null;
       const mapped = (_mappedRaw && _mappedRaw.zone && _mappedRaw.zone !== 'Unassigned') ? _mappedRaw : (_mappedBetter || _mappedRaw);
 
-      const { gp, isProvisional } = pickGP(job, cls);
+      const _fm = finMetrics(job);
+      const gp = _fm.gp;
+      const isProvisional = _fm.isProvisional;
       const gpProv   = isProvisional ? gp : 0;
       const gpActual = isProvisional ? 0 : gp;
-      // Revenue: use Billed Revenue if locked, else Provisional Revenue
+      // Revenue / cost / GP all come from finMetrics() (Financial-Lock rule, every LOB) - see its definition.
       const billedRev = parseFloat(job["Billed Revenue (C)"]      || 0) || 0;
       const provRev   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
-      // Revenue: use the SAME lock status as GP (isProvisional from pickGP) —
-      // FIXED: was re-checking Job Rev Recognition Date directly regardless of
-      // LOB, so Air rows Revenue could disagree with their own GP lock status
-      // (Air should key off Financial Lock, not Job Rev Recognition Date).
-      const rev = isProvisional ? provRev : billedRev;
-      const revBilledAmt = isProvisional ? 0 : billedRev;
-      const revProvAmt   = isProvisional ? provRev : 0;
+      const rev = _fm.revenue; // FL Done: Billed (C); FL Not Done: MAX(Billed C, Prov. A)
+      const revBilledAmt = isProvisional ? 0 : rev;
+      const revProvAmt   = isProvisional ? rev : 0;
 
       // Tons — only for AIR rows, Chargeable Weight (kg) ÷ 1000
       let tons = 0;
@@ -1416,11 +1423,11 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
     "Customer": 1, "Billed Revenue (C)": 1,
     "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
     "Sales Person": 1,
-    "Financial Lock": 1, "Operation Lock": 1, "Job Rev Recognition Date": 1, "Provisional Revenue (A)": 1,
+    "Financial Lock": 1, "Operation Lock": 1, "Provisional Revenue (A)": 1, "Posted Cost (G)": 1, "Provisional Cost (E)": 1,
     "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1, "Volume": 1, "Volume Unit": 1, "Cargo Type": 1,
     "ETD Loading Port": 1, "ETD First Leg of Origin": 1, "ETA Discharge": 1, "ETA Last Leg of Destination": 1, "Job Date": 1,
-    "Job Rev Recognition Date": 1, "Provisional Revenue (A)": 1,
+    
   };
 
   await Promise.all(ALL_COLLS.map(async (collName) => {
@@ -1452,15 +1459,11 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
 
       const customer = String(job["Customer"] || "").trim();
       if (!customer) continue;
-      // FIXED: revenue lock now uses the SAME isProvisional as GP (pickGP
-      // correctly handles Air=Financial Lock vs Sea/ISOTank=Job Rev
-      // Recognition Date) — was previously hardcoded to Job Rev Recognition
-      // Date regardless of LOB, causing Air rows' revenue to disagree with
-      // their own GP lock status.
-      const { gp, isProvisional } = pickGP(job, cls);
-      const revenue = isProvisional
-        ? (parseFloat(job["Provisional Revenue (A)"] || 0) || 0)
-        : (parseFloat(job["Billed Revenue (C)"] || 0) || 0);
+      // Revenue and GP both come from finMetrics() (Financial-Lock rule), so they always agree.
+      const _fm = finMetrics(job);
+      const gp = _fm.gp;
+      const isProvisional = _fm.isProvisional;
+      const revenue = _fm.revenue;
 
       // Tons for Air only
       let tons = 0;
@@ -2117,7 +2120,7 @@ async function computeTradelaneAggregate(db) {
   const projection = {
     "Shipment No": 1, "Billed Revenue (C)": 1,
     "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
-    "Financial Lock": 1, "Operation Lock": 1, "Job Rev Recognition Date": 1, "Provisional Revenue (A)": 1,
+    "Financial Lock": 1, "Operation Lock": 1, "Provisional Revenue (A)": 1, "Posted Cost (G)": 1, "Provisional Cost (E)": 1,
     "Sales Person": 1, "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1, "Volume": 1, "Volume Unit": 1, "Cargo Type": 1,
     "ETD Loading Port": 1, "ETD First Leg of Origin": 1, "ETA Discharge": 1, "ETA Last Leg of Destination": 1, "Job Date": 1,
@@ -2166,8 +2169,9 @@ async function computeTradelaneAggregate(db) {
       }
       if (!tradelane) continue;
 
-      const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
-      const { gp } = pickGP(job, cls);
+      const _fm = finMetrics(job);
+      const revenue = _fm.revenue;
+      const gp = _fm.gp;
 
       let tons = 0;
       if (isAir) {
@@ -2349,12 +2353,12 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
     "Destination Agent": 1, "Origin Agent": 1,
     "Billed Revenue (C)": 1,
     "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
-    "Financial Lock": 1, "Operation Lock": 1, "Job Rev Recognition Date": 1, "Provisional Revenue (A)": 1,
+    "Financial Lock": 1, "Operation Lock": 1, "Provisional Revenue (A)": 1, "Posted Cost (G)": 1, "Provisional Cost (E)": 1,
     "Sales Person": 1,
     "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1, "Cargo Type": 1,
     "ETD Loading Port": 1, "ETD First Leg of Origin": 1, "ETA Discharge": 1, "ETA Last Leg of Destination": 1, "Job Date": 1,
-    "Job Rev Recognition Date": 1, "Provisional Revenue (A)": 1,
+    
   };
 
   await Promise.all(ALL_COLLS.map(async (collName) => {
@@ -2395,8 +2399,9 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
         : String(job["Origin Agent"] || "").trim();
       if (!agentRaw) continue;
 
-      const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
-      const { gp } = pickGP(job, cls);
+      const _fm = finMetrics(job);
+      const revenue = _fm.revenue;
+      const gp = _fm.gp;
 
       let tons = 0;
       if (isAir) {
@@ -3511,11 +3516,11 @@ module.exports = async function handler(req, res) {
         if (!activeMonthSet.has(ml)) continue;
         job._primaryDate = dObj;
       }
-      const { gp } = pickGP(job, cls);
-      const _isLocked = !!(String(job["Job Rev Recognition Date"] || "").trim());
-      const provRev = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
-      const billRev = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
-      const rev = _isLocked ? billRev : provRev;
+      const _fm = finMetrics(job);
+      const gp = _fm.gp;
+      const provRev = _fm.provRev;
+      const billRev = _fm.billedRev;
+      const rev = _fm.revenue;
       const provCost = parseFloat(job["Provisional Cost (E)"] || 0) || 0;
       const postCost = parseFloat(job["Posted Cost (G)"] || 0) || 0;
       const srr = srrEntry || {};
