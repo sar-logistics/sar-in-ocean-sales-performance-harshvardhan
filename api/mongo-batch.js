@@ -3543,7 +3543,7 @@ module.exports = async function handler(req, res) {
         provRevenue: provRev, billedRevenue: billRev, unbilledRevenue: provRev-billRev,
         provCost, postedCost: postCost, unpostedCost: provCost-postCost,
         provisionalProfit: provRev-provCost, actualProfit: billRev-postCost,
-        g: gp, r: rev, gp, revenue: rev,
+        g: gp, r: rev, x: _fm.cost, gp, revenue: rev,
         salesPerson: job["Sales Person"]||"", jobOwner: job["Job Owner"]||"",
         location: job["Location"]||"", operationLock: job["Operation Lock"]||"",
         financialLock: job["Financial Lock"]||"",

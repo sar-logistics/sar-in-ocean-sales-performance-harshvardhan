@@ -7117,6 +7117,21 @@ function drawer(){
       { k:'firstOlStatus', l:'Lock Status', t:'olbadge', derived:function(s){
           return String(s.financialLock||'').trim() !== '';
         } },
+      // Revenue and Cost split by Financial Lock - the same rule the grid uses. s.r and s.x are the server's
+      // finMetrics revenue and cost: FL Done -> Billed (C) / Posted (G); FL Not Done -> MAX(C,A) / MAX(G,E).
+      // Each pair adds up to the job's revenue / cost, and Revenue - Cost inside a bucket equals that bucket's GP.
+      { k:'revFlDone',     l:'Revenue (FL Done)',     t:'cur', color:'#2563EB', derived:function(s){
+          return String(s.financialLock||'').trim() !== '' ? s.r : null;
+        } },
+      { k:'revFlNotDone',  l:'Revenue (FL Not Done)', t:'cur', color:'#2563EB', derived:function(s){
+          return String(s.financialLock||'').trim() === '' ? s.r : null;
+        } },
+      { k:'costFlDone',    l:'Cost (FL Done)',        t:'cur', color:'#DC2626', derived:function(s){
+          return String(s.financialLock||'').trim() !== '' ? s.x : null;
+        } },
+      { k:'costFlNotDone', l:'Cost (FL Not Done)',    t:'cur', color:'#DC2626', derived:function(s){
+          return String(s.financialLock||'').trim() === '' ? s.x : null;
+        } },
       { k:'provRevenue', l:'Provisional Revenue (A)', t:'cur' },
       { k:'billedRevenue', l:'Billed Revenue (C)', t:'cur', color:'#2563EB' },
       { k:'unbilledRevenue', l:'Unbilled Revenue (D=A-C)', t:'cur' },
