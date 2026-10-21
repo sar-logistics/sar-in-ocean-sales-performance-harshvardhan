@@ -2275,8 +2275,23 @@ function model(){
     shipGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return r.ship[i]||0;}));}));
   }
   var tonsGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return (r.tons&&r.tons[i])||0;}));}));
+  // A rep's target is prorated per month by the days they were actually employed (joining / exit date) - exactly what
+  // the grid row does in dispTgt. The card used a FLAT monthly target x number of months, so for any rep who joined or
+  // left inside the selected range (e.g. joined in Aug, range Apr-Oct) the GP TARGET and ACHIEVEMENT cards disagreed
+  // with that rep's own row. Reps with no joining/exit date are unchanged (monthly target x months).
+  function _repTargetForMonths(r){
+    var base = r.tgt || 0;
+    if (!(r.joinDate || r.exitDate)) return base * idxs.length;
+    return sum(idxs.map(function(i){
+      var b = monthBounds(months26[i]);
+      var active = activeDaysInRange(b[0], b[1], r.joinDate || null, r.exitDate || null);
+      if (active <= 0) return 0;
+      var total = Math.round((new Date(b[1]) - new Date(b[0])) / 86400000) + 1;
+      return active < total ? Math.round(base * active / total) : base;
+    }));
+  }
   var tgtGrand  = (_mRole === 'sales rep' || _frNorm)
-    ? sum(filteredRepsForModel.map(function(r){ return (r.tgt||0) * idxs.length; }))
+    ? sum(filteredRepsForModel.map(_repTargetForMonths))
     : sum(realZones.map(function(z){ return (z.monthlyTarget||0) * idxs.length; }));
   var achGrand  = tgtGrand > 0 ? Math.round(gpGrand / tgtGrand * 100) : 0;
   // Same source as the table's Grand Total (see weekly path above) — keeps the card in lock-step
