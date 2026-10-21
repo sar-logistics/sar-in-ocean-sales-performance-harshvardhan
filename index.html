@@ -188,7 +188,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v165';
+var CACHE_VERSION = 'ocean-v166';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region.
@@ -8168,6 +8168,9 @@ function dedupDrillRows(rows) {
   if (!rows || !rows.length) return rows;
   var seen = {};
   var deduped = rows.filter(function(r){
+    // No shipment number (the server writes an em dash as the placeholder) -> cannot be recognised as a duplicate, so never
+    // collapse such rows (the same guard the server's job de-duplication uses, so the grid and the cards stay in step)
+    if (!r.shipmentNo || r.shipmentNo === '\u2014' || r.shipmentNo === '?') return true;
     var key = r.shipmentNo + '|' + (r._cl||'') + '|' + (r._sp||'');
     if (seen[key]) return false;
     seen[key] = true;
