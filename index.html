@@ -6687,6 +6687,11 @@ function tableRows(){
     var lcl     = dispLcl;
     var tgtArr  = dispTgt;
     var achArr  = dispAch;
+    // The FY / Grand Total achievement - and the row header's badge, bar and colour - must be measured against the SAME target
+    // the Target row's total shows: the sum of the per-month targets, prorated by joining / exit date for a rep. It used to be
+    // computed further up from a FLAT monthly target x number of columns, so for a rep who joined (or left) inside the range
+    // the row said e.g. "Target 300" while its Achievement % was measured against 700. The monthly cells already used dispTgt.
+    achFy = sum(tgtArr) > 0 ? Math.round(sum(dispGp) / sum(tgtArr) * 100) : 0;
 
     function metric(label, indent, type, color, vals, fy, toggleType, repInfo, drillName){
       // drillName (optional): full metric name sent to the drill-down / used as its title when the row's
@@ -6735,7 +6740,7 @@ function tableRows(){
     var repInfo = {
       name: e.name, initials: e.initials, avatarBg: avatarBg,
       nameWeight: nameWeight, groupBg: groupBg,
-      achFmt: e.tgt>0 ? achFy+'%' : '—',
+      achFmt: sum(tgtArr) > 0 ? achFy+'%' : '—',
       barWidth: Math.min(100,achFy)+'%',
       barColor: barColor, achColor: achColor,
       isZone: isZone, isGrand: isGrand, isBranch: !!e.isBranch,
