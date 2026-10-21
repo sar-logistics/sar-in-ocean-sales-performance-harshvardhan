@@ -775,7 +775,14 @@ var _zoneAggRowsRef = null; // tracks the allDrillRows ARRAY ITSELF, not just it
 function buildZoneAggregates(){
   var _flA = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
   var _frA = state.filterReps && state.filterReps.length > 0 ? state.filterReps.map(function(x){ return normalizeName(x); }) : null;
-  var key = JSON.stringify(_flA) + '|' + JSON.stringify(_frA) + '|' + (allDrillRows ? allDrillRows.length : 0);
+  // RLS: the SAME restriction the KPI cards apply (_getRLSReps -> _rls_kpi in model()). This aggregate used to
+  // honour only the LOB and rep filters, so for a sales rep everything read from it (the TEU card, and the Grand
+  // Total / zone rows) covered EVERY rep's jobs. Admin gets [] -> no restriction -> unchanged.
+  var _rlsA = _getRLSReps().map(function(n){ return normalizeName(n); });
+  var _rlsK = _rlsA.length > 0 ? _rlsA : null;
+  // the user is part of the cache key: switching user (e.g. impersonating in the console) must never reuse the
+  // previous user's totals
+  var key = JSON.stringify(_flA) + '|' + JSON.stringify(_frA) + '|' + JSON.stringify(_rlsK) + '|' + (allDrillRows ? allDrillRows.length : 0);
   // Row COUNT alone is not enough to detect a real data change — a zone
   // rename (or any edit that changes content without changing row count,
   // e.g. INZ17 renamed to INZ16 for the same jobs) would keep the same
@@ -795,6 +802,7 @@ function buildZoneAggregates(){
       var r = allDrillRows[i];
       if (_flA && _flA.indexOf(r.lob) === -1) continue;
       if (_frA && (!r._sp || _frA.indexOf(r._sp) === -1)) continue;
+      if (_rlsK && _rlsK.indexOf(r._sp) === -1 && _rlsK.indexOf(normalizeName(r._sp)) === -1) continue;   // same test as model()'s _kpiDrillFilter
 
       var zk = r._zone || '__CROSS__';
       var isLcl = (r.cargoType||'').toUpperCase().trim() === 'LCL';
