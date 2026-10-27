@@ -15,6 +15,7 @@
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@500;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@500;700&display=swap"></noscript>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   /* Sidebar is always visible — fixed width, no collapse/toggle */
   .insight-bar-row { transition: background 0.15s; border-radius: 6px; }
@@ -187,7 +188,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v164';
+var CACHE_VERSION = 'ocean-v166';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region.
@@ -479,8 +480,10 @@ function _showDashboardBody() {
   if (currentUser) {
     var _role0 = (currentUser.role||'').toLowerCase().trim();
     if ((_role0==='sales rep'||_role0==='zonal manager') && currentUser.zone) {
-      state.zoneOpen[currentUser.zone] = true;
-      state.pendencyZoneOpen[currentUser.zone] = true;
+      (_role0==='zonal manager' ? _userZones(currentUser) : [currentUser.zone]).forEach(function(_z){
+        state.zoneOpen[_z] = true;
+        state.pendencyZoneOpen[_z] = true;
+      });
     }
     var ini = currentUser.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
     var roleLabel = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
@@ -674,19 +677,49 @@ var repsRaw  = [];         // filtered view — recomputed every render() based 
 // Sales Rep    → [their own name]
 // Zonal Manager → all reps in their zone (currentUser.zone must match r.zone)
 // Regional Manager / Admin / HR / null → [] (no restriction)
+// ─────────────────────────────────────────────────────────────────────────
+// Which name does the SALES DATA know this sales rep by?
+//
+// Rep data is tagged with the raw mapping-sheet name (e.g. an account is named
+// "Chittranjan Parihar | INZ06"), and sales-rep RLS compared the logged-in
+// ACCOUNT name to it by exact match. An account created by hand under a human
+// name ("Sini Thampy") never matched her mapping row ("Sini - Corporate
+// Sales"), so RLS filtered out EVERYTHING and she saw a blank dashboard.
+//
+// Resolve by email instead (the mapping sheet carries each rep's Email ID, the
+// same identity they log in with). Behaviour is unchanged whenever the account
+// name already matches a rep. The email is trusted ONLY if it identifies
+// exactly ONE person — a shared mailbox on several reps' rows must never widen
+// access, so that case falls back to the account name (fails closed).
+function _myRepName(){
+  if (!currentUser) return '';
+  var acct = (currentUser.name || '').trim();
+  var rows = (typeof repsRawOriginal !== 'undefined' ? repsRawOriginal : []).filter(function(r){ return !r.isBranch && r.name; });
+  var lc = acct.toLowerCase();
+  if (!acct || rows.some(function(r){ return r.name.toLowerCase() === lc; })) return acct;
+  var email = (currentUser.email || '').toLowerCase().trim();
+  if (!email) return acct;
+  var people = {};
+  rows.forEach(function(r){
+    if ((r.email || '').toLowerCase().trim() === email) people[normalizeName(r.name)] = r.name;
+  });
+  var keys = Object.keys(people);
+  return keys.length === 1 ? people[keys[0]] : acct;
+}
+
 function _getRLSReps() {
   if (!currentUser) return [];
   var role = (currentUser.role || '').toLowerCase().trim();
   if (role === 'sales rep') {
-    return [currentUser.name];
+    return [_myRepName()];
   }
   if (role === 'zonal manager') {
-    var userZone = (currentUser.zone || '').trim();
-    if (!userZone) return [];
-    var zoneSPs = zoneToRawSPs([userZone]);
+    var userZones = _userZones(currentUser);
+    if (userZones.length === 0) return [];
+    var zoneSPs = zoneToRawSPs(userZones);
     if (zoneSPs && zoneSPs.length > 0) return zoneSPs;
     return repsRawOriginal
-      .filter(function(r){ return !r.isBranch && r.zone === userZone; })
+      .filter(function(r){ return !r.isBranch && userZones.indexOf(r.zone) > -1; })
       .map(function(r){ return r.name; });
   }
   if (role === 'regional manager') {
@@ -742,7 +775,14 @@ var _zoneAggRowsRef = null; // tracks the allDrillRows ARRAY ITSELF, not just it
 function buildZoneAggregates(){
   var _flA = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
   var _frA = state.filterReps && state.filterReps.length > 0 ? state.filterReps.map(function(x){ return normalizeName(x); }) : null;
-  var key = JSON.stringify(_flA) + '|' + JSON.stringify(_frA) + '|' + (allDrillRows ? allDrillRows.length : 0);
+  // RLS: the SAME restriction the KPI cards apply (_getRLSReps -> _rls_kpi in model()). This aggregate used to
+  // honour only the LOB and rep filters, so for a sales rep everything read from it (the TEU card, and the Grand
+  // Total / zone rows) covered EVERY rep's jobs. Admin gets [] -> no restriction -> unchanged.
+  var _rlsA = _getRLSReps().map(function(n){ return normalizeName(n); });
+  var _rlsK = _rlsA.length > 0 ? _rlsA : null;
+  // the user is part of the cache key: switching user (e.g. impersonating in the console) must never reuse the
+  // previous user's totals
+  var key = JSON.stringify(_flA) + '|' + JSON.stringify(_frA) + '|' + JSON.stringify(_rlsK) + '|' + (allDrillRows ? allDrillRows.length : 0);
   // Row COUNT alone is not enough to detect a real data change — a zone
   // rename (or any edit that changes content without changing row count,
   // e.g. INZ17 renamed to INZ16 for the same jobs) would keep the same
@@ -762,6 +802,7 @@ function buildZoneAggregates(){
       var r = allDrillRows[i];
       if (_flA && _flA.indexOf(r.lob) === -1) continue;
       if (_frA && (!r._sp || _frA.indexOf(r._sp) === -1)) continue;
+      if (_rlsK && _rlsK.indexOf(r._sp) === -1 && _rlsK.indexOf(normalizeName(r._sp)) === -1) continue;   // same test as model()'s _kpiDrillFilter
 
       var zk = r._zone || '__CROSS__';
       var isLcl = (r.cargoType||'').toUpperCase().trim() === 'LCL';
@@ -829,13 +870,14 @@ function computeFilteredRepsRaw(){
   if (currentUser) {
     var role = (currentUser.role || '').toLowerCase().trim();
     if (role === 'sales rep') {
+      var _mineName = _myRepName().toLowerCase();
       base = base.filter(function(r){
-        return r.name && currentUser.name && r.name.toLowerCase() === currentUser.name.toLowerCase();
+        return r.name && _mineName && r.name.toLowerCase() === _mineName;
       });
     } else if (role === 'zonal manager') {
-      var userZone = (currentUser.zone || '').trim();
-      if (userZone) {
-        base = base.filter(function(r){ return r.zone === userZone; });
+      var userZones = _userZones(currentUser);
+      if (userZones.length > 0) {
+        base = base.filter(function(r){ return userZones.indexOf(r.zone) > -1; });
       }
     } else if (role === 'regional manager') {
       // Supports multiple regions (comma-separated), matching _getRLSReps().
@@ -1537,9 +1579,10 @@ function getTradelaneCacheKey() { var r = getTradelaneDateRange(); return (r.dat
 // (fixed today) so this produces the exact same numbers as the server, with
 // zero network latency.
 function _tlEffectiveRevenue(r) {
-  var isAir = r.lob === 'AIR EXPORT' || r.lob === 'AIR IMPORT';
-  var locked = isAir ? !!r.financialLock : !!r.operationLock;
-  return locked ? (r.billedRevenue || r.r || 0) : (r.provRevenue || r.r || 0);
+  // Revenue follows the Financial-Lock rule, computed ONCE on the server (finMetrics): FL Done -> Billed (C);
+  // FL Not Done -> MAX(Billed C, Prov. A). r.r is exactly that, so this page agrees with the grid and its own GP.
+  // This used to re-derive it here with the OLD rule (Operation Lock for non-Air LOBs, Provisional instead of the MAX).
+  return r.r || 0;
 }
 function computeTradelaneAggregateFromDrillRows(dateFrom, dateTo) {
   if (!allDrillRows || !allDrillRows.length) return null;
@@ -2170,7 +2213,7 @@ function model(){
   });
   var realZones = zonesRaw.filter(function(z){
     if (z.zone === 'Cross Sales') return false;
-    if (_mRole === 'zonal manager') return z.zone === (currentUser.zone || '');
+    if (_mRole === 'zonal manager') return _userZones(currentUser).indexOf(z.zone) > -1;
   if (_mRole === 'regional manager') {
     var _rmRegion = (currentUser.region||'').trim().toLowerCase();
     if (_rmRegion && window._zoneRegionMap) {
@@ -2186,7 +2229,16 @@ function model(){
     var gpGrand   = sum(filteredRepsForModel.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0;}));}));
     var shipGrand = sum(filteredRepsForModel.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0;}));}));
     var tonsGrand = sum(filteredRepsForModel.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0;}));}));
-    var teusGrand = sum(filteredRepsForModel.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0;}));}));
+    // TEU must come from the SAME source as the table's Grand Total (grandEntity -> _aggSumGT over
+    // allDrillRows). The per-rep r.weekData[k].teu arrays only know about zone/rep, so the card
+    // ignored the LOB filter and drifted from the table (22,797 vs 21,881).
+    var teusGrand;
+    if (allDrillRows && allDrillRows.length > 0) {
+      buildZoneAggregates();
+      teusGrand = sum(wkeys.map(function(k){ return _aggSumGT(k, true, 'teu'); }));
+    } else {
+      teusGrand = sum(filteredRepsForModel.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0;}));}));
+    }
     var tgtGrand  = (_mRole === 'sales rep' || _frNorm)
       ? sum(filteredRepsForModel.map(function(r){ return r.weeklyTgt||r.tgt||0; }))
       : sum(realZones.map(function(z){ return z.weeklyTarget||0; }));
@@ -2224,11 +2276,35 @@ function model(){
     shipGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return r.ship[i]||0;}));}));
   }
   var tonsGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return (r.tons&&r.tons[i])||0;}));}));
+  // A rep's target is prorated per month by the days they were actually employed (joining / exit date) - exactly what
+  // the grid row does in dispTgt. The card used a FLAT monthly target x number of months, so for any rep who joined or
+  // left inside the selected range (e.g. joined in Aug, range Apr-Oct) the GP TARGET and ACHIEVEMENT cards disagreed
+  // with that rep's own row. Reps with no joining/exit date are unchanged (monthly target x months).
+  function _repTargetForMonths(r){
+    var base = r.tgt || 0;
+    if (!(r.joinDate || r.exitDate)) return base * idxs.length;
+    return sum(idxs.map(function(i){
+      var b = monthBounds(months26[i]);
+      var active = activeDaysInRange(b[0], b[1], r.joinDate || null, r.exitDate || null);
+      if (active <= 0) return 0;
+      var total = Math.round((new Date(b[1]) - new Date(b[0])) / 86400000) + 1;
+      return active < total ? Math.round(base * active / total) : base;
+    }));
+  }
   var tgtGrand  = (_mRole === 'sales rep' || _frNorm)
-    ? sum(filteredRepsForModel.map(function(r){ return (r.tgt||0) * idxs.length; }))
+    ? sum(filteredRepsForModel.map(_repTargetForMonths))
     : sum(realZones.map(function(z){ return (z.monthlyTarget||0) * idxs.length; }));
   var achGrand  = tgtGrand > 0 ? Math.round(gpGrand / tgtGrand * 100) : 0;
-  var teusGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return (r.teu&&r.teu[i])||0;}));}));
+  // Same source as the table's Grand Total (see weekly path above) — keeps the card in lock-step
+  // with every filter the table honours (LOB, zone, rep). Falls back to the per-rep arrays only
+  // while the job-level rows haven't loaded yet.
+  var teusGrand;
+  if (allDrillRows && allDrillRows.length > 0) {
+    buildZoneAggregates();
+    teusGrand = sum(idxs.map(function(i){ return _aggSumGT(months26[i], false, 'teu'); }));
+  } else {
+    teusGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return (r.teu&&r.teu[i])||0;}));}));
+  }
   var revGrand;
   if (allDrillRows&&allDrillRows.length>0) {
     revGrand = allDrillRows.filter(_kpiDrillFilter).reduce(function(s,r){return s+(r.r||0);},0);
@@ -2639,8 +2715,9 @@ function repEntity(r){
       var mm = monthMap[row._ml];
       mm.ship += 1;
       mm.gp += (row.g || 0);
-      var _locked = (row.lob==='AIR EXPORT'||row.lob==='AIR IMPORT') ? !!row.financialLock : !!row.operationLock;
-      if (_locked) { mm.gpActual += (row.g||0); mm.revBilled += (row.r||0); }
+      // FL Done / FL Not Done is the server's finMetrics flag (row.prov = Financial Lock blank, every LOB) - the same flag
+      // buildZoneAggregates uses - not a second copy of the old Air=Financial / others=Operation Lock rule.
+      if (!row.prov) { mm.gpActual += (row.g||0); mm.revBilled += (row.r||0); }
       else { mm.gpProv += (row.g||0); mm.revProv += (row.r||0); }
       mm.rev += (row.r || 0);
       mm.tons += (row.tons || 0);
@@ -3234,9 +3311,13 @@ function kpiRow(M){
   var shipData  = isWeeklyView
     ? wkeys.map(function(k){ if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;return allDrillRows.filter(function(r){return r._wk===k&&(!_fl||_fl.indexOf(r.lob)>-1);}).length;} return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0); })
     : idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+(r.ship[i]||0);},0); });
+  // Delta series for the TEU card — same filter-aware source as the value itself, otherwise the
+  // up/down arrow could contradict the (now corrected) number beside it.
+  var _teuFromAgg = !!(allDrillRows && allDrillRows.length > 0);
+  if (_teuFromAgg) buildZoneAggregates();
   var teuData   = isWeeklyView
-    ? wkeys.map(function(k){ return repsRaw.reduce(function(s,r){ return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0); },0); })
-    : idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0); });
+    ? wkeys.map(function(k){ return _teuFromAgg ? _aggSumGT(k, true, 'teu') : repsRaw.reduce(function(s,r){ return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0); },0); })
+    : idxs.map(function(i){ return _teuFromAgg ? _aggSumGT(months26[i], false, 'teu') : repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0); });
   var revData   = isWeeklyView
     ? wkeys.map(function(k){ return repsRaw.reduce(function(s,r){ return s+((r.weekData&&r.weekData[k]&&r.weekData[k].rev)||0); },0); })
     : idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+((r.rev&&r.rev[i])||0);},0); });
@@ -4493,9 +4574,10 @@ function tradelanePage(){
   // despite correct tradelaneData" symptom throughout today.)
 
   function effectiveRevenueTL(r) {
-    var isAir = r.lob === 'AIR EXPORT' || r.lob === 'AIR IMPORT';
-    var locked = isAir ? !!r.financialLock : !!r.operationLock;
-    return locked ? (r.billedRevenue || r.r || 0) : (r.provRevenue || r.r || 0);
+    // Revenue follows the Financial-Lock rule, computed ONCE on the server (finMetrics): FL Done -> Billed (C);
+    // FL Not Done -> MAX(Billed C, Prov. A). r.r is exactly that, so this page agrees with the grid and its own GP.
+    // This used to re-derive it here with the OLD rule (Operation Lock for non-Air LOBs, Provisional instead of the MAX).
+    return r.r || 0;
   }
 
   var periodLabel = (function(){
@@ -4569,13 +4651,12 @@ function tradelanePage(){
 function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) {
   var rows = (lobData.allCountries || []).slice().sort(function(a,b){ return b.gp - a.gp; });
 
-  // Effective revenue per drill row:
-  // Air Export/Import: billedRevenue if financialLock filled, else provRevenue
-  // Other LOBs: billedRevenue if operationLock filled, else provRevenue
+  // Effective revenue per drill row: the server's Financial-Lock revenue (r.r) - see finMetrics in the API.
   function effectiveRevenue(r) {
-    var isAir = r.lob === 'AIR EXPORT' || r.lob === 'AIR IMPORT';
-    var locked = isAir ? !!r.financialLock : !!r.operationLock;
-    return locked ? (r.billedRevenue || r.r || 0) : (r.provRevenue || r.r || 0);
+    // Revenue follows the Financial-Lock rule, computed ONCE on the server (finMetrics): FL Done -> Billed (C);
+    // FL Not Done -> MAX(Billed C, Prov. A). r.r is exactly that, so this page agrees with the grid and its own GP.
+    // This used to re-derive it here with the OLD rule (Operation Lock for non-Air LOBs, Provisional instead of the MAX).
+    return r.r || 0;
   }
 
   var BORDER = '#D5DCE6';
@@ -5790,10 +5871,15 @@ function usagePage(){
   }).join('');
 
   return '<div style="padding:24px 28px 32px;">'
-  +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;">'
-    + usageKpiCard(d.totalUsers, 'Total Users', '#2563EB')
-    + usageKpiCard(d.activeUsers, 'Active Users', '#15875A')
-    + usageKpiCard(d.loggedIn7Day, 'Logged in (7 days)', '#7C3AED')
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;flex:1;">'
+      + usageKpiCard(d.totalUsers, 'Total Users', '#2563EB')
+      + usageKpiCard(d.activeUsers, 'Active Users', '#15875A')
+      + usageKpiCard(d.loggedIn7Day, 'Logged in (7 days)', '#7C3AED')
+    +'</div>'
+    +'<button onclick="exportUsageAnalyticsToExcel()" style="margin-left:16px;flex-shrink:0;display:flex;align-items:center;gap:7px;padding:10px 18px;background:#15875A;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">'
+      +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download Excel'
+    +'</button>'
   +'</div>'
   +'<div style="background:#FFFFFF;border:1px solid #E7ECF3;border-radius:10px;overflow:hidden;">'
     +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 130px);">'
@@ -5811,6 +5897,34 @@ function usagePage(){
     +'</table>'
   +'</div>'
   +'</div>';
+}
+
+// Exports the currently-loaded Usage Analytics table to a real .xlsx file
+// via SheetJS (loaded from CDN in <head>). Uses usageData directly — the
+// same data already rendered in the table, no extra fetch needed. Column
+// order/labels match the on-screen table exactly.
+function exportUsageAnalyticsToExcel(){
+  if (!usageDataReady || !usageData || !usageData.users) {
+    alert('Usage data is still loading — please wait a moment and try again.');
+    return;
+  }
+  var rows2 = usageData.users.map(function(u){
+    return {
+      '#': u.index,
+      'Name': u.name,
+      'Email': u.email,
+      'Role': u.role,
+      'Total Logins': u.totalLogins,
+      'Last Login': fmtLastLogin(u.lastLogin),
+      'Status': u.isActive ? 'Active' : 'Inactive'
+    };
+  });
+  var ws = XLSX.utils.json_to_sheet(rows2);
+  ws['!cols'] = [{wch:4},{wch:24},{wch:32},{wch:14},{wch:14},{wch:18},{wch:10}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Usage Analytics');
+  var today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, 'Usage_Analytics_' + today + '.xlsx');
 }
 
 /* ====================== TEAMS / ORG CHART ====================== */
@@ -5888,7 +6002,7 @@ function teamsPage(){
     var isYou = isYouEmail && u.email && u.email.toLowerCase().trim()===isYouEmail;
     var nameShort = (u.name||'').length>18 ? (u.name||'').slice(0,16)+'…' : (u.name||'');
     var reportLine = u.reportCount>0 ? '<div style="font-size:10px;color:#94A3B8;margin-top:2px;">'+u.reportCount+' report'+(u.reportCount===1?'':'s')+'</div>' : '';
-    var zoneLine = u.zone ? '<div style="font-size:10.5px;color:#5678C2;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(u.zone)+'">'+esc(u.zone)+'</div>' : '';
+    var zoneLine = u.zone ? '<div style="font-size:10.5px;color:#5678C2;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(u.zone.split(',').map(function(s){return s.trim();}).join(', '))+'">'+esc(u.zone.split(',').map(function(s){return s.trim();}).join(', '))+'</div>' : '';
     return '<div style="background:#FFF;border:'+(isYou?'2px solid #2563EB':'1px solid #E7ECF3')+';border-radius:10px;padding:12px 13px;display:flex;align-items:flex-start;gap:9px;width:'+CARD_W+'px;box-sizing:border-box;flex-shrink:0;">'
       +'<div style="width:38px;height:38px;border-radius:50%;background:'+avBg(u.name)+';color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+initials(u.name)+'</div>'
       +'<div style="flex:1;min-width:0;">'
@@ -6086,6 +6200,64 @@ function teamsPage(){
   +'</div>';
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Multi-zone support + shared draft state for the Add/Edit User modals.
+//
+// A user's `zone` is stored as a plain string. Zonal Managers can hold several
+// zones as a comma-separated list (same convention `region` already uses for
+// Regional Managers). _userZones() is the ONLY place that parses it — all RLS
+// code goes through it. A single zone whose own name contains a comma stays
+// intact (checked against known zone names), so legacy values never break.
+function _userZones(u){
+  var raw = ((u && u.zone) || '').trim();
+  if (!raw) return [];
+  if (raw.indexOf(',') === -1) return [raw];
+  var known = (typeof repsRawOriginal !== 'undefined' ? repsRawOriginal : []).some(function(r){ return r.zone === raw; });
+  if (known) return [raw];
+  return raw.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+}
+
+// Draft state for the Add/Edit User modals lives in state[scope], NOT the DOM.
+// The multi-select checklists only exist in the DOM while their dropdown is
+// open, and every dropdown toggle re-renders the whole modal — so anything
+// kept only in checkbox/select DOM state was wiped the moment a dropdown
+// closed, and Save then read zero checked boxes.
+window._userDraftSet = function(scope, key, val){
+  if (!state[scope]) state[scope] = {};
+  state[scope][key] = val;
+};
+window._userDraftToggle = function(scope, key, val, checked, labelId, noun){
+  if (!state[scope]) state[scope] = {};
+  var arr = (state[scope][key] || []).slice();
+  var i = arr.indexOf(val);
+  if (checked && i === -1) arr.push(val);
+  if (!checked && i > -1) arr.splice(i, 1);
+  state[scope][key] = arr;
+  // Patch only the button label — a full render() would collapse the list.
+  var lbl = document.getElementById(labelId);
+  if (lbl) lbl.textContent = arr.length > 0 ? (arr.length + ' ' + noun + (arr.length === 1 ? '' : 's') + ' selected') : ('Select ' + noun + 's...');
+};
+function _userMultiSelect(o){
+  var sel = o.selected || [];
+  var label = sel.length > 0 ? (sel.length + ' ' + o.noun + (sel.length === 1 ? '' : 's') + ' selected') : ('Select ' + o.noun + 's...');
+  var rows = o.items.map(function(it){
+    return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;font-size:12.5px;color:#374151;border-radius:6px;">'
+      +'<input type="checkbox" value="'+esc(it)+'" '+(sel.indexOf(it) > -1 ? 'checked' : '')
+      +' onchange="window._userDraftToggle(&#39;'+o.scope+'&#39;,&#39;'+o.key+'&#39;,this.value,this.checked,&#39;'+o.labelId+'&#39;,&#39;'+o.noun+'&#39;)" style="cursor:pointer;"/>'
+      +esc(it)
+    +'</label>';
+  }).join('');
+  return '<div>'
+    +'<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">'+o.title+'</label>'
+    +'<button type="button" data-act="'+o.toggleAct+'" style="width:100%;text-align:left;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;background:#FFFFFF;cursor:pointer;display:flex;align-items:center;justify-content:space-between;box-sizing:border-box;">'
+      +'<span id="'+o.labelId+'">'+label+'</span>'
+      +'<span style="color:#9AAFC8;">'+(o.open ? '\u25B2' : '\u25BC')+'</span>'
+    +'</button>'
+    +(o.open ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 8px 8px;padding:6px;max-height:160px;overflow-y:auto;background:#FFFFFF;margin-top:-1px;">'+rows+'</div>' : '')
+    +'<div style="font-size:10.5px;color:#9AAFC8;margin-top:4px;">'+o.hint+'</div>'
+  +'</div>';
+}
+
 window._orgEditDraftUpdate = function(val){ state.orgEditDraftName = val; };
 
 function orgEditModal(){
@@ -6106,28 +6278,31 @@ function orgEditModal(){
     return list;
   })();
 
+  // Seed the draft ONCE per open from the saved values, then read everything
+  // from it — so a re-render (toggling a dropdown) never reverts unsaved edits.
+  if (!state.orgEditDraft) {
+    state.orgEditDraft = {
+      role: person.role,
+      reportsTo: person.reportsTo || '',
+      isActive: person.isActive ? 'true' : 'false',
+      regions: (person.region||'').split(',').map(function(s){return s.trim();}).filter(Boolean),
+      zones: _userZones(person)
+    };
+  }
+  var D = state.orgEditDraft;
+
   var roleOptsHtml = ROLES.map(function(r){
-    return '<option value="'+esc(r)+'"'+(r===person.role?' selected':'')+'>'+esc(r)+'</option>';
+    return '<option value="'+esc(r)+'"'+(r===D.role?' selected':'')+'>'+esc(r)+'</option>';
   }).join('');
 
-  var zoneOptsHtml = '<option value="">None</option>' + ZONES.map(function(z){
-    return '<option value="'+esc(z)+'"'+(z===person.zone?' selected':'')+'>'+esc(z)+'</option>';
-  }).join('');
-
-  var _personRegions = (person.region||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
-  var regionChecklistHtml = REGIONS.map(function(r){
-    var checked = _personRegions.indexOf(r) > -1;
-    return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;font-size:12.5px;color:#374151;border-radius:6px;">'
-      +'<input type="checkbox" class="org-edit-region-cb" value="'+esc(r)+'" '+(checked?'checked':'')+' style="cursor:pointer;"/>'
-      +esc(r)
-    +'</label>';
-  }).join('');
+  // Keep a saved zone visible/uncheckable even if it is no longer in the current zone list
+  var zoneItems = ZONES.concat(D.zones.filter(function(z){ return ZONES.indexOf(z) === -1; }));
 
   var managerCandidates = allPeople.filter(function(p){
     return p.email !== person.email && ['admin','regional manager','zonal manager'].indexOf((p.role||'').toLowerCase()) > -1;
   });
   var managerOptsHtml = '<option value="">None</option>' + managerCandidates.map(function(m){
-    return '<option value="'+esc(m.email)+'"'+(m.email===person.reportsTo?' selected':'')+'>'+esc(m.name)+'</option>';
+    return '<option value="'+esc(m.email)+'"'+(m.email===D.reportsTo?' selected':'')+'>'+esc(m.name)+'</option>';
   }).join('');
 
   return '<div data-act="orgEditClose" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:60;display:flex;align-items:center;justify-content:center;animation:ovFade 0.16s ease;">'+
@@ -6146,32 +6321,19 @@ function orgEditModal(){
         '</div>'+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Role</label>'+
-          '<select id="org-edit-role" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+roleOptsHtml+'</select>'+
+          '<select id="org-edit-role" onchange="window._userDraftSet(&#39;orgEditDraft&#39;,&#39;role&#39;,this.value)" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+roleOptsHtml+'</select>'+
         '</div>'+
-        '<div>'+
-          '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Zone</label>'+
-          '<select id="org-edit-zone" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+zoneOptsHtml+'</select>'+
-        '</div>'+
-        '<div>'+
-          '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Region</label>'+
-          '<button type="button" data-act="toggleOrgEditRegionDrop" style="width:100%;text-align:left;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;background:#FFFFFF;cursor:pointer;display:flex;align-items:center;justify-content:space-between;box-sizing:border-box;">'
-            +'<span>'+(_personRegions.length>0?(_personRegions.length+' region'+(_personRegions.length===1?'':'s')+' selected'):'Select regions...')+'</span>'
-            +'<span style="color:#9AAFC8;">'+(state.orgEditRegionDropOpen?'▲':'▼')+'</span>'
-          +'</button>'+
-          (state.orgEditRegionDropOpen
-            ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 8px 8px;padding:6px;max-height:160px;overflow-y:auto;background:#FFFFFF;margin-top:-1px;">'+regionChecklistHtml+'</div>'
-            : '')+
-          '<div style="font-size:10.5px;color:#9AAFC8;margin-top:4px;">Only used for the Regional Manager role — select one or more regions this person can see.</div>'+
-        '</div>'+
+        _userMultiSelect({ title:'Zone', noun:'zone', items:zoneItems, selected:D.zones, open:!!state.orgEditZoneDropOpen, toggleAct:'toggleOrgEditZoneDrop', scope:'orgEditDraft', key:'zones', labelId:'org-edit-zone-label', hint:'A Zonal Manager can be assigned more than one zone. Other roles use a single zone.' })+
+        _userMultiSelect({ title:'Region', noun:'region', items:REGIONS, selected:D.regions, open:!!state.orgEditRegionDropOpen, toggleAct:'toggleOrgEditRegionDrop', scope:'orgEditDraft', key:'regions', labelId:'org-edit-region-label', hint:'Only used for the Regional Manager role — select one or more regions this person can see.' })+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Reports To</label>'+
-          '<select id="org-edit-reportsto" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+managerOptsHtml+'</select>'+
+          '<select id="org-edit-reportsto" onchange="window._userDraftSet(&#39;orgEditDraft&#39;,&#39;reportsTo&#39;,this.value)" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+managerOptsHtml+'</select>'+
         '</div>'+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Status</label>'+
-          '<select id="org-edit-active" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
-            '<option value="true"'+(person.isActive?' selected':'')+'>Active</option>'+
-            '<option value="false"'+(!person.isActive?' selected':'')+'>Inactive</option>'+
+          '<select id="org-edit-active" onchange="window._userDraftSet(&#39;orgEditDraft&#39;,&#39;isActive&#39;,this.value)" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
+            '<option value="true"'+(D.isActive==='true'?' selected':'')+'>Active</option>'+
+            '<option value="false"'+(D.isActive!=='true'?' selected':'')+'>Inactive</option>'+
           '</select>'+
         '</div>'+
         (state.orgEditError ? '<div style="font-size:11.5px;color:#DC2626;background:#FEF2F2;border-radius:7px;padding:8px 12px;">'+esc(state.orgEditError)+'</div>' : '')+
@@ -6208,6 +6370,10 @@ function addUserModal(){
   })();
   var allPeople = orgDataReady ? (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]) : [];
   var defaultRole = state.addUserDefaultRole || '';
+  // Draft lives in state (not the DOM) so toggling a dropdown never loses selections
+  if (!state.addUserDraft) state.addUserDraft = { reportsTo: '', regions: [], zones: [] };
+  var D = state.addUserDraft;
+  var roleSelected = D.role !== undefined ? D.role : defaultRole;
 
   return '<div data-act="addUserClose" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:60;display:flex;align-items:center;justify-content:center;">'+
     '<div data-stop="1" style="background:#FFFFFF;border-radius:16px;padding:28px;width:440px;max-width:95vw;box-shadow:0 20px 60px rgba(13,43,94,0.2);">'+
@@ -6226,38 +6392,16 @@ function addUserModal(){
         '</div>'+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Role *</label>'+
-          '<select id="add-user-role" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
-            ROLES.map(function(r){ return '<option value="'+esc(r)+'"'+(r===defaultRole?' selected':'')+'>'+esc(r)+'</option>'; }).join('')+
+          '<select id="add-user-role" onchange="window._userDraftSet(&#39;addUserDraft&#39;,&#39;role&#39;,this.value)" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
+            ROLES.map(function(r){ return '<option value="'+esc(r)+'"'+(r===roleSelected?' selected':'')+'>'+esc(r)+'</option>'; }).join('')+
           '</select>'+
         '</div>'+
-        '<div>'+
-          '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Zone</label>'+
-          '<select id="add-user-zone" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
-            '<option value="">None</option>'+ZONES.map(function(z){ return '<option value="'+esc(z)+'">'+esc(z)+'</option>'; }).join('')+
-          '</select>'+
-        '</div>'+
-        '<div>'+
-          '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Region</label>'+
-          '<button type="button" data-act="toggleAddUserRegionDrop" style="width:100%;text-align:left;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;background:#FFFFFF;cursor:pointer;display:flex;align-items:center;justify-content:space-between;box-sizing:border-box;">'
-            +'<span>'+(state.addUserSelectedRegionCount>0?(state.addUserSelectedRegionCount+' region'+(state.addUserSelectedRegionCount===1?'':'s')+' selected'):'Select regions...')+'</span>'
-            +'<span style="color:#9AAFC8;">'+(state.addUserRegionDropOpen?'▲':'▼')+'</span>'
-          +'</button>'+
-          (state.addUserRegionDropOpen
-            ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 8px 8px;padding:6px;max-height:160px;overflow-y:auto;background:#FFFFFF;margin-top:-1px;">'+
-              REGIONS.map(function(r){
-                return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;font-size:12.5px;color:#374151;border-radius:6px;">'
-                  +'<input type="checkbox" data-act="toggleAddUserRegionCb" class="add-user-region-cb" value="'+esc(r)+'" style="cursor:pointer;"/>'
-                  +esc(r)
-                +'</label>';
-              }).join('')+
-            '</div>'
-            : '')+
-          '<div style="font-size:10.5px;color:#9AAFC8;margin-top:4px;">Only used for the Regional Manager role — assigns which region this person can see.</div>'+
-        '</div>'+
+        _userMultiSelect({ title:'Zone', noun:'zone', items:ZONES, selected:D.zones, open:!!state.addUserZoneDropOpen, toggleAct:'toggleAddUserZoneDrop', scope:'addUserDraft', key:'zones', labelId:'add-user-zone-label', hint:'A Zonal Manager can be assigned more than one zone. Other roles use a single zone.' })+
+        _userMultiSelect({ title:'Region', noun:'region', items:REGIONS, selected:D.regions, open:!!state.addUserRegionDropOpen, toggleAct:'toggleAddUserRegionDrop', scope:'addUserDraft', key:'regions', labelId:'add-user-region-label', hint:'Only used for the Regional Manager role — assigns which region this person can see.' })+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Reports To</label>'+
-          '<select id="add-user-reportsto" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
-            '<option value="">None</option>'+allPeople.map(function(p){ return '<option value="'+esc(p.email)+'">'+esc(p.name)+'</option>'; }).join('')+
+          '<select id="add-user-reportsto" onchange="window._userDraftSet(&#39;addUserDraft&#39;,&#39;reportsTo&#39;,this.value)" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
+            '<option value="">None</option>'+allPeople.map(function(p){ return '<option value="'+esc(p.email)+'"'+(p.email===D.reportsTo?' selected':'')+'>'+esc(p.name)+'</option>'; }).join('')+
           '</select>'+
         '</div>'+
         (state.addUserError ? '<div style="font-size:11.5px;color:#DC2626;background:#FEF2F2;border-radius:7px;padding:8px 12px;">'+esc(state.addUserError)+'</div>' : '')+
@@ -6543,8 +6687,15 @@ function tableRows(){
     var lcl     = dispLcl;
     var tgtArr  = dispTgt;
     var achArr  = dispAch;
+    // The FY / Grand Total achievement - and the row header's badge, bar and colour - must be measured against the SAME target
+    // the Target row's total shows: the sum of the per-month targets, prorated by joining / exit date for a rep. It used to be
+    // computed further up from a FLAT monthly target x number of columns, so for a rep who joined (or left) inside the range
+    // the row said e.g. "Target 300" while its Achievement % was measured against 700. The monthly cells already used dispTgt.
+    achFy = sum(tgtArr) > 0 ? Math.round(sum(dispGp) / sum(tgtArr) * 100) : 0;
 
-    function metric(label, indent, type, color, vals, fy, toggleType, repInfo){
+    function metric(label, indent, type, color, vals, fy, toggleType, repInfo, drillName){
+      // drillName (optional): full metric name sent to the drill-down / used as its title when the row's
+      // visible label is deliberately short (e.g. 'FL Done' under its 'Revenue' parent row).
       var isShip = toggleType === 'ship';
       var isGP   = toggleType === 'gp';
       var isRev  = toggleType === 'rev';
@@ -6578,7 +6729,7 @@ function tableRows(){
         labelWeight:indent?500:600, labelStyle:indent?'italic':'normal',
         caret:arrowChar, toggleType:toggleType||false, entityName: isZone ? e.zone : e.name,
         repInfo:repInfo||null, rowBg: groupBg, isZoneBlock: isZone, isGrandBlock: isGrand,
-        cells:buildCells(fy, vals, type, color, isZone ? e.zone : e.name, label, colLabels, noTarget, rawColKeys)
+        cells:buildCells(fy, vals, type, color, isZone ? e.zone : e.name, (drillName || label), colLabels, noTarget, rawColKeys)
       };
     }
 
@@ -6589,7 +6740,7 @@ function tableRows(){
     var repInfo = {
       name: e.name, initials: e.initials, avatarBg: avatarBg,
       nameWeight: nameWeight, groupBg: groupBg,
-      achFmt: e.tgt>0 ? achFy+'%' : '—',
+      achFmt: sum(tgtArr) > 0 ? achFy+'%' : '—',
       barWidth: Math.min(100,achFy)+'%',
       barColor: barColor, achColor: achColor,
       isZone: isZone, isGrand: isGrand, isBranch: !!e.isBranch,
@@ -6608,15 +6759,18 @@ function tableRows(){
 
     rows.push(metric('Revenue', 0, 'cur', '#2563EB', dispRev || dispGp.map(function(){return 0;}), sum(dispRev||[]), 'rev'));
     if (revOpen) {
-      rows.push(metric('Billed Revenue',      1, 'cur', '#1D5FCC', dispRevBilled || dispGp.map(function(){return 0;}), sum(dispRevBilled||[]), false));
-      rows.push(metric('Provisional Revenue', 1, 'cur', '#475569', dispRevProv   || dispGp.map(function(){return 0;}), sum(dispRevProv||[]),   false));
+      // Financial Lock split (same rule as the Detailed View columns). The visible label stays short - it sits
+      // directly under its 'Revenue' parent row and the metric column is only 140px wide - while the drill-down
+      // still gets the full name ('Revenue (FL Done)').
+      rows.push(metric('FL Done',     1, 'cur', '#1D5FCC', dispRevBilled || dispGp.map(function(){return 0;}), sum(dispRevBilled||[]), false, null, 'Revenue (FL Done)'));
+      rows.push(metric('FL Not Done', 1, 'cur', '#475569', dispRevProv   || dispGp.map(function(){return 0;}), sum(dispRevProv||[]),   false, null, 'Revenue (FL Not Done)'));
     }
 
     rows.push(metric('GP', 0, 'cur', '#059669', dispGp, sum(dispGp), 'gp'));
 
     if (gpOpen) {
-      rows.push(metric('Actual Profit',      1, 'cur', '#1D5FCC', dispGpActual, sum(dispGpActual), false));
-      rows.push(metric('Provisional Profit', 1, 'cur', '#10875A', dispGpProv,   sum(dispGpProv),   false));
+      rows.push(metric('FL Done',     1, 'cur', '#1D5FCC', dispGpActual, sum(dispGpActual), false, null, 'GP (FL Done)'));
+      rows.push(metric('FL Not Done', 1, 'cur', '#10875A', dispGpProv,   sum(dispGpProv),   false, null, 'GP (FL Not Done)'));
     }
 
     rows.push(metric('Target',        0, 'cur', '#0D2B5E', tgtArr,  sum(tgtArr), false));
@@ -6980,22 +7134,36 @@ function drawer(){
       { k:'shipmentNo', l:'Shipment No', t:'mono', color:'#2563EB', sticky:0,   width:130 },
       { k:'jobDate', l:'Job Date', t:'date', sticky:130, width:105 },
       { k:'lob', l:'LOB', t:'badge', sticky:235, width:105 },
+      // Financial Lock split - Revenue, Cost and GP, FL Done then FL Not Done, straight after the three
+      // identifying columns. s.r / s.x / s.g are the server's finMetrics revenue, cost and GP (the same rule
+      // the grid uses): FL Done -> Billed (C) / Posted (G) / C-G; FL Not Done -> MAX(C,A) / MAX(G,E) / MAX(C,A)-MAX(G,E).
+      // Exactly one of each pair is filled per job; Revenue - Cost = GP inside each bucket.
+      { k:'revFlDone',     l:'Revenue (FL Done)',     t:'cur', color:'#2563EB', derived:function(s){
+          return String(s.financialLock||'').trim() !== '' ? s.r : null;
+        } },
+      { k:'revFlNotDone',  l:'Revenue (FL Not Done)', t:'cur', color:'#2563EB', derived:function(s){
+          return String(s.financialLock||'').trim() === '' ? s.r : null;
+        } },
+      { k:'costFlDone',    l:'Cost (FL Done)',        t:'cur', color:'#DC2626', derived:function(s){
+          return String(s.financialLock||'').trim() !== '' ? s.x : null;
+        } },
+      { k:'costFlNotDone', l:'Cost (FL Not Done)',    t:'cur', color:'#DC2626', derived:function(s){
+          return String(s.financialLock||'').trim() === '' ? s.x : null;
+        } },
+      { k:'gpFlDone',      l:'GP (FL Done)',          t:'cur', signed:true, derived:function(s){
+          return String(s.financialLock||'').trim() !== '' ? s.g : null;
+        } },
+      { k:'gpFlNotDone',   l:'GP (FL Not Done)',      t:'cur', signed:true, derived:function(s){
+          return String(s.financialLock||'').trim() === '' ? s.g : null;
+        } },
       { k:'masterNo', l:'Master No.', t:'text' },
       { k:'houseNo', l:'House No.', t:'text' },
       { k:'consolNo', l:'Consol No.', t:'text' },
       { k:'cargoType', l:'Cargo Type', t:'text' },
       { k:'carrier', l:'Carrier', t:'text', truncate:130 },
       { k:'gp', l:'GP', t:'cur', signed:true, derived:function(s){ return s.g; } },
-      { k:'gpOlDone', l:'Actual GP', t:'cur', signed:true, derived:function(s){
-          var locked = (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.operationLock;
-          return locked ? s.actualProfit : null;
-        } },
-      { k:'gpOlNotDone', l:'Provisional GP', t:'cur', signed:true, derived:function(s){
-          var locked = (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.operationLock;
-          return !locked ? s.provisionalProfit : null;
-        } },
       { k:'firstOlStatus', l:'Lock Status', t:'olbadge', derived:function(s){
-          return (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.jobRevRecogDate;
+          return String(s.financialLock||'').trim() !== '';
         } },
       { k:'provRevenue', l:'Provisional Revenue (A)', t:'cur' },
       { k:'billedRevenue', l:'Billed Revenue (C)', t:'cur', color:'#2563EB' },
@@ -7199,9 +7367,9 @@ function drawer(){
       colSums = {};
       var dActualGpSum = 0, dProvGpSum = 0;
       visibleRows.forEach(function(r){
-        var _locked = (r.lob==='AIR EXPORT'||r.lob==='AIR IMPORT') ? !!r.financialLock : !!r.operationLock;
-        if (_locked) dActualGpSum += (r.actualProfit || 0);
-        else dProvGpSum += (r.provisionalProfit || 0);
+        var _locked = String(r.financialLock||'').trim() !== '';   // Financial Lock rule, all LOBs
+        if (_locked) dActualGpSum += (r.g || 0);
+        else dProvGpSum += (r.g || 0);
         _activeDrillCols.forEach(function(c){
           if (c.t !== 'cur' && c.t !== 'num') return;
           var v = c.derived ? c.derived(r) : r[c.k];
@@ -7210,8 +7378,8 @@ function drawer(){
           }
         });
       });
-      colSums['gpOlDone']    = dActualGpSum;
-      colSums['gpOlNotDone'] = dProvGpSum;
+      colSums['gpFlDone']    = dActualGpSum;
+      colSums['gpFlNotDone'] = dProvGpSum;
 
       window._drillColSums = JSON.parse(JSON.stringify(colSums));
       window._drillActiveDrillCols = _activeDrillCols;
@@ -7742,7 +7910,7 @@ function render(){
   if (currentUser) {
     var _rdRole = (currentUser.role||'').toLowerCase().trim();
     if (_rdRole === 'zonal manager' && currentUser.zone && (!state.filterZones || state.filterZones.length === 0)) {
-      state.filterZones = [currentUser.zone];
+      state.filterZones = _userZones(currentUser);
     } else if (_rdRole === 'regional manager' && currentUser.region && (!state.filterRegions || state.filterRegions.length === 0)) {
       state.filterRegions = currentUser.region.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
       state._regionExpandedZones = false; // let the existing expansion logic below populate filterZones fresh
@@ -8000,6 +8168,9 @@ function dedupDrillRows(rows) {
   if (!rows || !rows.length) return rows;
   var seen = {};
   var deduped = rows.filter(function(r){
+    // No shipment number (the server writes an em dash as the placeholder) -> cannot be recognised as a duplicate, so never
+    // collapse such rows (the same guard the server's job de-duplication uses, so the grid and the cards stay in step)
+    if (!r.shipmentNo || r.shipmentNo === '\u2014' || r.shipmentNo === '?') return true;
     var key = r.shipmentNo + '|' + (r._cl||'') + '|' + (r._sp||'');
     if (seen[key]) return false;
     seen[key] = true;
@@ -8204,10 +8375,10 @@ function computeDrillResult(entity, metric, month){
     });
   }
   // For RLS: use zoneToRawSPs on the user's zone — gives exact _sp values matching allDrillRows
-  var _rlsZone = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'zonal manager') ? (currentUser.zone||'') : '';
-  var _rlsName = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') ? normalizeName(currentUser.name||'') : '';
-  if (_rlsZone) {
-    _spFilter = zoneToRawSPs([_rlsZone]) || [];
+  var _rlsZones = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'zonal manager') ? _userZones(currentUser) : [];
+  var _rlsName = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') ? normalizeName(_myRepName()) : '';
+  if (_rlsZones.length > 0) {
+    _spFilter = zoneToRawSPs(_rlsZones) || [];
   } else if (_rlsName) {
     _spFilter = [_rlsName];
   } else if (_fz.length > 0 && _fr.length > 0) {
@@ -8638,10 +8809,10 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
 
   // Pre-build zone/rep/RLS SP filter for grand total
   var _pSpFilter = null;
-  var _pRlsZone = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'zonal manager') ? (currentUser.zone||'') : '';
-  var _pRlsName = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') ? normalizeName(currentUser.name||'') : '';
-  if (_pRlsZone) {
-    _pSpFilter = zoneToRawSPs([_pRlsZone]);
+  var _pRlsZones = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'zonal manager') ? _userZones(currentUser) : [];
+  var _pRlsName = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') ? normalizeName(_myRepName()) : '';
+  if (_pRlsZones.length > 0) {
+    _pSpFilter = zoneToRawSPs(_pRlsZones);
   } else if (_pRlsName) {
     _pSpFilter = [_pRlsName];
   } else if ((state.filterZones||[]).length > 0) {
@@ -9283,7 +9454,8 @@ document.addEventListener('click', function(ev){
     state.addUserError = '';
     state.addUserDefaultRole = el.getAttribute('data-role') || '';
     state.addUserRegionDropOpen = false;
-    state.addUserSelectedRegionCount = 0;
+    state.addUserZoneDropOpen = false;
+    state.addUserDraft = null;
     state.addUserDraftName = '';
     state.addUserDraftEmail = '';
     render();
@@ -9293,6 +9465,9 @@ document.addEventListener('click', function(ev){
     state.addUserOpen = false;
     state.addUserError = '';
     state.addUserDefaultRole = '';
+    state.addUserDraft = null;
+    state.addUserRegionDropOpen = false;
+    state.addUserZoneDropOpen = false;
     render();
   }
   else if(act==='deleteUser'){
@@ -9310,34 +9485,27 @@ document.addEventListener('click', function(ev){
       else alert('Failed: ' + (data.error||'Unknown error'));
     }).catch(function(e){ alert('Error: ' + e.message); });
   }
-  else if(act==='toggleAddUserRegionDrop'){ ev.stopPropagation(); state.addUserRegionDropOpen = !state.addUserRegionDropOpen; render(); }
-  else if(act==='toggleAddUserRegionCb'){
-    ev.stopPropagation();
-    // Don't re-render the whole dropdown (would lose focus/collapse it) —
-    // just recompute the live count for the toggle button's label text
-    // and patch that one span directly.
-    var _checkedCount = document.querySelectorAll('.add-user-region-cb:checked').length;
-    state.addUserSelectedRegionCount = _checkedCount;
-    var _btn = document.querySelector('[data-act="toggleAddUserRegionDrop"] span');
-    if (_btn) _btn.textContent = _checkedCount>0 ? (_checkedCount+' region'+(_checkedCount===1?'':'s')+' selected') : 'Select regions...';
-  }
+  else if(act==='toggleAddUserRegionDrop'){ ev.stopPropagation(); state.addUserRegionDropOpen = !state.addUserRegionDropOpen; state.addUserZoneDropOpen = false; render(); }
+  else if(act==='toggleAddUserZoneDrop'){ ev.stopPropagation(); state.addUserZoneDropOpen = !state.addUserZoneDropOpen; state.addUserRegionDropOpen = false; render(); }
   else if(act==='addUserSave'){
     ev.stopPropagation();
     var nameIn  = document.getElementById('add-user-name');
     var emailIn = document.getElementById('add-user-email');
     var roleSel = document.getElementById('add-user-role');
-    var zoneSel = document.getElementById('add-user-zone');
-    var regionChecks = document.querySelectorAll('.add-user-region-cb:checked');
+    var _D = state.addUserDraft || {};
     var rtSel   = document.getElementById('add-user-reportsto');
     var newName  = nameIn  ? nameIn.value.trim()  : '';
     var newEmail = emailIn ? emailIn.value.trim()  : '';
     var newRole  = roleSel ? roleSel.value         : 'Sales Rep';
-    var newZone  = zoneSel ? zoneSel.value         : '';
-    var newRegion = Array.prototype.map.call(regionChecks, function(cb){ return cb.value; }).join(',');
+    var _zonesSel = (_D.zones || []).slice();
+    var newZone  = _zonesSel.join(',');
+    var newRegion = (_D.regions || []).join(',');
     var newRT    = rtSel   ? rtSel.value           : '';
     if(!newName){ state.addUserError='Name is required.'; render(); return; }
     if(!newEmail){ state.addUserError='Email is required.'; render(); return; }
     if(newRole === 'Regional Manager' && !newRegion){ state.addUserError='Please select at least one region for a Regional Manager.'; render(); return; }
+    if(_zonesSel.length > 1 && newRole !== 'Zonal Manager'){ state.addUserError='Only a Zonal Manager can be assigned more than one zone. Keep a single zone for other roles.'; render(); return; }
+    if(_zonesSel.length > 1 && _zonesSel.some(function(z){ return z.indexOf(',') > -1; })){ state.addUserError='A selected zone name contains a comma, which cannot be stored in a multi-zone list.'; render(); return; }
     el.disabled = true; el.textContent = 'Adding...';
     fetch('/api/mongo-batch?action=addUser', {
       method:'POST',
@@ -9348,6 +9516,7 @@ document.addEventListener('click', function(ev){
       if(!data.success){ state.addUserError = data.error||'Failed to add user.'; render(); return; }
       state.addUserOpen = false;
       state.addUserError = '';
+      state.addUserDraft = null;
       // Add new user to orgData immediately
       if (!orgData) { orgData = { hierarchy:[], directReports:[], support:[] }; orgDataReady = true; }
       if (!orgData.support) orgData.support = [];
@@ -9372,6 +9541,8 @@ document.addEventListener('click', function(ev){
     orgEditTarget = el.getAttribute('data-email');
     state.orgEditError='';
     state.orgEditRegionDropOpen = false;
+    state.orgEditZoneDropOpen = false;
+    state.orgEditDraft = null;
     state.orgEditDraftName = undefined;
     render();
   }
@@ -9379,26 +9550,32 @@ document.addEventListener('click', function(ev){
     if(ev.target.closest('[data-stop]')&&!el.matches('[data-act="orgEditClose"]')) return;
     orgEditTarget = null;
     state.orgEditError='';
+    state.orgEditDraft = null;
+    state.orgEditRegionDropOpen = false;
+    state.orgEditZoneDropOpen = false;
     render();
   }
-  else if(act==='toggleOrgEditRegionDrop'){ ev.stopPropagation(); state.orgEditRegionDropOpen = !state.orgEditRegionDropOpen; render(); }
+  else if(act==='toggleOrgEditRegionDrop'){ ev.stopPropagation(); state.orgEditRegionDropOpen = !state.orgEditRegionDropOpen; state.orgEditZoneDropOpen = false; render(); }
+  else if(act==='toggleOrgEditZoneDrop'){ ev.stopPropagation(); state.orgEditZoneDropOpen = !state.orgEditZoneDropOpen; state.orgEditRegionDropOpen = false; render(); }
   else if(act==='orgEditSave'){
     ev.stopPropagation();
     var email = el.getAttribute('data-email');
     var nameSel = document.getElementById('org-edit-name');
     var roleSel = document.getElementById('org-edit-role');
-    var zoneSel = document.getElementById('org-edit-zone');
-    var regionChecks = document.querySelectorAll('.org-edit-region-cb:checked');
+    var _D = state.orgEditDraft || {};
     var reportsToSel = document.getElementById('org-edit-reportsto');
     var activeSel = document.getElementById('org-edit-active');
     var newName = nameSel ? nameSel.value.trim() : '';
     var newRole = roleSel ? roleSel.value : '';
-    var newZone = zoneSel ? zoneSel.value : '';
-    var newRegion = Array.prototype.map.call(regionChecks, function(cb){ return cb.value; }).join(',');
+    var _zonesSel = (_D.zones || []).slice();
+    var newZone = _zonesSel.join(',');
+    var newRegion = (_D.regions || []).join(',');
     var newReportsTo = reportsToSel ? reportsToSel.value : '';
     var newActive = activeSel ? activeSel.value === 'true' : true;
     if(!newRole){ state.orgEditError='Please select a role.'; render(); return; }
     if(newRole === 'Regional Manager' && !newRegion){ state.orgEditError='Please select at least one region for a Regional Manager.'; render(); return; }
+    if(_zonesSel.length > 1 && newRole !== 'Zonal Manager'){ state.orgEditError='Only a Zonal Manager can be assigned more than one zone. Keep a single zone for other roles.'; render(); return; }
+    if(_zonesSel.length > 1 && _zonesSel.some(function(z){ return z.indexOf(',') > -1; })){ state.orgEditError='A selected zone name contains a comma, which cannot be stored in a multi-zone list.'; render(); return; }
     el.disabled = true;
     el.textContent = 'Saving...';
     updateUserField(email, { name:newName, role:newRole, zone:newZone, region:newRegion, reportsTo:newReportsTo, isActive:newActive }, function(result){
@@ -9409,6 +9586,7 @@ document.addEventListener('click', function(ev){
       }
       orgEditTarget = null;
       state.orgEditError='';
+      state.orgEditDraft = null;
       // Direct fetch bypasses makeFetcher cache/inFlight guards
       fetch('/api/mongo-batch?action=org&force=1')
         .then(function(r){ return r.json(); })
