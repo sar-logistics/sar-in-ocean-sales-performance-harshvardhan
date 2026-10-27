@@ -1558,7 +1558,18 @@ function prefetchAgentRanges() {
 // ── Tradelane Insights fetch ──────────────────────────────────────────────────
 // Clear stale tradelane cache synchronously before anything else
 var _tradelaneCache = {};
-(function(){ var v = 'ocean-v164'; if (localStorage.getItem('sar_oc_tl_cache_ver') !== v) { Object.keys(localStorage).forEach(function(k){ if(k.startsWith('tradelane_')) localStorage.removeItem(k); }); localStorage.setItem('sar_oc_tl_cache_ver', v); _tradelaneCache = {}; } })();
+(function(){
+  var v = 'ocean-v164';
+  if (localStorage.getItem('sar_oc_tl_cache_ver') !== v) {
+    // Clears this dashboard's OLD unprefixed tradelane_* cache keys. Skipped
+    // under the Hub (shared origin): Ocean no longer writes keys like that,
+    // while the Air Sales dashboard does, so there it would only delete Air's.
+    if (location.pathname.indexOf('/dashboards/') !== 0) {
+      Object.keys(localStorage).forEach(function(k){ if(k.startsWith('tradelane_')) localStorage.removeItem(k); });
+    }
+    localStorage.setItem('sar_oc_tl_cache_ver', v); _tradelaneCache = {};
+  }
+})();
 var _tradelaneFetchTimer = null;
 var _tradelanePrefetchDone = false;
 

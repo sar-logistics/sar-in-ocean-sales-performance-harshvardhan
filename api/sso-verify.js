@@ -16,8 +16,7 @@ const { MongoClient } = require("mongodb");
 const HUB_ISSUER         = "sar-systems-hub";
 const DEFAULT_HUB_ORIGIN = "https://systems.sarlogisolutions.com";
 
-const KNOWN_DASHBOARD_SLUGS = ["stspl-ocean-sales-test", "ocean-sales-performance"];
-const DEFAULT_DASHBOARD_SLUG = "ocean-sales-performance";
+const DEFAULT_DASHBOARD_SLUG = "stspl-ocean-sales-test";
 
 const MONGO_URI        = process.env.MONGO_URI;
 const DB_NAME          = "sar-in-air-sales";
@@ -103,7 +102,7 @@ module.exports = async function handler(req, res) {
   if (!email) return res.status(400).send("Token missing email");
 
   const tokenSlug = typeof payload.slug === "string" ? payload.slug.trim() : "";
-  const dashboardSlug = KNOWN_DASHBOARD_SLUGS.includes(tokenSlug) ? tokenSlug : DEFAULT_DASHBOARD_SLUG;
+  const dashboardSlug = /^[a-z0-9][a-z0-9_-]{0,79}$/i.test(tokenSlug) ? tokenSlug : DEFAULT_DASHBOARD_SLUG;
 
   try {
     const db = await getDB();
