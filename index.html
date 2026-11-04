@@ -6081,65 +6081,142 @@ function _arZoneIsOpen(zone, M){
   return M && M.zones.length === 1;
 }
 
+// Rows behind the open customer panel (current filters + that customer + zone)
+function _arDrillRows(){
+  var dr = state.arDrill;
+  if (!dr) return [];
+  return _arVisibleRows().filter(function(r){ return r.c === dr.customer && r.z === dr.zone; })
+    .sort(function(a, b){ return (b.o > 0) - (a.o > 0) || (b.od || 0) - (a.od || 0); });
+}
+
+// "21-Sep-2026" + 30 days → "21-Oct-2026" ('' when the date can't be read)
+var _AR_MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function _arDueDate(d, cd){
+  var m = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/.exec(String(d || '').trim());
+  if (!m || cd === null || cd === undefined) return '';
+  var mon = _AR_MON.indexOf(m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase());
+  if (mon < 0) return '';
+  var dt = new Date(+m[3], mon, +m[1] + Number(cd));
+  return ('0' + dt.getDate()).slice(-2) + '-' + _AR_MON[dt.getMonth()] + '-' + dt.getFullYear();
+}
+function _arRepName(sp){ return String(sp || '').split('|')[0].trim(); }
+
 function arDrillDrawer(){
   var dr = state.arDrill;
   if (!dr) return '';
-  var rows = _arVisibleRows().filter(function(r){ return r.c === dr.customer && r.z === dr.zone; })
-    .sort(function(a, b){ return (b.o > 0) - (a.o > 0) || (b.od || 0) - (a.od || 0); });
-  var agg = _arEmptyAgg(); rows.forEach(function(r){ _arAdd(agg, r); });
-  function status(r){
-    if (r.o < 0) return '<span style="color:#946312;background:#FBF1DA;border-radius:999px;padding:2px 8px;font-weight:700;">On Account</span>';
+  var C = AR_COLORS;
+  var rows = _arDrillRows();
+  var agg = _arEmptyAgg(), bill = 0, reps = {}, cds = {};
+  rows.forEach(function(r){
+    _arAdd(agg, r);
+    if (r.o > 0) {
+      bill += r.bill || 0;
+      if (r.cd !== null && r.cd !== undefined) cds[r.cd] = (cds[r.cd] || 0) + 1;
+    }
+    if (r.sp) reps[_arRepName(r.sp)] = 1;
+  });
+  var overdue = agg.b1 + agg.b2 + agg.b3 + agg.b4 + agg.b5;
+  var creditDays = Object.keys(cds).sort(function(a, b){ return cds[b] - cds[a]; })[0];
+  var lobLbl = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import','ISOTANK EXPORT':'ISO Export','ISOTANK IMPORT':'ISO Import','GENERAL':'General'};
+
+  function chip(r){
+    var s = 'display:inline-block;border-radius:999px;padding:3px 9px;font-weight:700;font-size:10.5px;white-space:nowrap;';
+    if (r.o < 0) return '<span style="'+s+'color:'+C.oa.fg+';background:'+C.oa.bg+';">On Account</span>';
     var b = _arBucket(r.od);
-    if (b === 'nd') return '<span style="color:#15875A;background:#E3F5EA;border-radius:999px;padding:2px 8px;font-weight:700;">Not Due</span>';
-    var lbl = AR_BUCKETS.filter(function(x){ return x.key === b; })[0].label;
-    return '<span style="color:#B83A2B;background:#FBDED9;border-radius:999px;padding:2px 8px;font-weight:700;">Overdue '+lbl+'</span>';
+    if (b === 'nd') {
+      var left = -(r.od || 0);
+      return '<span style="'+s+'color:'+C.nd.fg+';background:'+C.nd.bg+';">'+(left > 0 ? 'Due in '+left+' day'+(left === 1 ? '' : 's') : 'Due today')+'</span>';
+    }
+    return '<span style="'+s+'color:'+C[b].fg+';background:'+C[b].bg+';">'+r.od+' day'+(r.od === 1 ? '' : 's')+' overdue</span>';
   }
-  var th = 'position:sticky;top:0;background:#F1F5FB;color:#3C5275;font-size:10px;font-weight:800;padding:7px 9px;border-bottom:1px solid #D9E3EE;white-space:nowrap;';
-  var td = 'padding:6px 9px;border-bottom:1px solid #EEF2F8;font-size:11px;white-space:nowrap;';
+  // Same card style as the page's KPI row
+  function card(label, v, tint, sub){
+    return '<div style="position:relative;overflow:hidden;background:rgba(255,255,255,0.66);border:1px solid #E3EAF4;border-radius:14px;padding:10px 12px 9px;">'
+      + '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+tint+';"></div>'
+      + '<div style="font-size:8px;font-weight:800;letter-spacing:0.09em;text-transform:uppercase;color:#5B7298;margin-bottom:5px;">'+label+'</div>'
+      + '<div style="font-family:\'DM Mono\',monospace;font-size:16px;font-weight:600;color:#15233B;">'+v+'</div>'
+      + (sub ? '<div style="font-size:10px;color:#8A9AB5;margin-top:2px;font-weight:600;">'+sub+'</div>' : '')
+      + '</div>';
+  }
+
+  var th = 'position:sticky;top:0;z-index:2;background:#F1F5FB;color:#3C5275;font-size:10.5px;font-weight:800;padding:9px 10px;border-bottom:2px solid #C9D6E8;white-space:nowrap;';
+  var td = 'padding:8px 10px;border-bottom:1px solid #EEF2F8;font-size:12px;white-space:nowrap;';
   var num = 'text-align:right;font-family:\'DM Mono\',monospace;';
-  var lobLbl = {'SEA EXPORT':'Sea Exp','SEA IMPORT':'Sea Imp','AIR EXPORT':'Air Exp','AIR IMPORT':'Air Imp','ISOTANK EXPORT':'ISO Exp','ISOTANK IMPORT':'ISO Imp','GENERAL':'General'};
+  var heads = [['Invoice No'],['Invoice Date'],['Due Date'],['House No'],['Sales Person'],['LOB'],['Branch'],['Bill Amount',1],['Outstanding',1],['Status']];
   var table = '<table style="width:100%;border-collapse:separate;border-spacing:0;"><thead><tr>'
-    + ['Invoice No','Date','Sales Person','LOB','Branch','Bill Amount','Outstanding','Credit Days','Overdue Days','Status'].map(function(h, i){
-        return '<th style="'+th+'text-align:'+((i >= 5 && i <= 8) ? 'right' : 'left')+';">'+h+'</th>';
-      }).join('')
+    + heads.map(function(h){ return '<th style="'+th+'text-align:'+(h[1] ? 'right' : 'left')+';">'+h[0]+'</th>'; }).join('')
     + '</tr></thead><tbody>'
-    + rows.map(function(r){
-        return '<tr>'
-          + '<td style="'+td+'font-weight:600;color:#15233B;">'+esc(r.txn || (r.o < 0 ? (r.ty || 'On Account').replace(/\n/g, ' · ') : '–'))+'</td>'
+    + rows.map(function(r, i){
+        var bg = i % 2 ? '#FBFCFE' : '#FFFFFF';
+        var isOa = r.o < 0;
+        return '<tr style="background:'+bg+';">'
+          + '<td style="'+td+'font-weight:700;color:#15233B;">'+esc(r.txn || (isOa ? (r.ty || 'On Account').replace(/\n/g, ' · ') : '–'))+'</td>'
           + '<td style="'+td+'color:#3C5275;">'+esc(r.d || '–')+'</td>'
-          + '<td style="'+td+'color:#3C5275;">'+esc(r.sp || '–')+'</td>'
+          + '<td style="'+td+'color:#3C5275;">'+(isOa ? '–' : esc(_arDueDate(r.d, r.cd) || '–'))+'</td>'
+          + '<td style="'+td+'color:#3C5275;">'+esc(r.h || '–')+'</td>'
+          + '<td style="'+td+'color:#3C5275;">'+esc(_arRepName(r.sp) || '–')+'</td>'
           + '<td style="'+td+'color:#3C5275;">'+esc(lobLbl[r.lob] || r.lob)+'</td>'
           + '<td style="'+td+'color:#3C5275;">'+esc(r.br || r.loc || '–')+'</td>'
-          + '<td style="'+td+num+'">'+(r.bill ? _arFull(r.bill) : '–')+'</td>'
-          + '<td style="'+td+num+'font-weight:700;color:'+(r.o < 0 ? '#946312' : '#15233B')+';">'+_arFull(r.o)+'</td>'
-          + '<td style="'+td+num+'">'+(r.cd !== null && r.cd !== undefined ? r.cd : '–')+'</td>'
-          + '<td style="'+td+num+'color:'+(r.od > 0 ? '#B83A2B' : '#3C5275')+';">'+(r.o > 0 ? r.od : '–')+'</td>'
-          + '<td style="'+td+'font-size:10px;">'+status(r)+'</td></tr>';
+          + '<td style="'+td+num+'color:#3C5275;">'+(r.bill ? _arFull(r.bill) : '–')+'</td>'
+          + '<td style="'+td+num+'font-weight:700;color:'+(isOa ? C.oa.fg : '#15233B')+';">'+_arFull(r.o)+'</td>'
+          + '<td style="'+td+'">'+chip(r)+'</td></tr>';
       }).join('')
-    + '</tbody></table>';
-  function pill(label, v, color){
-    return '<div style="background:#F6F9FD;border:1px solid #E3EAF4;border-radius:10px;padding:7px 11px;">'
-      + '<div style="font-size:8px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#5B7298;">'+label+'</div>'
-      + '<div style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:'+color+';margin-top:2px;">'+_arFull(v)+'</div></div>';
-  }
+    + '</tbody><tfoot><tr>'
+    + '<td colspan="7" style="position:sticky;bottom:0;background:#E4ECF8;padding:9px 10px;font-size:12px;font-weight:800;color:#0D2B5E;border-top:2px solid #C9D6E8;">Total · '+rows.length+' line'+(rows.length === 1 ? '' : 's')+'</td>'
+    + '<td style="position:sticky;bottom:0;background:#E4ECF8;padding:9px 10px;'+num+'font-size:12px;font-weight:800;color:#0D2B5E;border-top:2px solid #C9D6E8;">'+_arFull(bill)+'</td>'
+    + '<td style="position:sticky;bottom:0;background:#E4ECF8;padding:9px 10px;'+num+'font-size:12px;font-weight:800;color:#0D2B5E;border-top:2px solid #C9D6E8;">'+_arFull(agg.total - agg.oa)+'</td>'
+    + '<td style="position:sticky;bottom:0;background:#E4ECF8;border-top:2px solid #C9D6E8;"></td>'
+    + '</tr></tfoot></table>';
+
+  var sub = [esc(dr.zone)];
+  var repList = Object.keys(reps);
+  if (repList.length) sub.push(esc(repList.slice(0, 3).join(', ')) + (repList.length > 3 ? ' +' + (repList.length - 3) : ''));
+  if (creditDays !== undefined) sub.push('Credit ' + esc(creditDays) + ' days');
+  if (arMeta && arMeta.asOn) sub.push('as on ' + esc(arMeta.asOn));
+
   return '<div data-act="arPgDrillClose" style="position:fixed;inset:0;background:rgba(13,43,94,0.28);z-index:900;"></div>'
-    + '<div data-stop="1" style="position:fixed;top:0;right:0;bottom:0;width:min(1040px,94vw);background:#fff;z-index:901;box-shadow:-12px 0 40px rgba(13,43,94,0.18);display:flex;flex-direction:column;">'
-    +   '<div style="padding:16px 20px 12px;border-bottom:1px solid #E3EAF4;">'
+    + '<div data-stop="1" style="position:fixed;top:0;right:0;bottom:0;width:min(1120px,94vw);background:#F7F9FC;z-index:901;box-shadow:-12px 0 40px rgba(13,43,94,0.18);display:flex;flex-direction:column;">'
+    +   '<div style="padding:18px 22px 14px;background:#FFFFFF;border-bottom:1px solid #E3EAF4;">'
     +     '<div style="display:flex;align-items:flex-start;gap:10px;">'
-    +       '<div style="flex:1;"><div style="font-size:14px;font-weight:800;color:#15233B;">'+esc(dr.customer)+'</div>'
-    +       '<div style="font-size:11px;color:#6B82A0;font-weight:600;margin-top:2px;">'+esc(dr.zone)+' · '+agg.inv+' open invoice'+(agg.inv === 1 ? '' : 's')+(arMeta && arMeta.asOn ? ' · as on '+esc(arMeta.asOn) : '')+'</div></div>'
-    +       '<button data-act="arPgDrillClose" style="border:none;background:#F1F5FB;border-radius:999px;width:28px;height:28px;cursor:pointer;color:#3C5275;font-size:15px;line-height:1;">×</button>'
+    +       '<div style="flex:1;min-width:0;">'
+    +         '<div style="font-size:11px;font-weight:700;color:#6488D6;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:3px;">Customer invoices</div>'
+    +         '<div style="font-size:17px;font-weight:800;color:#15233B;">'+esc(dr.customer)+'</div>'
+    +         '<div style="font-size:11.5px;color:#6B82A0;font-weight:600;margin-top:3px;">'+sub.join(' · ')+'</div>'
+    +       '</div>'
+    +       '<button data-act="arPgDrillExport" class="btnq" style="display:flex;align-items:center;gap:6px;border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:7px 13px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
+    +         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Excel</button>'
+    +       '<button data-act="arPgDrillClose" title="Close" style="border:none;background:#F1F5FB;border-radius:999px;width:32px;height:32px;cursor:pointer;color:#3C5275;font-size:16px;line-height:1;">×</button>'
     +     '</div>'
-    +     '<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:12px;">'
-    +       pill('Total Outstanding', agg.total, '#15233B')
-    +       pill('Overdue', agg.b1 + agg.b2 + agg.b3 + agg.b4 + agg.b5, '#B83A2B')
-    +       pill('Not Due', agg.nd, '#15875A')
-    +       pill('On Account', agg.oa, '#946312')
-    +       pill('Net Outstanding', agg.total - agg.oa, '#0D7C6B')
+    +     '<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:14px;">'
+    +       card('Total Outstanding', _arFull(agg.total), '#2C4E82', agg.inv + ' open invoice' + (agg.inv === 1 ? '' : 's'))
+    +       card('Overdue', _arFull(overdue), '#D9534F', agg.total ? Math.round(overdue / agg.total * 100) + '% of outstanding' : '')
+    +       card('Not Due', _arFull(agg.nd), '#15875A', 'within credit days')
+    +       card('On Account', _arFull(agg.oa), '#946312', agg.oa ? 'paid extra, to adjust' : 'nothing extra paid')
+    +       card('Net Outstanding', _arFull(agg.total - agg.oa), '#0D7C6B', 'total − on account')
     +     '</div>'
     +   '</div>'
-    +   '<div style="flex:1;overflow:auto;">'+table+'</div>'
+    +   '<div style="flex:1;min-height:0;padding:12px 16px 16px;display:flex;flex-direction:column;">'
+    +     '<div style="max-height:100%;overflow:auto;background:#FFFFFF;border:1px solid #E3EAF4;border-radius:12px;">'+table+'</div>'
+    +   '</div>'
     + '</div>';
+}
+
+function arExportDrill(){
+  var dr = state.arDrill;
+  if (!dr) return;
+  var data = _arDrillRows().map(function(r){
+    var b = r.o < 0 ? 'On Account' : (_arBucket(r.od) === 'nd' ? 'Not Due' : 'Overdue');
+    return {
+      'Invoice No': r.txn || (r.o < 0 ? String(r.ty || 'On Account').replace(/\n/g, ' ') : ''),
+      'Invoice Date': r.d || '', 'Due Date': r.o < 0 ? '' : _arDueDate(r.d, r.cd),
+      'House No': r.h || '', 'Sales Person': _arRepName(r.sp), 'LOB': r.lob, 'Branch': r.br || r.loc || '',
+      'Bill Amount (INR)': Math.round(r.bill || 0), 'Outstanding (INR)': Math.round(r.o),
+      'Credit Days': r.cd !== null && r.cd !== undefined ? r.cd : '', 'Overdue Days': r.o > 0 ? r.od : '', 'Status': b
+    };
+  });
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Invoices');
+  XLSX.writeFile(wb, ('AR_' + dr.customer).replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '_').slice(0, 60) + (arMeta && arMeta.asOn ? '_' + arMeta.asOn : '') + '.xlsx');
 }
 
 function arExportExcel(){
@@ -6205,6 +6282,8 @@ function arHandleAct(act, el){
     if (c) { state.arDrill = c; render(); }
   } else if (act === 'arPgDrillClose') {
     state.arDrill = null; render();
+  } else if (act === 'arPgDrillExport') {
+    arExportDrill();
   } else if (act === 'arPgExport') {
     arExportExcel();
   } else if (act === 'arPgRetry') {
