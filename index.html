@@ -2840,6 +2840,7 @@ function sidebarNav(){
       +'<div style="height:1px;background:rgba(255,255,255,0.07);margin:7px 6px;"></div>'
       +navItem('Operation Pendency',state.page==='op',IC.clip,'page','op')
       +navItem('Finance Pendency',state.page==='finance',IC.dollar,'page','finance')
+      +navItem('Accounts Receivable',state.page==='ar',IC.clip,'page','ar')
     +'</div>'
     +(canSeeAdmin ? ('<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:12px 8px 5px;text-transform:uppercase;">Admin</div>'
     +'<div style="display:flex;flex-direction:column;gap:1px;">'
@@ -2899,7 +2900,7 @@ function topbar(){
     // ── SINGLE ROW: View / Dates / Currency / Rate / Filters / Refresh → Feedback / Sign Out ──
     +'<div style="display:flex;align-items:center;gap:10px;padding:7px 16px 7px;overflow:visible;background:linear-gradient(180deg,#F9FBFE,#F2F6FB);">'
       // Report View dropdown — hidden on non-data pages
-      +(['usage','teams','admin','org'].indexOf(state.page) >= 0 ? '' : '<div style="position:relative;display:inline-block;flex-shrink:0;">'
+      +(['usage','teams','admin','org','ar'].indexOf(state.page) >= 0 ? '' : '<div style="position:relative;display:inline-block;flex-shrink:0;">'
         +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;transition:box-shadow 0.15s;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';'+(state.viewDropOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+pillShadow+';':'')+'">'
           +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="'+(state.viewDropOpen?'#1D5FCC':'#7C93B8')+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>'
           +state.reportView+' View'
@@ -2919,7 +2920,7 @@ function topbar(){
           : '')
       +'</div>')
       // ── View-specific date selector ──────────────────────────────────────
-      +(['usage','teams','admin','org'].indexOf(state.page) >= 0 ? '' : (function(){
+      +(['usage','teams','admin','org','ar'].indexOf(state.page) >= 0 ? '' : (function(){
         var v = state.reportView;
         var ps = pillShadow;
 
@@ -5785,6 +5786,401 @@ function financePage(){
 }
 
 
+/* ====================== ACCOUNTS RECEIVABLE ====================== */
+// Customer outstanding from the AR sheet (pushed by apps-script/arSync.gs).
+// One row per sheet line with a non-zero Outstanding:
+//   o > 0 → unpaid invoice, bucketed by Overdue Days (≤0 = Not Due)
+//   o < 0 → On Account: the customer paid extra; held against their next bill
+// Total Outstanding = unpaid invoices · Net = Total − On Account.
+var arRows = null, arMeta = null, arDataReady = false, arDataLoading = false, arDataError = '';
+var AR_BUCKETS = [
+  { key:'b1', label:'0-30',   max:30 },
+  { key:'b2', label:'30-60',  max:60 },
+  { key:'b3', label:'60-90',  max:90 },
+  { key:'b4', label:'90-120', max:120 },
+  { key:'b5', label:'120+',   max:Infinity }
+];
+
+function fetchArData(callback, force){
+  arDataLoading = true;
+  fetch('/api/mongo-batch?action=ar' + (force ? '&force=1' : ''))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d || !d.success) throw new Error((d && d.error) || 'AR data failed to load');
+      var D = d.dicts || {};
+      arRows = (d.rows || []).map(function(r){
+        return { c:D.customer[r[0]], sp:D.sp[r[1]], z:D.zone[r[2]], lob:D.lob[r[3]], br:D.branch[r[4]],
+                 loc:D.location[r[5]], ty:D.type[r[6]], txn:r[7], d:r[8], bill:r[9], o:r[10],
+                 od:r[11], cd:r[12], h:r[13], jo:r[14] };
+      });
+      arMeta = { asOn:d.asOn, pushedAt:d.pushedAt };
+      arDataReady = true; arDataError = '';
+    })
+    .catch(function(e){ arDataError = e.message || String(e); arDataReady = false; })
+    .finally(function(){ arDataLoading = false; if (callback) callback(); });
+}
+
+function _arBucket(od){
+  if (!(od > 0)) return 'nd';
+  for (var i = 0; i < AR_BUCKETS.length; i++) if (od <= AR_BUCKETS[i].max) return AR_BUCKETS[i].key;
+  return 'b5';
+}
+
+// Same access as the rest of the dashboard (_getRLSReps): a Sales Rep sees
+// their own customers, a Zonal Manager their zones, a Regional Manager the
+// zones of their regions; Admin / HR (and managers with no zone/region set)
+// see everything. Returns null when unrestricted.
+function _arScope(){
+  if (!currentUser) return null;
+  var role = (currentUser.role || '').toLowerCase().trim();
+  if (role === 'sales rep') return { reps: [normalizeName(_myRepName())] };
+  if (role === 'zonal manager') {
+    var zs = _userZones(currentUser);
+    return zs.length ? { zones: zs } : null;
+  }
+  if (role === 'regional manager') {
+    var regions = (currentUser.region || '').split(',').map(function(s){ return s.trim().toLowerCase(); }).filter(Boolean);
+    if (!regions.length) return null;
+    var zones = Object.keys(window._zoneRegionMap || {}).filter(function(z){
+      return regions.indexOf((window._zoneRegionMap[z] || '').toLowerCase()) > -1;
+    });
+    if (regions.indexOf('cross sales') > -1) zones.push('Cross Sales');
+    return zones.length ? { zones: zones } : null;
+  }
+  return null;
+}
+
+// Rows the user may see, after the Filters panel (zone / region / rep / LOB)
+function _arVisibleRows(){
+  if (!arRows) return [];
+  var scope = _arScope();
+  var fz = state.filterZones || [], fr = state.filterRegions || [];
+  var frep = (state.filterReps || []).map(normalizeName);
+  var flob = state.filterLobs || [];
+  var regionMap = window._zoneRegionMap || {};
+  return arRows.filter(function(r){
+    if (scope) {
+      if (scope.reps && scope.reps.indexOf(normalizeName(r.sp)) === -1) return false;
+      if (scope.zones && scope.zones.indexOf(r.z) === -1) return false;
+    }
+    if (fz.length && fz.indexOf(r.z) === -1) return false;
+    if (!fz.length && fr.length && fr.indexOf(r.z === 'Cross Sales' ? 'Cross Sales' : (regionMap[r.z] || '')) === -1) return false;
+    if (frep.length && frep.indexOf(normalizeName(r.sp)) === -1) return false;
+    if (!_lobPassesFilter(r.lob, flob)) return false;
+    return true;
+  });
+}
+
+function _arEmptyAgg(){ return { total:0, nd:0, b1:0, b2:0, b3:0, b4:0, b5:0, oa:0, inv:0 }; }
+function _arAdd(agg, r){
+  if (r.o > 0) { agg.total += r.o; agg[_arBucket(r.od)] += r.o; agg.inv++; }
+  else agg.oa += -r.o;
+}
+
+// Zone → customers, honouring the customer search box
+function _arModel(){
+  var q = (state.arSearch || '').toLowerCase().trim();
+  var rows = _arVisibleRows();
+  if (q) rows = rows.filter(function(r){ return (r.c || '').toLowerCase().indexOf(q) > -1; });
+  var grand = _arEmptyAgg(), zones = {}, custSet = {};
+  rows.forEach(function(r){
+    _arAdd(grand, r);
+    custSet[r.c] = 1;
+    var Z = zones[r.z] || (zones[r.z] = { name:r.z, agg:_arEmptyAgg(), cust:{} });
+    _arAdd(Z.agg, r);
+    var C = Z.cust[r.c] || (Z.cust[r.c] = { name:r.c, agg:_arEmptyAgg(), reps:{}, cd:{} });
+    _arAdd(C.agg, r);
+    if (r.sp) C.reps[r.sp] = 1;
+    if (r.o > 0 && r.cd !== null && r.cd !== undefined) C.cd[r.cd] = (C.cd[r.cd] || 0) + 1;
+  });
+  var sortKey = (state.arSort && state.arSort.key) || 'total', dir = (state.arSort && state.arSort.dir) || -1;
+  function val(x){ return sortKey === 'name' ? x.name.toLowerCase() : sortKey === 'net' ? x.agg.total - x.agg.oa : x.agg[sortKey]; }
+  var zoneList = sortZones(Object.keys(zones)).map(function(zn){
+    var Z = zones[zn];
+    Z.custList = Object.keys(Z.cust).map(function(k){
+      var C = Z.cust[k];
+      // most common credit days across the customer's open invoices
+      var best = null, bestN = 0;
+      Object.keys(C.cd).forEach(function(cd){ if (C.cd[cd] > bestN) { bestN = C.cd[cd]; best = cd; } });
+      C.creditDays = best;
+      C.repList = Object.keys(C.reps).sort();
+      return C;
+    }).sort(function(a, b){
+      var va = val(a), vb = val(b);
+      return va < vb ? -dir : va > vb ? dir : 0;
+    });
+    return Z;
+  });
+  return { grand:grand, zones:zoneList, customers:Object.keys(custSet).length, rowCount:rows.length };
+}
+
+function _arFull(v){
+  var val = state.currency === 'USD' ? v / state.rate : v;
+  var sym = state.currency === 'USD' ? '$' : '₹';
+  var s = Math.abs(val).toLocaleString(state.currency === 'USD' ? 'en-US' : 'en-IN', { maximumFractionDigits:0 });
+  return (val < 0 ? '-' : '') + sym + s;
+}
+
+function arPage(){
+  if (!arDataReady) {
+    if (!arDataLoading && !arDataError) fetchArData(function(){ render(); });
+    if (arDataError) {
+      return '<div style="padding:40px 24px;text-align:center;color:#B83A2B;font-size:12px;font-weight:600;">Couldn’t load Accounts Receivable: '+esc(arDataError)
+        +'<div style="margin-top:12px;"><button data-act="arPgRetry" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:6px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">Try again</button></div></div>';
+    }
+    return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'
+      +'<div style="width:18px;height:18px;border:2.5px solid #1D5FCC;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'
+      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading accounts receivable…</div>'
+      +'</div>';
+  }
+  if (!arRows.length) {
+    return '<div style="padding:60px 24px;text-align:center;color:#6B82A0;font-size:12.5px;font-weight:600;">No receivable data has been pushed yet.</div>';
+  }
+
+  var M = _arModel();
+  window._arLastModel = M;
+  var G = M.grand;
+  var overdue = G.b1 + G.b2 + G.b3 + G.b4 + G.b5;
+
+  function card(label, value, tint, sub){
+    return '<div class="kpi-card" style="position:relative;overflow:hidden;background:rgba(255,255,255,0.66);border:1px solid #E3EAF4;border-radius:16px;padding:12px 14px 11px;">'
+      +'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+tint+';"></div>'
+      +'<div style="font-size:8px;font-weight:800;letter-spacing:0.09em;text-transform:uppercase;color:#5B7298;margin-bottom:6px;">'+label+'</div>'
+      +'<div style="font-family:\'DM Mono\',monospace;font-size:18px;font-weight:600;color:#15233B;">'+value+'</div>'
+      +(sub ? '<div style="font-size:10px;color:#8A9AB5;margin-top:3px;font-weight:600;">'+sub+'</div>' : '')
+      +'</div>';
+  }
+  var kpis = '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:12px;">'
+    + card('Total Outstanding', fmtCur(G.total), '#2C4E82', G.inv.toLocaleString('en-IN')+' invoices')
+    + card('Overdue', fmtCur(overdue), '#D9534F', G.total ? Math.round(overdue / G.total * 100)+'% of outstanding' : '')
+    + card('Not Due', fmtCur(G.nd), '#15875A', 'within credit days')
+    + card('On Account', fmtCur(G.oa), '#946312', 'paid extra, not yet adjusted')
+    + card('Net Outstanding', fmtCur(G.total - G.oa), '#0D7C6B', 'total − on account')
+    + card('Customers', M.customers.toLocaleString('en-IN'), '#6488D6', M.zones.length+' zones')
+    + '</div>';
+
+  var allOpen = M.zones.length > 0 && M.zones.every(function(Z){ return _arZoneIsOpen(Z.name, M); });
+  var header = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">'
+    +'<div style="font-size:13px;font-weight:700;color:#15233B;">Accounts Receivable</div>'
+    +(arMeta && arMeta.asOn ? '<span style="font-size:11px;font-weight:700;color:#2C4E82;background:#EEF3FC;border:1px solid #D5E0F5;border-radius:999px;padding:3px 10px;">As on '+esc(arMeta.asOn)+'</span>' : '')
+    +'<div style="flex:1;"></div>'
+    +'<div style="display:flex;align-items:center;gap:6px;background:#fff;border:1.5px solid #D8E1F0;border-radius:999px;padding:6px 12px;width:240px;">'
+      +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A9AB5" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>'
+      +'<input type="text" id="ar-search" placeholder="Search customer…" value="'+esc(state.arSearch || '')+'" style="border:none;background:transparent;outline:none;font-size:12px;color:#15233B;width:100%;"/>'
+    +'</div>'
+    +'<button data-act="arPgExpandAll" data-val="'+(allOpen ? '0' : '1')+'" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:7px 13px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'+(allOpen ? 'Collapse all' : 'Expand all')+'</button>'
+    +'<button data-act="arPgExport" class="btnq" style="display:flex;align-items:center;gap:6px;border:none;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border-radius:999px;padding:7px 14px;font-size:11.5px;font-weight:700;color:#fff;cursor:pointer;">'
+      +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download Excel</button>'
+    +'</div>';
+
+  var cols = [
+    { key:'name',  label:'Customer', left:true },
+    { key:'total', label:'Total Outstanding' },
+    { key:'b1', label:'0-30', group:true }, { key:'b2', label:'30-60', group:true }, { key:'b3', label:'60-90', group:true },
+    { key:'b4', label:'90-120', group:true }, { key:'b5', label:'120+', group:true },
+    { key:'nd',  label:'Not Due' },
+    { key:'oa',  label:'On Account' },
+    { key:'net', label:'Net Outstanding' },
+    { key:'cd',  label:'Credit Days', noSort:true }
+  ];
+  var th = 'position:sticky;z-index:2;background:#F1F5FB;color:#3C5275;font-size:10px;font-weight:800;letter-spacing:0.03em;padding:7px 10px;border-bottom:1px solid #D9E3EE;white-space:nowrap;';
+  var sk = (state.arSort && state.arSort.key) || 'total', sd = (state.arSort && state.arSort.dir) || -1;
+  var head = '<thead><tr>'
+    + '<th colspan="2" style="'+th+'top:0;"></th>'
+    + '<th colspan="5" style="'+th+'top:0;text-align:center;color:#B83A2B;border-bottom:1px solid #F0C9C3;">Ageing (overdue days)</th>'
+    + '<th colspan="4" style="'+th+'top:0;"></th></tr><tr>'
+    + cols.map(function(c){
+        var arrow = (!c.noSort && sk === c.key) ? (sd < 0 ? ' ▾' : ' ▴') : '';
+        return '<th '+(c.noSort ? '' : 'data-act="arPgSort" data-val="'+c.key+'" ')+'style="'+th+'top:29px;text-align:'+(c.left ? 'left' : 'right')+';'+(c.noSort ? '' : 'cursor:pointer;')+(c.group ? 'color:#B83A2B;' : '')+'">'+c.label+arrow+'</th>';
+      }).join('')
+    + '</tr></thead>';
+
+  var td = 'padding:6px 10px;border-bottom:1px solid #EEF2F8;text-align:right;font-family:\'DM Mono\',monospace;font-size:11.5px;white-space:nowrap;';
+  function amt(v, color){ return v ? '<span style="color:'+(color || '#15233B')+';">'+fmtCur(v)+'</span>' : '<span style="color:#C7CEDA;">–</span>'; }
+  function cells(a, bold){
+    var w = bold ? 'font-weight:700;' : '';
+    return '<td style="'+td+w+'">'+amt(a.total)+'</td>'
+      + AR_BUCKETS.map(function(b){ return '<td style="'+td+w+'">'+amt(a[b.key], '#B83A2B')+'</td>'; }).join('')
+      + '<td style="'+td+w+'">'+amt(a.nd, '#15875A')+'</td>'
+      + '<td style="'+td+w+'">'+amt(a.oa, '#946312')+'</td>'
+      + '<td style="'+td+w+'">'+amt(a.total - a.oa, (a.total - a.oa) < 0 ? '#946312' : '#0D2B5E')+'</td>';
+  }
+
+  var custIndex = [];
+  var body = '<tbody>'
+    + '<tr style="background:#E8EEF8;"><td style="'+td+'text-align:left;font-family:Inter,sans-serif;font-weight:800;color:#0D2B5E;font-size:12px;">Grand Total <span style="font-weight:600;color:#6B82A0;font-size:10.5px;">· '+M.customers.toLocaleString('en-IN')+' customers</span></td>'
+    + cells(G, true) + '<td style="'+td+'"></td></tr>';
+  M.zones.forEach(function(Z){
+    var open = _arZoneIsOpen(Z.name, M);
+    body += '<tr data-act="arPgZone" data-val="'+esc(Z.name)+'" style="background:#F6F9FD;cursor:pointer;">'
+      + '<td style="'+td+'text-align:left;font-family:Inter,sans-serif;font-weight:700;color:#173E76;font-size:12px;">'
+      + '<span style="display:inline-block;width:12px;color:#6488D6;">'+(open ? '▾' : '▸')+'</span>'+esc(Z.name)
+      + ' <span style="font-weight:600;color:#8A9AB5;font-size:10.5px;">· '+Z.custList.length+'</span></td>'
+      + cells(Z.agg, true) + '<td style="'+td+'"></td></tr>';
+    if (!open) return;
+    Z.custList.forEach(function(C){
+      var i = custIndex.length; custIndex.push({ zone:Z.name, customer:C.name });
+      body += '<tr data-act="arPgCust" data-val="'+i+'" class="drill-row" style="cursor:pointer;">'
+        + '<td style="'+td+'text-align:left;font-family:Inter,sans-serif;padding-left:28px;max-width:340px;white-space:normal;">'
+        +   '<div style="font-size:11.5px;font-weight:600;color:#15233B;">'+esc(C.name)+'</div>'
+        +   (C.repList.length ? '<div title="'+esc(C.repList.join(', '))+'" style="font-size:9.5px;color:#8A9AB5;font-weight:600;margin-top:1px;">'+esc(C.repList.slice(0, 2).join(', '))+(C.repList.length > 2 ? ' +'+(C.repList.length - 2)+' more' : '')+'</div>' : '')
+        + '</td>'
+        + cells(C.agg, false)
+        + '<td style="'+td+'color:#3C5275;">'+(C.creditDays !== null ? esc(C.creditDays) : '–')+'</td></tr>';
+    });
+  });
+  body += '</tbody>';
+  window._arCustIndex = custIndex;
+
+  var table = M.rowCount
+    ? '<div style="background:#fff;border:1px solid #E3EAF4;border-radius:14px;overflow:auto;max-height:calc(100vh - 290px);">'
+      + '<table style="width:100%;border-collapse:separate;border-spacing:0;">'+head+body+'</table></div>'
+    : '<div style="padding:40px;text-align:center;color:#8A9AB5;font-size:12px;font-weight:600;background:#fff;border:1px solid #E3EAF4;border-radius:14px;">No outstanding for the current filters'+(state.arSearch ? ' and search' : '')+'.</div>';
+
+  return '<div style="padding:20px 24px 32px;">' + header + kpis + table + '</div>';
+}
+
+// Zones start collapsed; a single visible zone (e.g. a zonal manager) starts open
+function _arZoneIsOpen(zone, M){
+  var o = state.arZoneOpen || {};
+  if (o.hasOwnProperty(zone)) return o[zone];
+  return M && M.zones.length === 1;
+}
+
+function arDrillDrawer(){
+  var dr = state.arDrill;
+  if (!dr) return '';
+  var rows = _arVisibleRows().filter(function(r){ return r.c === dr.customer && r.z === dr.zone; })
+    .sort(function(a, b){ return (b.o > 0) - (a.o > 0) || (b.od || 0) - (a.od || 0); });
+  var agg = _arEmptyAgg(); rows.forEach(function(r){ _arAdd(agg, r); });
+  function status(r){
+    if (r.o < 0) return '<span style="color:#946312;background:#FBF1DA;border-radius:999px;padding:2px 8px;font-weight:700;">On Account</span>';
+    var b = _arBucket(r.od);
+    if (b === 'nd') return '<span style="color:#15875A;background:#E3F5EA;border-radius:999px;padding:2px 8px;font-weight:700;">Not Due</span>';
+    var lbl = AR_BUCKETS.filter(function(x){ return x.key === b; })[0].label;
+    return '<span style="color:#B83A2B;background:#FBDED9;border-radius:999px;padding:2px 8px;font-weight:700;">Overdue '+lbl+'</span>';
+  }
+  var th = 'position:sticky;top:0;background:#F1F5FB;color:#3C5275;font-size:10px;font-weight:800;padding:7px 9px;border-bottom:1px solid #D9E3EE;white-space:nowrap;';
+  var td = 'padding:6px 9px;border-bottom:1px solid #EEF2F8;font-size:11px;white-space:nowrap;';
+  var num = 'text-align:right;font-family:\'DM Mono\',monospace;';
+  var lobLbl = {'SEA EXPORT':'Sea Exp','SEA IMPORT':'Sea Imp','AIR EXPORT':'Air Exp','AIR IMPORT':'Air Imp','ISOTANK EXPORT':'ISO Exp','ISOTANK IMPORT':'ISO Imp','GENERAL':'General'};
+  var table = '<table style="width:100%;border-collapse:separate;border-spacing:0;"><thead><tr>'
+    + ['Invoice No','Date','Sales Person','LOB','Branch','Bill Amount','Outstanding','Credit Days','Overdue Days','Status'].map(function(h, i){
+        return '<th style="'+th+'text-align:'+((i >= 5 && i <= 8) ? 'right' : 'left')+';">'+h+'</th>';
+      }).join('')
+    + '</tr></thead><tbody>'
+    + rows.map(function(r){
+        return '<tr>'
+          + '<td style="'+td+'font-weight:600;color:#15233B;">'+esc(r.txn || (r.o < 0 ? (r.ty || 'On Account').replace(/\n/g, ' · ') : '–'))+'</td>'
+          + '<td style="'+td+'color:#3C5275;">'+esc(r.d || '–')+'</td>'
+          + '<td style="'+td+'color:#3C5275;">'+esc(r.sp || '–')+'</td>'
+          + '<td style="'+td+'color:#3C5275;">'+esc(lobLbl[r.lob] || r.lob)+'</td>'
+          + '<td style="'+td+'color:#3C5275;">'+esc(r.br || r.loc || '–')+'</td>'
+          + '<td style="'+td+num+'">'+(r.bill ? _arFull(r.bill) : '–')+'</td>'
+          + '<td style="'+td+num+'font-weight:700;color:'+(r.o < 0 ? '#946312' : '#15233B')+';">'+_arFull(r.o)+'</td>'
+          + '<td style="'+td+num+'">'+(r.cd !== null && r.cd !== undefined ? r.cd : '–')+'</td>'
+          + '<td style="'+td+num+'color:'+(r.od > 0 ? '#B83A2B' : '#3C5275')+';">'+(r.o > 0 ? r.od : '–')+'</td>'
+          + '<td style="'+td+'font-size:10px;">'+status(r)+'</td></tr>';
+      }).join('')
+    + '</tbody></table>';
+  function pill(label, v, color){
+    return '<div style="background:#F6F9FD;border:1px solid #E3EAF4;border-radius:10px;padding:7px 11px;">'
+      + '<div style="font-size:8px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#5B7298;">'+label+'</div>'
+      + '<div style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:'+color+';margin-top:2px;">'+_arFull(v)+'</div></div>';
+  }
+  return '<div data-act="arPgDrillClose" style="position:fixed;inset:0;background:rgba(13,43,94,0.28);z-index:900;"></div>'
+    + '<div data-stop="1" style="position:fixed;top:0;right:0;bottom:0;width:min(1040px,94vw);background:#fff;z-index:901;box-shadow:-12px 0 40px rgba(13,43,94,0.18);display:flex;flex-direction:column;">'
+    +   '<div style="padding:16px 20px 12px;border-bottom:1px solid #E3EAF4;">'
+    +     '<div style="display:flex;align-items:flex-start;gap:10px;">'
+    +       '<div style="flex:1;"><div style="font-size:14px;font-weight:800;color:#15233B;">'+esc(dr.customer)+'</div>'
+    +       '<div style="font-size:11px;color:#6B82A0;font-weight:600;margin-top:2px;">'+esc(dr.zone)+' · '+agg.inv+' open invoice'+(agg.inv === 1 ? '' : 's')+(arMeta && arMeta.asOn ? ' · as on '+esc(arMeta.asOn) : '')+'</div></div>'
+    +       '<button data-act="arPgDrillClose" style="border:none;background:#F1F5FB;border-radius:999px;width:28px;height:28px;cursor:pointer;color:#3C5275;font-size:15px;line-height:1;">×</button>'
+    +     '</div>'
+    +     '<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:12px;">'
+    +       pill('Total Outstanding', agg.total, '#15233B')
+    +       pill('Overdue', agg.b1 + agg.b2 + agg.b3 + agg.b4 + agg.b5, '#B83A2B')
+    +       pill('Not Due', agg.nd, '#15875A')
+    +       pill('On Account', agg.oa, '#946312')
+    +       pill('Net Outstanding', agg.total - agg.oa, '#0D7C6B')
+    +     '</div>'
+    +   '</div>'
+    +   '<div style="flex:1;overflow:auto;">'+table+'</div>'
+    + '</div>';
+}
+
+function arExportExcel(){
+  var M = window._arLastModel || _arModel();
+  var data = [];
+  M.zones.forEach(function(Z){
+    Z.custList.forEach(function(C){
+      var a = C.agg;
+      data.push({
+        'Zone': Z.name, 'Customer': C.name, 'Sales Person': C.repList.join(', '),
+        'Total Outstanding (INR)': Math.round(a.total),
+        '0-30': Math.round(a.b1), '30-60': Math.round(a.b2), '60-90': Math.round(a.b3), '90-120': Math.round(a.b4), '120+': Math.round(a.b5),
+        'Not Due': Math.round(a.nd), 'On Account': Math.round(a.oa), 'Net Outstanding': Math.round(a.total - a.oa),
+        'Credit Days': C.creditDays !== null ? Number(C.creditDays) : ''
+      });
+    });
+  });
+  var ws = XLSX.utils.json_to_sheet(data);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Accounts Receivable');
+  XLSX.writeFile(wb, 'Accounts_Receivable' + (arMeta && arMeta.asOn ? '_' + arMeta.asOn : '') + '.xlsx');
+}
+
+// Re-render only the page body (search typing keeps the input focused)
+function _arRerenderMain(keepSearchFocus){
+  var mainEl = document.getElementById('main-slot');
+  if (!mainEl || state.page !== 'ar') return;
+  var inner = mainEl.querySelector('div[style*="overflow:auto"]');
+  var innerTop = inner ? inner.scrollTop : 0;
+  mainEl.innerHTML = arPage();
+  var inner2 = mainEl.querySelector('div[style*="overflow:auto"]');
+  if (inner2 && innerTop) inner2.scrollTop = innerTop;
+  if (keepSearchFocus) {
+    var inp = document.getElementById('ar-search');
+    if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  }
+}
+var _arSearchTimer = null;
+document.addEventListener('input', function(ev){
+  if (!ev.target || ev.target.id !== 'ar-search') return;
+  state.arSearch = ev.target.value;
+  clearTimeout(_arSearchTimer);
+  _arSearchTimer = setTimeout(function(){ _arRerenderMain(true); }, 250);
+}, true);
+
+// Click actions for this page (called from the main click handler)
+function arHandleAct(act, el){
+  var v = el.getAttribute('data-val');
+  if (act === 'arPgZone') {
+    if (!state.arZoneOpen) state.arZoneOpen = {};
+    state.arZoneOpen[v] = !_arZoneIsOpen(v, window._arLastModel);
+    _arRerenderMain(false);
+  } else if (act === 'arPgExpandAll') {
+    state.arZoneOpen = {};
+    (window._arLastModel ? window._arLastModel.zones : []).forEach(function(Z){ state.arZoneOpen[Z.name] = v === '1'; });
+    _arRerenderMain(false);
+  } else if (act === 'arPgSort') {
+    var cur = state.arSort || { key:'total', dir:-1 };
+    state.arSort = cur.key === v ? { key:v, dir:-cur.dir } : { key:v, dir:(v === 'name' ? 1 : -1) };
+    _arRerenderMain(false);
+  } else if (act === 'arPgCust') {
+    var c = (window._arCustIndex || [])[+v];
+    if (c) { state.arDrill = c; render(); }
+  } else if (act === 'arPgDrillClose') {
+    state.arDrill = null; render();
+  } else if (act === 'arPgExport') {
+    arExportExcel();
+  } else if (act === 'arPgRetry') {
+    arDataError = ''; render();
+  } else {
+    return false;
+  }
+  return true;
+}
+
 /* ====================== OPERATION PENDENCY ====================== */
 function opPage(){
   if (!opDataReady) {
@@ -7972,7 +8368,7 @@ function render(){
   computeFilteredRepsRaw();
   buildZoneAggregates(); // pre-compute once per render, used by grandEntity/zoneEntity
   // Skip model() on insight pages — they don't use it, saves CPU
-  var M = (state.page==='customers'||state.page==='agents'||state.page==='tradelane'||state.page==='usage'||state.page==='teams'||state.page==='admin'||state.page==='finance'||state.page==='op') ? null : model();
+  var M = (state.page==='customers'||state.page==='agents'||state.page==='tradelane'||state.page==='usage'||state.page==='teams'||state.page==='admin'||state.page==='finance'||state.page==='op'||state.page==='ar') ? null : model();
   var app=document.getElementById('app');
   if(!app.querySelector('aside')){
     app.innerHTML = sidebar()
@@ -8005,10 +8401,11 @@ function render(){
     : state.page==='admin' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1) ? adminPage() : (function(){ state.page='sales'; return salesPage(); })())
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
+    : state.page==='ar' ? arPage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
   if(state.page==='teams'){ mainEl.style.overflow='hidden'; mainEl.style.padding='0'; mainEl.style.display='flex'; mainEl.style.flexDirection='column'; } else { mainEl.style.overflow=''; mainEl.style.padding=''; mainEl.style.display=''; mainEl.style.flexDirection=''; }
   console.log('[PERF] mainEl.innerHTML took', (performance.now()-_tHtml).toFixed(1)+'ms');
-  document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'');
+  document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'')+(state.arDrill&&state.page==='ar'?arDrillDrawer():'');
   if(scrollTop) mainEl.scrollTop=scrollTop;
   var _newInner=mainEl.querySelector('div[style*="overflow-y:auto"]');
   if(_newInner) _newInner.setAttribute('data-render-key',_curRenderKey);
@@ -8030,6 +8427,7 @@ function renderKeepTopbar(){
     : state.page==='teams' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?teamsPage():(function(){state.page='sales';return salesPage();}()))
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
+    : state.page==='ar' ? arPage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
   var drawerEl=document.getElementById('drawer-slot');
   if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal();
@@ -9279,9 +9677,11 @@ document.addEventListener('click', function(ev){
   }
 
   var act=el.getAttribute('data-act');
+  if(act && act.indexOf('arPg')===0 && arHandleAct(act, el)){ ev.stopPropagation(); ev.preventDefault(); return; }
   if(act==='page'){
     ev.stopPropagation(); ev.preventDefault();
     state.page=el.getAttribute('data-val');
+    state.arDrill = null;
     // Clear admin search when navigating away
     if(state.adminSearch) { state.adminSearch = ''; }
     render();
@@ -9398,6 +9798,7 @@ document.addEventListener('click', function(ev){
     pending++; reloadAllDrillRows(done);
     pending++; fetchFinanceData(done, true);
     pending++; fetchOpData(done, true);
+    if (arRows || state.page==='ar') { pending++; arDataReady = false; fetchArData(done, true); }
     pending++; fetchOrgData(done, true);
     pending++; fetchUsageData(done, true);
   }
