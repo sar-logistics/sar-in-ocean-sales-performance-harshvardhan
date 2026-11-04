@@ -92,7 +92,7 @@ function pushArToDashboard() {
     Object.keys(col).forEach(function (k) {
       if (col[k] === -1) { doc[k] = null; return; }
       const v = row[col[k]];
-      if (AR_NUMERIC.indexOf(k) > -1) { doc[k] = (v === '' || v === null) ? null : arNum_(v); return; }
+      if (AR_NUMERIC.indexOf(k) > -1) { doc[k] = String(v == null ? '' : v).trim() === '' ? null : arNum_(v); return; }
       if (v instanceof Date) { doc[k] = isNaN(v.getTime()) ? '' : Utilities.formatDate(v, tz, 'dd-MMM-yyyy'); return; }
       doc[k] = String(v == null ? '' : v).replace(/\s*\n\s*/g, '\n').trim();
     });
@@ -145,16 +145,33 @@ function arAsOnDate_(src) {
 
 function arPost_(body) {
   const props = PropertiesService.getScriptProperties();
-  const url = props.getProperty('AR_API_URL') || AR_DEFAULT_API;
+  let url = props.getProperty('AR_API_URL') || AR_DEFAULT_API;
   const headers = {};
   const bypass = props.getProperty('AR_BYPASS');
-  if (bypass) headers['x-vercel-protection-bypass'] = bypass;
+  if (bypass) {
+    // Vercel accepts the bypass secret as a header or a query parameter; send both
+    headers['x-vercel-protection-bypass'] = bypass;
+    url += (url.indexOf('?') > -1 ? '&' : '?') + 'x-vercel-protection-bypass=' + encodeURIComponent(bypass);
+  }
   const resp = UrlFetchApp.fetch(url, {
     method: 'post', contentType: 'application/json', headers: headers,
     payload: JSON.stringify(body), muteHttpExceptions: true,
   });
   const code = resp.getResponseCode();
   const text = resp.getContentText();
-  if (code !== 200) throw new Error('arPush failed (' + code + '): ' + text.slice(0, 300));
+  if (code !== 200) {
+    // never echo the bypass secret back into the log
+    const safe = text.replace(/x-vercel-protection-bypass(=|%3D)[^&"\s]*/gi, 'x-vercel-protection-bypass=***');
+    throw new Error('arPush failed (' + code + '): ' + safe.slice(0, 300));
+  }
   return JSON.parse(text);
+}
+
+// Prints which script properties are set and how long each value is (never the value itself)
+function arCheckProps() {
+  const p = PropertiesService.getScriptProperties().getProperties();
+  Object.keys(p).forEach(function (k) {
+    const v = p[k];
+    Logger.log(JSON.stringify(k) + ' length ' + v.length + (v !== v.trim() ? ' (has spaces at the ends)' : '') + (/\u2022|\*/.test(v) ? ' (looks masked)' : ''));
+  });
 }
