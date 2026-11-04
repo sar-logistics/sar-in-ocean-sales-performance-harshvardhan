@@ -5802,13 +5802,13 @@ var AR_BUCKETS = [
 ];
 // fg = text / bar colour, bg = header tint; overdue buckets go amber → dark red
 var AR_COLORS = {
-  nd: { fg:'#15875A', bg:'#E6F5EC' },
-  b1: { fg:'#C27A00', bg:'#FFF4DE' },
-  b2: { fg:'#D3601C', bg:'#FDEBDD' },
-  b3: { fg:'#CC4527', bg:'#FCE3DC' },
-  b4: { fg:'#B3302B', bg:'#FADBD7' },
-  b5: { fg:'#8A1C1C', bg:'#F4CFCD' },
-  oa: { fg:'#946312', bg:'#FBF1DA' },
+  nd: { fg:'#0F7048', bg:'#E6F5EC' },
+  b1: { fg:'#9A5A00', bg:'#FFF4DE' },
+  b2: { fg:'#A8470F', bg:'#FDEBDD' },
+  b3: { fg:'#A3331C', bg:'#FCE3DC' },
+  b4: { fg:'#93231F', bg:'#FADBD7' },
+  b5: { fg:'#741515', bg:'#F4CFCD' },
+  oa: { fg:'#7A510E', bg:'#FBF1DA' },
   net:{ fg:'#0D2B5E', bg:'#E4ECF8' }
 };
 
@@ -5914,7 +5914,7 @@ function _arModel(){
       var best = null, bestN = 0;
       Object.keys(C.cd).forEach(function(cd){ if (C.cd[cd] > bestN) { bestN = C.cd[cd]; best = cd; } });
       C.creditDays = best;
-      C.repList = Object.keys(C.reps).sort();
+      C.repList = Object.keys(C.reps).map(_arRepName).filter(function(n, i, all){ return n && all.indexOf(n) === i; }).sort();
       return C;
     }).sort(function(a, b){
       var va = val(a), vb = val(b);
@@ -5964,6 +5964,10 @@ function arPage(){
     + '.arpg-zone td{background:#F3F7FD;}'
     + '.arpg-zone:hover td{background:#E8EFFB;}'
     + '.arpg-th-sort:hover{color:#173E76 !important;}'
+    + '#ar-table-scroll th,#ar-table-scroll td{border-right:1px solid #DDE5F0;}'
+    + '#ar-table-scroll th:last-child,#ar-table-scroll td:last-child{border-right:none;}'
+    + '#ar-table-scroll tbody td{border-bottom:1px solid #DDE5F0 !important;}'
+    + '#ar-table-scroll tbody tr.arpg-zone td{border-top:1px solid #C9D6E8;border-bottom:1px solid #C9D6E8 !important;}'
     + '</style>';
 
   // Same KPI card as the other pages
@@ -6063,9 +6067,25 @@ function arPage(){
 }
 
 // Amount cells shared by the Grand Total, zone and customer rows
+// Table amount in one consistent format; under 1,000 shows whole units (no paise / cents)
+function _arAmt(v){
+  var usd = state.currency === 'USD';
+  var val = usd ? v / state.rate : v, a = Math.abs(val), n, u = '';
+  if (usd) {
+    if (a >= 1e6) { n = (a / 1e6).toFixed(2); u = 'Mn'; }
+    else if (a >= 1e3) { n = (a / 1e3).toFixed(1); u = 'k'; }
+    else n = Math.round(a).toLocaleString('en-US');
+  } else {
+    if (a >= 1e7) { n = (a / 1e7).toFixed(2); u = 'Cr'; }
+    else if (a >= 1e5) { n = (a / 1e5).toFixed(2); u = 'L'; }
+    else if (a >= 1e3) { n = (a / 1e3).toFixed(1); u = 'k'; }
+    else n = Math.round(a).toLocaleString('en-IN');
+  }
+  return (val < 0 ? '-' : '') + (usd ? '$' : '\u20B9') + n + (u ? (u === 'k' ? '' : ' ') + u : '');
+}
 function _arCells(a, tag, style){
   var C = AR_COLORS;
-  function amt(v, color){ return v ? '<span style="color:'+(color || '#15233B')+';">'+fmtCur(v)+'</span>' : '<span style="color:#CDD5E1;">–</span>'; }
+  function amt(v, color){ return v ? '<span style="color:'+(color || '#15233B')+';">'+_arAmt(v)+'</span>' : '<span style="color:#D5DCE6;">–</span>'; }
   var net = a.total - a.oa;
   return '<'+tag+' style="'+style+'text-align:right;">'+amt(a.total)+'</'+tag+'>'
     + AR_BUCKETS.map(function(b){ return '<'+tag+' style="'+style+'text-align:right;">'+amt(a[b.key], C[b.key].fg)+'</'+tag+'>'; }).join('')
