@@ -5800,6 +5800,17 @@ var AR_BUCKETS = [
   { key:'b4', label:'90-120', max:120 },
   { key:'b5', label:'120+',   max:Infinity }
 ];
+// fg = text / bar colour, bg = header tint; overdue buckets go amber → dark red
+var AR_COLORS = {
+  nd: { fg:'#15875A', bg:'#E6F5EC' },
+  b1: { fg:'#C27A00', bg:'#FFF4DE' },
+  b2: { fg:'#D3601C', bg:'#FDEBDD' },
+  b3: { fg:'#CC4527', bg:'#FCE3DC' },
+  b4: { fg:'#B3302B', bg:'#FADBD7' },
+  b5: { fg:'#8A1C1C', bg:'#F4CFCD' },
+  oa: { fg:'#946312', bg:'#FBF1DA' },
+  net:{ fg:'#0D2B5E', bg:'#E4ECF8' }
+};
 
 function fetchArData(callback, force){
   arDataLoading = true;
@@ -5941,7 +5952,21 @@ function arPage(){
   window._arLastModel = M;
   var G = M.grand;
   var overdue = G.b1 + G.b2 + G.b3 + G.b4 + G.b5;
+  var C = AR_COLORS;
 
+  var css = '<style>'
+    + '.arpg-row td{transition:background .12s;background:#FFFFFF;}'
+    // Customer column stays put when the table scrolls sideways on smaller screens
+    + '#ar-table-scroll tbody td:first-child{position:sticky;left:0;z-index:1;}'
+    + '#ar-table-scroll thead tr:nth-child(n+2) th:first-child{left:0;z-index:4;}'
+    + '.arpg-row:nth-child(even) td{background:#FBFCFE;}'
+    + '.arpg-row:hover td{background:#EEF4FF !important;}'
+    + '.arpg-zone td{background:#F3F7FD;}'
+    + '.arpg-zone:hover td{background:#E8EFFB;}'
+    + '.arpg-th-sort:hover{color:#173E76 !important;}'
+    + '</style>';
+
+  // Same KPI card as the other pages
   function card(label, value, tint, sub){
     return '<div class="kpi-card" style="position:relative;overflow:hidden;background:rgba(255,255,255,0.66);border:1px solid #E3EAF4;border-radius:16px;padding:12px 14px 11px;">'
       +'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+tint+';"></div>'
@@ -5961,83 +5986,92 @@ function arPage(){
 
   var allOpen = M.zones.length > 0 && M.zones.every(function(Z){ return _arZoneIsOpen(Z.name, M); });
   var header = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">'
-    +'<div style="font-size:13px;font-weight:700;color:#15233B;">Accounts Receivable</div>'
-    +(arMeta && arMeta.asOn ? '<span style="font-size:11px;font-weight:700;color:#2C4E82;background:#EEF3FC;border:1px solid #D5E0F5;border-radius:999px;padding:3px 10px;">As on '+esc(arMeta.asOn)+'</span>' : '')
+    +'<div><div style="font-size:16px;font-weight:800;color:#15233B;letter-spacing:-0.01em;">Accounts Receivable</div>'
+    +'<div style="font-size:11px;font-weight:600;color:#6B82A0;margin-top:2px;">Customer outstanding by zone'+(arMeta && arMeta.asOn ? ' · <span style="color:#2C4E82;font-weight:700;">as on '+esc(arMeta.asOn)+'</span>' : '')+'</div></div>'
     +'<div style="flex:1;"></div>'
-    +'<div style="display:flex;align-items:center;gap:6px;background:#fff;border:1.5px solid #D8E1F0;border-radius:999px;padding:6px 12px;width:240px;">'
+    +'<div style="display:flex;align-items:center;gap:6px;background:#fff;border:1.5px solid #D8E1F0;border-radius:999px;padding:7px 13px;width:260px;">'
       +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A9AB5" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>'
-      +'<input type="text" id="ar-search" placeholder="Search customer…" value="'+esc(state.arSearch || '')+'" style="border:none;background:transparent;outline:none;font-size:12px;color:#15233B;width:100%;"/>'
+      +'<input type="text" id="ar-search" placeholder="Search customer…" value="'+esc(state.arSearch || '')+'" style="border:none;background:transparent;outline:none;font-size:12.5px;color:#15233B;width:100%;"/>'
     +'</div>'
-    +'<button data-act="arPgExpandAll" data-val="'+(allOpen ? '0' : '1')+'" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:7px 13px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'+(allOpen ? 'Collapse all' : 'Expand all')+'</button>'
-    +'<button data-act="arPgExport" class="btnq" style="display:flex;align-items:center;gap:6px;border:none;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border-radius:999px;padding:7px 14px;font-size:11.5px;font-weight:700;color:#fff;cursor:pointer;">'
+    +'<button data-act="arPgExpandAll" data-val="'+(allOpen ? '0' : '1')+'" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'+(allOpen ? 'Collapse all' : 'Expand all')+'</button>'
+    +'<button data-act="arPgExport" class="btnq" style="display:flex;align-items:center;gap:6px;border:none;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:#fff;cursor:pointer;">'
       +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download Excel</button>'
     +'</div>';
 
   var cols = [
     { key:'name',  label:'Customer', left:true },
     { key:'total', label:'Total Outstanding' },
-    { key:'b1', label:'0-30', group:true }, { key:'b2', label:'30-60', group:true }, { key:'b3', label:'60-90', group:true },
-    { key:'b4', label:'90-120', group:true }, { key:'b5', label:'120+', group:true },
+    { key:'b1', label:'0-30' }, { key:'b2', label:'30-60' }, { key:'b3', label:'60-90' },
+    { key:'b4', label:'90-120' }, { key:'b5', label:'120+' },
     { key:'nd',  label:'Not Due' },
     { key:'oa',  label:'On Account' },
     { key:'net', label:'Net Outstanding' },
     { key:'cd',  label:'Credit Days', noSort:true }
   ];
-  var th = 'position:sticky;z-index:2;background:#F1F5FB;color:#3C5275;font-size:10px;font-weight:800;letter-spacing:0.03em;padding:7px 10px;border-bottom:1px solid #D9E3EE;white-space:nowrap;';
+  // Three sticky header rows with fixed heights: band (26px), column names (36px), Grand Total
+  var thBase = 'position:sticky;z-index:3;font-size:10.5px;font-weight:800;letter-spacing:0.02em;padding:0 9px;white-space:nowrap;box-sizing:border-box;';
   var sk = (state.arSort && state.arSort.key) || 'total', sd = (state.arSort && state.arSort.dir) || -1;
   var head = '<thead><tr>'
-    + '<th colspan="2" style="'+th+'top:0;"></th>'
-    + '<th colspan="5" style="'+th+'top:0;text-align:center;color:#B83A2B;border-bottom:1px solid #F0C9C3;">Ageing (overdue days)</th>'
-    + '<th colspan="4" style="'+th+'top:0;"></th></tr><tr>'
+    + '<th colspan="2" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
+    + '<th colspan="5" style="'+thBase+'top:0;height:26px;text-align:center;background:linear-gradient(90deg,'+C.b1.bg+','+C.b5.bg+');color:'+C.b5.fg+';border-bottom:1px solid #F0C9C3;letter-spacing:0.08em;text-transform:uppercase;font-size:9.5px;">Overdue · days past due date</th>'
+    + '<th colspan="4" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th></tr><tr>'
     + cols.map(function(c){
         var arrow = (!c.noSort && sk === c.key) ? (sd < 0 ? ' ▾' : ' ▴') : '';
-        return '<th '+(c.noSort ? '' : 'data-act="arPgSort" data-val="'+c.key+'" ')+'style="'+th+'top:29px;text-align:'+(c.left ? 'left' : 'right')+';'+(c.noSort ? '' : 'cursor:pointer;')+(c.group ? 'color:#B83A2B;' : '')+'">'+c.label+arrow+'</th>';
+        var tint = C[c.key];
+        return '<th '+(c.noSort ? '' : 'data-act="arPgSort" data-val="'+c.key+'" class="arpg-th-sort" ')
+          +'style="'+thBase+'top:26px;height:36px;white-space:normal;line-height:1.15;text-align:'+(c.left ? 'left' : 'right')+';'+(c.noSort ? '' : 'cursor:pointer;')
+          +'background:'+(tint ? tint.bg : '#F1F5FB')+';color:'+(tint ? tint.fg : '#3C5275')+';border-bottom:2px solid '+(tint ? tint.fg : '#C9D6E8')+';">'+c.label+arrow+'</th>';
       }).join('')
-    + '</tr></thead>';
+    + '</tr>'
+    // Grand Total stays visible while scrolling
+    + '<tr>' + '<th style="'+thBase+'top:62px;height:38px;text-align:left;background:#E4ECF8;color:#0D2B5E;font-size:12.5px;border-bottom:1px solid #C9D6E8;">Grand Total <span style="font-weight:600;color:#6B82A0;font-size:11px;">· '+M.customers.toLocaleString('en-IN')+' customers</span></th>'
+    + _arCells(G, 'th', 'position:sticky;z-index:3;top:62px;height:38px;padding:0 9px;box-sizing:border-box;white-space:nowrap;font-family:\'DM Mono\',monospace;font-size:12px;background:#E4ECF8;border-bottom:1px solid #C9D6E8;font-weight:700;')
+    + '<th style="'+thBase+'top:62px;height:38px;background:#E4ECF8;border-bottom:1px solid #C9D6E8;"></th></tr>'
+    + '</thead>';
 
-  var td = 'padding:6px 10px;border-bottom:1px solid #EEF2F8;text-align:right;font-family:\'DM Mono\',monospace;font-size:11.5px;white-space:nowrap;';
-  function amt(v, color){ return v ? '<span style="color:'+(color || '#15233B')+';">'+fmtCur(v)+'</span>' : '<span style="color:#C7CEDA;">–</span>'; }
-  function cells(a, bold){
-    var w = bold ? 'font-weight:700;' : '';
-    return '<td style="'+td+w+'">'+amt(a.total)+'</td>'
-      + AR_BUCKETS.map(function(b){ return '<td style="'+td+w+'">'+amt(a[b.key], '#B83A2B')+'</td>'; }).join('')
-      + '<td style="'+td+w+'">'+amt(a.nd, '#15875A')+'</td>'
-      + '<td style="'+td+w+'">'+amt(a.oa, '#946312')+'</td>'
-      + '<td style="'+td+w+'">'+amt(a.total - a.oa, (a.total - a.oa) < 0 ? '#946312' : '#0D2B5E')+'</td>';
-  }
-
+  var td = 'padding:7px 9px;border-bottom:1px solid #EEF2F8;text-align:right;font-family:\'DM Mono\',monospace;font-size:12px;white-space:nowrap;';
   var custIndex = [];
-  var body = '<tbody>'
-    + '<tr style="background:#E8EEF8;"><td style="'+td+'text-align:left;font-family:Inter,sans-serif;font-weight:800;color:#0D2B5E;font-size:12px;">Grand Total <span style="font-weight:600;color:#6B82A0;font-size:10.5px;">· '+M.customers.toLocaleString('en-IN')+' customers</span></td>'
-    + cells(G, true) + '<td style="'+td+'"></td></tr>';
+  var body = '<tbody>';
   M.zones.forEach(function(Z){
     var open = _arZoneIsOpen(Z.name, M);
-    body += '<tr data-act="arPgZone" data-val="'+esc(Z.name)+'" style="background:#F6F9FD;cursor:pointer;">'
-      + '<td style="'+td+'text-align:left;font-family:Inter,sans-serif;font-weight:700;color:#173E76;font-size:12px;">'
-      + '<span style="display:inline-block;width:12px;color:#6488D6;">'+(open ? '▾' : '▸')+'</span>'+esc(Z.name)
-      + ' <span style="font-weight:600;color:#8A9AB5;font-size:10.5px;">· '+Z.custList.length+'</span></td>'
-      + cells(Z.agg, true) + '<td style="'+td+'"></td></tr>';
+    body += '<tr data-act="arPgZone" data-val="'+esc(Z.name)+'" class="arpg-zone" style="cursor:pointer;">'
+      + '<td style="'+td+'text-align:left;font-family:Inter,sans-serif;font-weight:700;color:#173E76;font-size:13px;border-left:3px solid #2C4E82;padding-left:10px;">'
+      + '<span style="display:inline-block;width:14px;color:#6488D6;">'+(open ? '▾' : '▸')+'</span>'+esc(Z.name)
+      + ' <span style="font-weight:600;color:#8A9AB5;font-size:11px;">· '+Z.custList.length+' customer'+(Z.custList.length === 1 ? '' : 's')+'</span></td>'
+      + _arCells(Z.agg, 'td', td + 'font-weight:700;') + '<td style="'+td+'"></td></tr>';
     if (!open) return;
-    Z.custList.forEach(function(C){
-      var i = custIndex.length; custIndex.push({ zone:Z.name, customer:C.name });
-      body += '<tr data-act="arPgCust" data-val="'+i+'" class="drill-row" style="cursor:pointer;">'
-        + '<td style="'+td+'text-align:left;font-family:Inter,sans-serif;padding-left:28px;max-width:340px;white-space:normal;">'
-        +   '<div style="font-size:11.5px;font-weight:600;color:#15233B;">'+esc(C.name)+'</div>'
-        +   (C.repList.length ? '<div title="'+esc(C.repList.join(', '))+'" style="font-size:9.5px;color:#8A9AB5;font-weight:600;margin-top:1px;">'+esc(C.repList.slice(0, 2).join(', '))+(C.repList.length > 2 ? ' +'+(C.repList.length - 2)+' more' : '')+'</div>' : '')
+    Z.custList.forEach(function(Cu){
+      var i = custIndex.length; custIndex.push({ zone:Z.name, customer:Cu.name });
+      body += '<tr data-act="arPgCust" data-val="'+i+'" class="arpg-row drill-row" style="cursor:pointer;">'
+        + '<td style="'+td+'text-align:left;font-family:Inter,sans-serif;padding-left:30px;min-width:220px;max-width:300px;white-space:normal;">'
+        +   '<div style="font-size:12.5px;font-weight:600;color:#15233B;">'+esc(Cu.name)+'</div>'
+        +   (Cu.repList.length ? '<div title="'+esc(Cu.repList.join(', '))+'" style="font-size:10.5px;color:#8A9AB5;font-weight:600;margin-top:2px;">'+esc(Cu.repList.slice(0, 2).join(', '))+(Cu.repList.length > 2 ? ' +'+(Cu.repList.length - 2)+' more' : '')+'</div>' : '')
         + '</td>'
-        + cells(C.agg, false)
-        + '<td style="'+td+'color:#3C5275;">'+(C.creditDays !== null ? esc(C.creditDays) : '–')+'</td></tr>';
+        + _arCells(Cu.agg, 'td', td)
+        + '<td style="'+td+'color:#3C5275;">'+(Cu.creditDays !== null ? esc(Cu.creditDays) : '–')+'</td></tr>';
     });
   });
   body += '</tbody>';
   window._arCustIndex = custIndex;
 
   var table = M.rowCount
-    ? '<div style="background:#fff;border:1px solid #E3EAF4;border-radius:14px;overflow:auto;max-height:calc(100vh - 290px);">'
+    ? '<div id="ar-table-scroll" style="flex:1;min-height:0;background:#fff;border:1px solid #E3EAF4;border-radius:14px;overflow:auto;box-shadow:0 1px 2px rgba(13,43,94,0.05);">'
       + '<table style="width:100%;border-collapse:separate;border-spacing:0;">'+head+body+'</table></div>'
-    : '<div style="padding:40px;text-align:center;color:#8A9AB5;font-size:12px;font-weight:600;background:#fff;border:1px solid #E3EAF4;border-radius:14px;">No outstanding for the current filters'+(state.arSearch ? ' and search' : '')+'.</div>';
+    : '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#8A9AB5;font-size:12.5px;font-weight:600;background:#fff;border:1px solid #E3EAF4;border-radius:14px;">No outstanding for the current filters'+(state.arSearch ? ' and search' : '')+'.</div>';
 
-  return '<div style="padding:20px 24px 32px;">' + header + kpis + table + '</div>';
+  return css + '<div style="height:100%;display:flex;flex-direction:column;padding:14px 6px 4px;box-sizing:border-box;">' + header + kpis + table + '</div>';
+}
+
+// Amount cells shared by the Grand Total, zone and customer rows
+function _arCells(a, tag, style){
+  var C = AR_COLORS;
+  function amt(v, color){ return v ? '<span style="color:'+(color || '#15233B')+';">'+fmtCur(v)+'</span>' : '<span style="color:#CDD5E1;">–</span>'; }
+  var net = a.total - a.oa;
+  return '<'+tag+' style="'+style+'text-align:right;">'+amt(a.total)+'</'+tag+'>'
+    + AR_BUCKETS.map(function(b){ return '<'+tag+' style="'+style+'text-align:right;">'+amt(a[b.key], C[b.key].fg)+'</'+tag+'>'; }).join('')
+    + '<'+tag+' style="'+style+'text-align:right;">'+amt(a.nd, C.nd.fg)+'</'+tag+'>'
+    + '<'+tag+' style="'+style+'text-align:right;">'+amt(a.oa, C.oa.fg)+'</'+tag+'>'
+    + '<'+tag+' style="'+style+'text-align:right;font-weight:700;">'+amt(net, net < 0 ? C.oa.fg : '#0D2B5E')+'</'+tag+'>';
 }
 
 // Zones start collapsed; a single visible zone (e.g. a zonal manager) starts open
@@ -6133,10 +6167,10 @@ function arExportExcel(){
 function _arRerenderMain(keepSearchFocus){
   var mainEl = document.getElementById('main-slot');
   if (!mainEl || state.page !== 'ar') return;
-  var inner = mainEl.querySelector('div[style*="overflow:auto"]');
+  var inner = document.getElementById('ar-table-scroll');
   var innerTop = inner ? inner.scrollTop : 0;
   mainEl.innerHTML = arPage();
-  var inner2 = mainEl.querySelector('div[style*="overflow:auto"]');
+  var inner2 = document.getElementById('ar-table-scroll');
   if (inner2 && innerTop) inner2.scrollTop = innerTop;
   if (keepSearchFocus) {
     var inp = document.getElementById('ar-search');
@@ -8403,7 +8437,8 @@ function render(){
     : state.page==='op' ? opPage()
     : state.page==='ar' ? arPage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
-  if(state.page==='teams'){ mainEl.style.overflow='hidden'; mainEl.style.padding='0'; mainEl.style.display='flex'; mainEl.style.flexDirection='column'; } else { mainEl.style.overflow=''; mainEl.style.padding=''; mainEl.style.display=''; mainEl.style.flexDirection=''; }
+  if(state.page==='teams'){ mainEl.style.overflow='hidden'; mainEl.style.padding='0'; mainEl.style.display='flex'; mainEl.style.flexDirection='column'; }
+  else if(state.page==='ar'){ mainEl.style.overflow='hidden'; mainEl.style.padding='4px 18px 14px'; mainEl.style.display=''; mainEl.style.flexDirection=''; } else { mainEl.style.overflow=''; mainEl.style.padding=''; mainEl.style.display=''; mainEl.style.flexDirection=''; }
   console.log('[PERF] mainEl.innerHTML took', (performance.now()-_tHtml).toFixed(1)+'ms');
   document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'')+(state.arDrill&&state.page==='ar'?arDrillDrawer():'');
   if(scrollTop) mainEl.scrollTop=scrollTop;
