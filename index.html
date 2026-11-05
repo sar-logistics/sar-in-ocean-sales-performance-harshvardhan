@@ -5930,29 +5930,29 @@ var AR_COLORS = {
   oa: { fg:'#7A510E', bg:'#FBF1DA' },
   net:{ fg:'#0D2B5E', bg:'#E4ECF8' }
 };
-// Overdue buckets. An admin sets the day limits for everyone (saved on the
-// server, _meta "ar_buckets"); default 0-30 / 30-60 / 60-90 / 90-120 / 120+.
-// Each limit closes a bucket: [30, 90] → 0-30, 30-90, 90+.
-var AR_DEFAULT_EDGES = [30, 60, 90, 120];
+// Overdue buckets, set as "slabs" like the Logisys report: up to 9 slabs, each
+// ticked on/off with a day limit. Every ticked slab closes a bucket:
+// 15, 30 → 0-15, 15-30, 30+. An admin saves them for everyone (_meta "ar_buckets").
+var AR_SLAB_COUNT = 9;
+var AR_DEFAULT_SLABS = [15, 30, 45, 60, 90, 120, 180, 0, 0].map(function(d){ return { on: d > 0, d: d }; });
+function _arSlabEdges(slabs){ return slabs.filter(function(x){ return x.on; }).map(function(x){ return Number(x.d); }); }
+function _arSlabsFromEdges(e){
+  var out = [];
+  for (var i = 0; i < AR_SLAB_COUNT; i++) out.push(i < e.length ? { on:true, d:e[i] } : { on:false, d:0 });
+  return out;
+}
+var AR_DEFAULT_EDGES = _arSlabEdges(AR_DEFAULT_SLABS);
 var AR_EDGES = AR_DEFAULT_EDGES.slice();
 var AR_BUCKETS = [];
 // amber → dark red; buckets pick evenly spread steps
 var AR_RAMP = [['#9A5A00','#FFF4DE'],['#A3500A','#FEEFDD'],['#A8470F','#FDEBDD'],['#A63D16','#FCE7DC'],['#A3331C','#FCE3DC'],['#9B2B1E','#FBDFD9'],['#93231F','#FADBD7'],['#841C1A','#F7D5D2'],['#741515','#F4CFCD']];
 function _arValidEdges(e){
-  if (!Array.isArray(e) || e.length < 1 || e.length > 8) return false;
+  if (!Array.isArray(e) || e.length < 1 || e.length > AR_SLAB_COUNT) return false;
   for (var i = 0; i < e.length; i++) {
     if (typeof e[i] !== 'number' || !isFinite(e[i]) || e[i] !== Math.floor(e[i]) || e[i] < 1 || e[i] > 3650) return false;
     if (i && e[i] <= e[i - 1]) return false;
   }
   return true;
-}
-// "30, 90" / "0-30, 30-90, 90+" → [30, 90] (null when it can't be read)
-function _arParseEdges(text){
-  var nums = String(text || '').match(/\d+/g);
-  if (!nums) return null;
-  var e = nums.map(Number).filter(function(n){ return n > 0; });
-  e = e.filter(function(n, i){ return e.indexOf(n) === i; }).sort(function(a, b){ return a - b; });
-  return _arValidEdges(e) ? e : null;
 }
 function _arBucketList(edges){
   var n = edges.length + 1, out = [];
@@ -6166,8 +6166,8 @@ function arPage(){
       +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A9AB5" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>'
       +'<input type="text" id="ar-search" placeholder="Search customer…" value="'+esc(state.arSearch || '')+'" style="border:none;background:transparent;outline:none;font-size:12.5px;color:#15233B;width:100%;"/>'
     +'</div>'
-    +(_arCanEditBuckets() ? '<button data-act="arPgBucketOpen" class="btnq" title="Set the overdue day buckets for everyone" style="display:flex;align-items:center;gap:6px;border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
-      +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Ageing buckets</button>' : '')
+    +(_arCanEditBuckets() ? '<button data-act="arPgBucketOpen" class="btnq" title="Set the overdue slabs for everyone" style="display:flex;align-items:center;gap:6px;border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
+      +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Ageing slabs</button>' : '')
     +'<button data-act="arPgExpandAll" data-val="'+(allOpen ? '0' : '1')+'" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'+(allOpen ? 'Collapse all' : 'Expand all')+'</button>'
     +'<button data-act="arPgExport" class="btnq" style="display:flex;align-items:center;gap:6px;border:none;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:#fff;cursor:pointer;">'
       +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download Excel</button>'
@@ -6236,12 +6236,26 @@ function arPage(){
   return css + '<div style="height:100%;display:flex;flex-direction:column;padding:14px 6px 4px;box-sizing:border-box;">' + header + kpis + table + '</div>' + _arBucketModal();
 }
 
-// Admin: set the overdue day buckets (applies to everyone)
-function _arBucketPreview(text){
-  var e = _arParseEdges(text);
-  if (!e) return '<span style="color:#B83A2B;font-weight:700;">Enter 1 to 8 day limits, e.g. 30, 90, 180</span>';
-  return _arBucketList(e).map(function(b){
-    return '<span style="display:inline-block;margin:0 4px 4px 0;border-radius:999px;padding:3px 10px;font-weight:700;color:'+b.color[0]+';background:'+b.color[1]+';">'+b.label+' days</span>';
+// Admin: set the overdue slabs (applies to everyone)
+var AR_SLAB_NAMES = ['First','Second','Third','Fourth','Fifth','Sixth','Seventh','Eighth','Ninth'];
+// '' when the ticked slabs make valid buckets, else what to fix
+function _arSlabProblem(slabs){
+  var on = slabs.filter(function(x){ return x.on; });
+  if (!on.length) return 'Tick at least one slab';
+  for (var i = 0; i < slabs.length; i++) {
+    if (!slabs[i].on) continue;
+    var d = Number(slabs[i].d);
+    if (!(d >= 1 && d <= 3650 && d === Math.floor(d))) return AR_SLAB_NAMES[i] + ' slab needs whole days between 1 and 3650';
+  }
+  var e = _arSlabEdges(slabs);
+  for (var j = 1; j < e.length; j++) if (e[j] <= e[j - 1]) return 'Each ticked slab must have more days than the one above it';
+  return '';
+}
+function _arBucketPreview(slabs){
+  var bad = _arSlabProblem(slabs);
+  if (bad) return '<span style="color:#B83A2B;font-weight:700;">'+esc(bad)+'</span>';
+  return _arBucketList(_arSlabEdges(slabs)).map(function(b){
+    return '<span style="display:inline-block;margin:0 4px 4px 0;border-radius:999px;padding:3px 10px;font-weight:700;color:'+b.color[0]+';background:'+b.color[1]+';">'+b.label+'</span>';
   }).join('');
 }
 function _arBucketModal(){
@@ -6249,15 +6263,25 @@ function _arBucketModal(){
   if (!m) return '';
   var by = arMeta && arMeta.buckets && arMeta.buckets.updatedBy;
   var btn = 'border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;cursor:pointer;';
+  var rows = m.slabs.map(function(x, i){
+    return '<label style="display:flex;align-items:center;gap:10px;padding:5px 0;cursor:pointer;">'
+      + '<input type="checkbox" data-slab-on="'+i+'"'+(x.on ? ' checked' : '')+' style="width:16px;height:16px;accent-color:#2C6BD6;cursor:pointer;"/>'
+      + '<span style="flex:1;font-size:12.5px;font-weight:600;color:#15233B;">'+AR_SLAB_NAMES[i]+' Slab</span>'
+      + '<input type="number" min="1" max="3650" step="1" data-slab-days="'+i+'" value="'+(x.d || 0)+'"'+(x.on ? '' : ' disabled')
+      +   ' style="width:84px;box-sizing:border-box;text-align:right;border:1.5px solid #D8E1F0;border-radius:8px;padding:5px 8px;font-size:12.5px;font-family:\'DM Mono\',monospace;color:#15233B;outline:none;background:'+(x.on ? '#fff' : '#F1F4F8')+';"/>'
+      + '<span style="width:30px;font-size:12px;color:#6B82A0;font-weight:600;">days</span>'
+      + '</label>';
+  }).join('');
   return '<div data-act="arPgBucketClose" style="position:fixed;inset:0;background:rgba(13,43,94,0.28);z-index:950;"></div>'
-    + '<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(460px,92vw);background:#fff;border-radius:16px;box-shadow:0 18px 50px rgba(13,43,94,0.25);z-index:951;padding:20px 22px;">'
-    +   '<div style="font-size:15px;font-weight:800;color:#15233B;">Ageing buckets</div>'
-    +   '<div style="font-size:11.5px;color:#6B82A0;font-weight:600;margin-top:3px;line-height:1.45;">Type where each bucket ends, in overdue days. <b>30, 90</b> gives 0-30, 30-90 and 90+. Applies to everyone.</div>'
-    +   '<input type="text" id="ar-bucket-input" value="'+esc(m.text)+'" placeholder="30, 60, 90, 120" style="margin-top:14px;width:100%;box-sizing:border-box;border:1.5px solid #D8E1F0;border-radius:10px;padding:9px 12px;font-size:13px;font-family:\'DM Mono\',monospace;color:#15233B;outline:none;"/>'
-    +   '<div id="ar-bucket-preview" style="margin-top:10px;font-size:11px;min-height:24px;">'+_arBucketPreview(m.text)+'</div>'
+    + '<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(420px,92vw);max-height:92vh;overflow:auto;box-sizing:border-box;background:#fff;border-radius:16px;box-shadow:0 18px 50px rgba(13,43,94,0.25);z-index:951;padding:18px 22px;">'
+    +   '<div style="font-size:15px;font-weight:800;color:#15233B;">Ageing slabs</div>'
+    +   '<div style="font-size:11.5px;color:#6B82A0;font-weight:600;margin-top:3px;line-height:1.45;">Tick the slabs to use and set where each ends, in overdue days. 15 and 30 give 0-15 and 15-30. Applies to everyone.</div>'
+    +   '<div style="margin-top:10px;border-top:1px solid #EEF2F8;border-bottom:1px solid #EEF2F8;padding:4px 0;">'+rows+'</div>'
+    +   '<div style="margin-top:10px;font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:#8A9AB5;">Dashboard buckets</div>'
+    +   '<div id="ar-bucket-preview" style="margin-top:6px;font-size:11px;min-height:24px;">'+_arBucketPreview(m.slabs)+'</div>'
     +   (m.error ? '<div style="margin-top:6px;font-size:11.5px;color:#B83A2B;font-weight:700;">'+esc(m.error)+'</div>' : '')
     +   (by ? '<div style="margin-top:6px;font-size:10.5px;color:#8A9AB5;font-weight:600;">Last set by '+esc(by)+'</div>' : '')
-    +   '<div style="display:flex;gap:8px;margin-top:16px;align-items:center;">'
+    +   '<div style="display:flex;gap:8px;margin-top:14px;align-items:center;">'
     +     '<button data-act="arPgBucketReset" class="btnq" style="'+btn+'border:1.5px solid #D8E1F0;background:#fff;color:#6B82A0;"'+(m.saving ? ' disabled' : '')+'>Reset to default</button>'
     +     '<div style="flex:1;"></div>'
     +     '<button data-act="arPgBucketClose" class="btnq" style="'+btn+'border:1.5px solid #D8E1F0;background:#fff;color:#2C4E82;">Cancel</button>'
@@ -6265,12 +6289,13 @@ function _arBucketModal(){
     +   '</div>'
     + '</div>';
 }
-function _arSaveBuckets(edges){
+function _arSaveBuckets(slabs){
   var m = state.arBucketEdit;
   if (!m) return;
+  var edges = _arSlabEdges(slabs);
   m.saving = true; m.error = ''; _arRerenderMain(false);
   fetch('/api/mongo-batch?action=arBuckets', { method:'POST', headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify({ action:'arBuckets', edges:edges, by:(currentUser && (currentUser.name || currentUser.email)) || '' }) })
+    body: JSON.stringify({ action:'arBuckets', edges:edges, slabs:slabs, by:(currentUser && (currentUser.name || currentUser.email)) || '' }) })
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (!d || !d.success) throw new Error((d && d.error) || 'Could not save');
@@ -6282,12 +6307,27 @@ function _arSaveBuckets(edges){
     .catch(function(e){ if (state.arBucketEdit) { state.arBucketEdit.saving = false; state.arBucketEdit.error = e.message || String(e); } })
     .finally(function(){ _arRerenderMain(false); });
 }
-document.addEventListener('input', function(ev){
-  if (!ev.target || ev.target.id !== 'ar-bucket-input' || !state.arBucketEdit) return;
-  state.arBucketEdit.text = ev.target.value;
+// Slab edits update state + preview in place (no re-render, so typing keeps focus)
+function _arSlabInput(ev){
+  var t = ev.target, m = state.arBucketEdit;
+  if (!t || !m || !t.hasAttribute) return;
+  if (t.hasAttribute('data-slab-on')) {
+    var i = +t.getAttribute('data-slab-on');
+    m.slabs[i].on = t.checked;
+    var box = document.querySelector('[data-slab-days="'+i+'"]');
+    if (box) {
+      box.disabled = !t.checked; box.style.background = t.checked ? '#fff' : '#F1F4F8';
+      if (t.checked && !(Number(box.value) > 0)) { box.value = ''; box.focus(); }
+    }
+  } else if (t.hasAttribute('data-slab-days')) {
+    m.slabs[+t.getAttribute('data-slab-days')].d = t.value === '' ? 0 : Number(t.value);
+  } else return;
+  m.error = '';
   var pv = document.getElementById('ar-bucket-preview');
-  if (pv) pv.innerHTML = _arBucketPreview(ev.target.value);
-}, true);
+  if (pv) pv.innerHTML = _arBucketPreview(m.slabs);
+}
+document.addEventListener('input', _arSlabInput, true);
+document.addEventListener('change', _arSlabInput, true);
 
 // Amount cells shared by the Grand Total, zone and customer rows
 // Table amount in one consistent format; under 1,000 shows whole units (no paise / cents)
@@ -6570,18 +6610,21 @@ function arHandleAct(act, el){
   } else if (act === 'arPgExport') {
     arExportExcel();
   } else if (act === 'arPgBucketOpen') {
-    state.arBucketEdit = { text: AR_EDGES.join(', '), error:'', saving:false };
+    var saved = arMeta && arMeta.buckets && arMeta.buckets.slabs;
+    var base = Array.isArray(saved) && saved.length === AR_SLAB_COUNT && _arSlabEdges(saved).join() === AR_EDGES.join() ? saved : _arSlabsFromEdges(AR_EDGES);
+    state.arBucketEdit = { slabs: base.map(function(x){ return { on: !!x.on, d: Number(x.d) || 0 }; }), error:'', saving:false };
     _arRerenderMain(false);
-    var bi = document.getElementById('ar-bucket-input');
-    if (bi) { bi.focus(); bi.setSelectionRange(bi.value.length, bi.value.length); }
   } else if (act === 'arPgBucketClose') {
     if (!(state.arBucketEdit && state.arBucketEdit.saving)) { state.arBucketEdit = null; _arRerenderMain(false); }
   } else if (act === 'arPgBucketSave') {
-    var edges = state.arBucketEdit && _arParseEdges(state.arBucketEdit.text);
-    if (!edges) { state.arBucketEdit.error = 'Enter 1 to 8 day limits, e.g. 30, 90, 180'; _arRerenderMain(false); }
-    else _arSaveBuckets(edges);
+    var me = state.arBucketEdit, bad = me ? _arSlabProblem(me.slabs) : 'nothing to save';
+    if (bad) { if (me) { me.error = bad; _arRerenderMain(false); } }
+    else _arSaveBuckets(me.slabs.map(function(x){ return { on: !!x.on, d: x.on ? Number(x.d) : (Number(x.d) || 0) }; }));
   } else if (act === 'arPgBucketReset') {
-    if (state.arBucketEdit) { state.arBucketEdit.text = AR_DEFAULT_EDGES.join(', '); _arSaveBuckets(AR_DEFAULT_EDGES.slice()); }
+    if (state.arBucketEdit) {
+      state.arBucketEdit.slabs = AR_DEFAULT_SLABS.map(function(x){ return { on:x.on, d:x.d }; });
+      _arSaveBuckets(state.arBucketEdit.slabs);
+    }
   } else if (act === 'arPgRetry') {
     arDataError = ''; render();
   } else {

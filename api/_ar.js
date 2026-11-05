@@ -174,14 +174,17 @@ async function arGet(db, force, deployTs) {
   return data;
 }
 
-// Overdue bucket limits for everyone ([30, 60, 90, 120] → 0-30 … 120+); null = page default
+// Overdue slabs for everyone: edges = the ticked slabs' days ([15, 30] → 0-15, 15-30, 30+),
+// slabs = all 9 rows as the admin left them ({ on, d }). null = page default.
 async function arBucketsGet(db) {
   const doc = await db.collection("_meta").findOne({ _id: AR_BUCKETS_ID });
-  return doc && Array.isArray(doc.edges) ? { edges: doc.edges, updatedBy: doc.updatedBy || null, updatedAt: doc.updatedAt || null } : null;
+  return doc && Array.isArray(doc.edges)
+    ? { edges: doc.edges, slabs: doc.slabs || null, updatedBy: doc.updatedBy || null, updatedAt: doc.updatedAt || null }
+    : null;
 }
 
 function validEdges(e) {
-  if (!Array.isArray(e) || e.length < 1 || e.length > 8) return false;
+  if (!Array.isArray(e) || e.length < 1 || e.length > 9) return false;
   for (let i = 0; i < e.length; i++) {
     if (!Number.isInteger(e[i]) || e[i] < 1 || e[i] > 3650) return false;
     if (i && e[i] <= e[i - 1]) return false;
@@ -189,11 +192,16 @@ function validEdges(e) {
   return true;
 }
 
-// POST action=arBuckets { edges:[30, 90], by }
+// POST action=arBuckets { edges:[15, 30], slabs:[{ on, d } ×9], by }
 async function arBucketsSave(db, body) {
   const edges = body && body.edges;
-  if (!validEdges(edges)) return { status: 400, json: { success: false, error: "1 to 8 increasing whole numbers of days (1-3650) required" } };
-  const doc = { edges, updatedBy: String((body && body.by) || "").slice(0, 120) || null, updatedAt: new Date().toISOString() };
+  if (!validEdges(edges)) return { status: 400, json: { success: false, error: "1 to 9 increasing whole numbers of days (1-3650) required" } };
+  let slabs = body && body.slabs;
+  const okSlabs = Array.isArray(slabs) && slabs.length === 9 &&
+    slabs.every((x) => x && typeof x.on === "boolean" && Number.isInteger(x.d) && x.d >= 0 && x.d <= 3650) &&
+    slabs.filter((x) => x.on).map((x) => x.d).join() === edges.join();
+  if (!okSlabs) slabs = null;
+  const doc = { edges, slabs, updatedBy: String((body && body.by) || "").slice(0, 120) || null, updatedAt: new Date().toISOString() };
   await db.collection("_meta").updateOne({ _id: AR_BUCKETS_ID }, { $set: doc }, { upsert: true });
   return { status: 200, json: { success: true, buckets: doc } };
 }
