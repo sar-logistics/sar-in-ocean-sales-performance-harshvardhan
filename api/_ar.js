@@ -5,9 +5,10 @@
 //  Source: the "Accounts Receivable" tab of the AR sheet (Logisys OS
 //  report), pushed by the Apps Script in apps-script/arSync.gs as one
 //  document per row that has a non-zero Outstanding (INR):
-//    positive Outstanding → an unpaid invoice
-//    negative Outstanding → On Account (customer paid extra / unmatched;
-//                           adjusted against their next invoice)
+//    row with a Transaction No.    → an invoice
+//    row without a Transaction No. → On Account (unmatched receipts, payments,
+//                                    JVs, previous-year balances; either sign —
+//                                    same as the sheet's "On Account Total")
 //
 //  A push arrives in chunks. Every chunk carries the same batchId; the
 //  dashboard keeps reading the previous batch until the last chunk lands,
