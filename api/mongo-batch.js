@@ -3092,6 +3092,10 @@ module.exports = async function handler(req, res) {
             if (copy.lobData['ISOTANK IMPORT']) oceanOnly['ISOTANK IMPORT'] = copy.lobData['ISOTANK IMPORT'];
             if (copy.lobData['AIR EXPORT'])     oceanOnly['AIR EXPORT']     = copy.lobData['AIR EXPORT'];
             if (copy.lobData['AIR IMPORT'])     oceanOnly['AIR IMPORT']     = copy.lobData['AIR IMPORT'];
+            // GENERAL is one of the page's LOB filter options too — dropping it
+            // made every Sales cell leave out General jobs while the drill-through
+            // (built from all job rows) included them (e.g. 176 vs 179).
+            if (copy.lobData['GENERAL'])        oceanOnly['GENERAL']        = copy.lobData['GENERAL'];
             copy.lobData = oceanOnly;
           }
         }
