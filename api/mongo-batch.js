@@ -5,6 +5,7 @@
 
 const { MongoClient } = require("mongodb");
 const { arPush, arGet } = require("./_ar");
+const { incentiveOutstanding } = require("./_incentive");
 
 const MONGO_URI = process.env.MONGO_URI;
 const DB_NAME   = "sar-in-air-sales";  // Option B: same DB as Air, Ocean dashboard filters differently
@@ -2922,7 +2923,7 @@ module.exports = async function handler(req, res) {
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "tradelaneDrill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug", "ar"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "tradelaneDrill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug", "ar", "incentiveOutstanding"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -2933,6 +2934,11 @@ module.exports = async function handler(req, res) {
     // Accounts Receivable: GET action=ar (page data), POST action=arPush (Apps Script)
     if (action === "ar") {
       const data = await arGet(db, req.query?.force === "1", DEPLOY_TS);
+      return res.status(200).json(data);
+    }
+    // Incentive page: Ref Nos in ar_outstanding with a positive outstanding
+    if (action === "incentiveOutstanding") {
+      const data = await incentiveOutstanding(db, req.query?.force === "1");
       return res.status(200).json(data);
     }
     if (action === "arPush") {
