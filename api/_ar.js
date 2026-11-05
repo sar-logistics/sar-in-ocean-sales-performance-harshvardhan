@@ -104,7 +104,7 @@ async function loadRepLookup(db) {
 // replaced by an index into a dictionary, so ~25k rows stay well under the
 // response size limit.
 function buildArPayload(rows, repLookup, meta) {
-  const dicts = { customer: [], sp: [], zone: [], lob: [], branch: [], location: [], type: [] };
+  const dicts = { customer: [], sp: [], zone: [], lob: [], branch: [], location: [], type: [], gl: [] };
   const idx = {};
   Object.keys(dicts).forEach((k) => { idx[k] = new Map(); });
   function code(kind, value) {
@@ -114,12 +114,35 @@ function buildArPayload(rows, repLookup, meta) {
     return i;
   }
   const num = (v) => { const n = Number(v); return isFinite(n) ? n : 0; };
+  // "OVR Receivable" counts from arrival: base date = ATA, else ETA (else Trans. Date as in the report)
+  const MON = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const day = (sv) => {
+    const m = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/.exec(String(sv || "").trim());
+    const mo = m ? MON.indexOf(m[2].toLowerCase()) : -1;
+    return mo < 0 ? null : Date.UTC(+m[3], mo, +m[1]) / 86400000;
+  };
+  const asOnDay = day(meta && meta.asOn);
 
   // [customer, salesPerson(display), zone, lob, branch, location, type,
-  //  txnNo, transDate, billAmt, outstanding, overdueDays, creditDays, houseNo, jobOwner]
+  //  txnNo, transDate, billAmt, outstanding, overdueDays, creditDays, houseNo, jobOwner,
+  //  glGroup, baseDate (OVR Receivable: the ATA/ETA used instead of Trans. Date, else "")]
   // A sales person missing from the mapping keeps their report name, minus the "| INZ05" tag
   const out = [];
+  // Weighted DSO totals (rows the sync marks _dso): [customer, sp, zone, lob, Σ bill, Σ bill × days]
+  const dso = [];
   for (const r of rows) {
+    if (r._dso) {
+      const rp = repLookup(r.salesPerson);
+      dso.push([
+        code("customer", r.customer),
+        code("sp", rp ? rp.display : String(r.salesPerson || "").split("|")[0].replace(/\.+\s*$/, "").trim()),
+        code("zone", rp ? rp.zone : "Cross Sales"),
+        code("lob", arLobKey(r.lob, r.location)),
+        num(r.dsoBill), num(r.dsoBillDays),
+        code("gl", r.glGroup),
+      ]);
+      continue;
+    }
     const o = num(r.outstanding);
     if (!o) continue;
     const rep = repLookup(r.salesPerson);
@@ -127,6 +150,13 @@ function buildArPayload(rows, repLookup, meta) {
     let od = r.overdueDays;
     if (od === null || od === undefined || od === "") {
       od = (r.ageingDays !== null && r.ageingDays !== undefined && r.ageingDays !== "") ? num(r.ageingDays) - num(r.creditDays) : 0;
+    }
+    const gl = String(r["GL Group Name"] || "").trim();
+    let baseDate = "";
+    if (gl.toLowerCase() === "ovr receivable") {
+      const ata = String(r.ATA || "").trim(), eta = String(r.eta || "").trim();
+      baseDate = day(ata) !== null ? ata : day(eta) !== null ? eta : "";
+      if (baseDate && asOnDay !== null) od = asOnDay - day(baseDate) - num(r.creditDays);
     }
     out.push([
       code("customer", r.customer),
@@ -144,6 +174,8 @@ function buildArPayload(rows, repLookup, meta) {
       r.creditDays === null || r.creditDays === undefined || r.creditDays === "" ? null : num(r.creditDays),
       String(r.houseNo || ""),
       String(r.jobOwner || ""),
+      code("gl", gl),
+      baseDate,
     ]);
   }
   return {
@@ -152,6 +184,7 @@ function buildArPayload(rows, repLookup, meta) {
     pushedAt: meta ? meta.pushedAt || null : null,
     dicts,
     rows: out,
+    dso,
   };
 }
 
@@ -166,7 +199,7 @@ async function arGet(db, force, deployTs) {
   const key = meta.currentBatch + "|" + deployTs;
   if (!force && arCache && arCache.key === key) return arCache.data;
   const [rows, repLookup] = await Promise.all([
-    db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch }, { projection: { _id: 0, customer: 1, salesPerson: 1, lob: 1, location: 1, branch: 1, type: 1, txnNo: 1, transDate: 1, billAmt: 1, outstanding: 1, overdueDays: 1, ageingDays: 1, creditDays: 1, houseNo: 1, jobOwner: 1 } }).toArray(),
+    db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch }, { projection: { _id: 0, customer: 1, salesPerson: 1, lob: 1, location: 1, branch: 1, type: 1, txnNo: 1, transDate: 1, billAmt: 1, outstanding: 1, overdueDays: 1, ageingDays: 1, creditDays: 1, houseNo: 1, jobOwner: 1, _dso: 1, dsoBill: 1, dsoBillDays: 1, glGroup: 1, "GL Group Name": 1, ATA: 1, eta: 1 } }).toArray(),
     loadRepLookup(db),
   ]);
   const data = buildArPayload(rows, repLookup, meta);
@@ -225,6 +258,7 @@ const AR_DETAIL_FIELDS = [
   ["atd", "ATD"],
   ["ata", "ATA"],
   ["refNo2", "Ref No"],             // Ref No.
+  ["receiptDate", "Receipt Date"],
 ];
 
 // action=arDetail → detail columns for some customers' lines.

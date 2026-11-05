@@ -3116,7 +3116,7 @@ function topbar(){
       // data — no filter selection could ever change what they see.
       +(['admin','usage','org','teams'].indexOf(state.page) >= 0 || (currentUser && (currentUser.role||'').toLowerCase().trim()==='sales rep') ? '' : (function(){
         var _isInsightPg = ['customers','agents','tradelane'].indexOf(state.page) >= 0;
-        var activeCount = (_isInsightPg ? 0 : state.filterLobs.length) + state.filterReps.length + (state.filterZones||[]).length + (state.filterRegions||[]).length;
+        var activeCount = (_isInsightPg ? 0 : state.filterLobs.length) + state.filterReps.length + (state.filterZones||[]).length + (state.filterRegions||[]).length + (state.page === 'ar' ? (state.filterGl||[]).length : 0);
         var isFOpen = state.filtersOpen;
         var btnHtml = '<button data-act="toggleFiltersDrop" style="display:flex;align-items:center;gap:6px;background:'+(activeCount>0?'#EEF3FC':'#FFFFFF')+';border:1.5px solid '+(isFOpen?BRAND_A1:(activeCount>0?'#B7C8EA':'#D8E1F0'))+';border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:'+(activeCount>0?'#1E3A66':'#3C5275')+';cursor:pointer;transition:box-shadow 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';">'
           +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>'
@@ -3199,6 +3199,15 @@ function topbar(){
                 + '</div>'
               + '</div>' : '');
 
+          // Accounts Receivable only: GL Group Name
+          var glSection = state.page !== 'ar' ? '' : sectionHeader('GL Group', (state.filterGl||[]).length, state.filterGlDropOpen, 'toggleFilterGlDrop')
+            + (state.filterGlDropOpen ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'
+                + '<div id="gl-checklist" style="max-height:180px;overflow-y:auto;">'
+                  + checkRow('All GL Groups', !(state.filterGl||[]).length, 'filterGlAll', '')
+                  + _arGlGroups().map(function(g){ return checkRow(g || '(blank)', (state.filterGl||[]).indexOf(g) > -1, 'toggleFilterGl', g); }).join('')
+                + '</div>'
+              + '</div>' : '');
+
           var repSection = sectionHeader('Reps', state.filterReps.length, repOpen, 'toggleFilterRepDrop')
             + (repOpen ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'
                 + searchBox('rep-search-input', 'Search reps…')
@@ -3263,7 +3272,7 @@ var regionSection = sectionHeader('Regions', _frPanel.length, regionOpen, 'toggl
 var zoneSection = sectionHeader('Zones', (state.filterZones||[]).length, zoneOpen, 'toggleFilterZoneDrop')
             + (zoneOpen ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'                + '<div id="zone-checklist" style="max-height:180px;overflow-y:auto;">'                  + checkRow('All Zones', (state.filterZones||[]).length===0, 'filterZoneAll', '')                  + allZoneNames.map(function(z){ return checkRow(z, (state.filterZones||[]).indexOf(z)>-1, 'toggleFilterZone', z); }).join('')                + '</div>'              + '</div>' : '');
 
-          _dropdownPanels += '<div id="filters-drop" data-stop="1" style="position:fixed;background:#FFFFFF;border-radius:14px;box-shadow:0 12px 36px rgba(13,43,94,0.2),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;width:280px;padding:16px;pointer-events:auto;">'            +'<div style="font-size:10px;font-weight:800;letter-spacing:0.08em;color:#97A1B2;text-transform:uppercase;margin-bottom:12px;">Filters</div>'            +'<div style="display:flex;flex-direction:column;gap:8px;">'+lobSection+(_isZonalMgr?'':regionSection)+(_isZonalMgr?'':zoneSection)+repSection+'</div>'            +'<div style="height:1px;background:#EEF2F8;margin:14px 0 12px;"></div>'            +'<div style="display:flex;align-items:center;justify-content:space-between;">'              +'<button data-act="filterResetAll" style="background:none;border:none;color:#94A3B8;font-size:12px;font-weight:600;cursor:pointer;padding:6px 4px;">Reset all</button>'              +'<button data-act="toggleFiltersDrop" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;color:#fff;font-size:12px;font-weight:700;padding:8px 20px;cursor:pointer;">Done</button>'            +'</div>'          +'</div>';
+          _dropdownPanels += '<div id="filters-drop" data-stop="1" style="position:fixed;background:#FFFFFF;border-radius:14px;box-shadow:0 12px 36px rgba(13,43,94,0.2),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;width:280px;padding:16px;pointer-events:auto;">'            +'<div style="font-size:10px;font-weight:800;letter-spacing:0.08em;color:#97A1B2;text-transform:uppercase;margin-bottom:12px;">Filters</div>'            +'<div style="display:flex;flex-direction:column;gap:8px;">'+lobSection+(_isZonalMgr?'':regionSection)+(_isZonalMgr?'':zoneSection)+repSection+glSection+'</div>'            +'<div style="height:1px;background:#EEF2F8;margin:14px 0 12px;"></div>'            +'<div style="display:flex;align-items:center;justify-content:space-between;">'              +'<button data-act="filterResetAll" style="background:none;border:none;color:#94A3B8;font-size:12px;font-weight:600;cursor:pointer;padding:6px 4px;">Reset all</button>'              +'<button data-act="toggleFiltersDrop" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;color:#fff;font-size:12px;font-weight:700;padding:8px 20px;cursor:pointer;">Done</button>'            +'</div>'          +'</div>';
           return btnHtml;
         }
         return btnHtml;
@@ -6093,7 +6102,7 @@ function incentivePage(){
 //                           sheet's "On Account Total" lines, so either sign counts.
 // Total Outstanding = invoices · Net = Total − On Account.
 function _arIsOa(r){ return !String(r.txn || '').trim(); }
-var arRows = null, arMeta = null, arDataReady = false, arDataLoading = false, arDataError = '';
+var arRows = null, arDso = [], arMeta = null, arDataReady = false, arDataLoading = false, arDataError = '';
 // fg = text / bar colour, bg = header tint
 var AR_COLORS = {
   nd: { fg:'#0F7048', bg:'#E6F5EC' },
@@ -6154,7 +6163,11 @@ function fetchArData(callback, force){
       arRows = (d.rows || []).map(function(r){
         return { c:D.customer[r[0]], sp:D.sp[r[1]], z:D.zone[r[2]], lob:D.lob[r[3]], br:D.branch[r[4]],
                  loc:D.location[r[5]], ty:D.type[r[6]], txn:r[7], d:r[8], bill:r[9], o:r[10],
-                 od:r[11], cd:r[12], h:r[13], jo:r[14] };
+                 od:r[11], cd:r[12], h:r[13], jo:r[14], gl:(D.gl || [])[r[15]] || '', bd:r[16] || '' };
+      });
+      // Weighted DSO totals per customer / rep / LOB (paid invoices included)
+      arDso = (d.dso || []).map(function(x){
+        return { c:D.customer[x[0]], sp:D.sp[x[1]], z:D.zone[x[2]], lob:D.lob[x[3]], bill:x[4], bd:x[5], gl:(D.gl || [])[x[6]] || '' };
       });
       arMeta = { asOn:d.asOn, pushedAt:d.pushedAt, buckets:d.buckets || null };
       _arSetBuckets(d.buckets && d.buckets.edges);
@@ -6195,14 +6208,16 @@ function _arScope(){
 }
 
 // Rows the user may see, after the Filters panel (zone / region / rep / LOB)
-function _arVisibleRows(){
-  if (!arRows) return [];
+function _arVisibleRows(list){
+  list = list || arRows;
+  if (!list) return [];
   var scope = _arScope();
   var fz = state.filterZones || [], fr = state.filterRegions || [];
   var frep = (state.filterReps || []).map(normalizeName);
   var flob = state.filterLobs || [];
+  var fgl = state.filterGl || [];
   var regionMap = window._zoneRegionMap || {};
-  return arRows.filter(function(r){
+  return list.filter(function(r){
     if (scope) {
       if (scope.reps && scope.reps.indexOf(normalizeName(r.sp)) === -1) return false;
       if (scope.zones && scope.zones.indexOf(r.z) === -1) return false;
@@ -6211,12 +6226,19 @@ function _arVisibleRows(){
     if (!fz.length && fr.length && fr.indexOf(r.z === 'Cross Sales' ? 'Cross Sales' : (regionMap[r.z] || '')) === -1) return false;
     if (frep.length && frep.indexOf(normalizeName(r.sp)) === -1) return false;
     if (!_lobPassesFilter(r.lob, flob)) return false;
+    if (fgl.length && fgl.indexOf(r.gl || '') === -1) return false;
     return true;
   });
 }
+// GL Group Name values for the Filters panel ('' = rows with no GL group)
+function _arGlGroups(){
+  var seen = {};
+  (arRows || []).concat(arDso || []).forEach(function(r){ seen[r.gl || ''] = 1; });
+  return Object.keys(seen).sort(function(a, b){ return (a === '') - (b === '') || a.localeCompare(b); });
+}
 
 function _arEmptyAgg(){
-  var a = { total:0, nd:0, oa:0, inv:0 };
+  var a = { total:0, nd:0, oa:0, inv:0, dsoB:0, dsoBD:0 };
   AR_BUCKETS.forEach(function(b){ a[b.key] = 0; });
   return a;
 }
@@ -6242,10 +6264,23 @@ function _arModel(){
     if (r.sp) C.reps[r.sp] = 1;
     if (!_arIsOa(r) && r.o > 0 && r.cd !== null && r.cd !== undefined) C.cd[r.cd] = (C.cd[r.cd] || 0) + 1;
   });
+  // Weighted DSO: zone / Grand Total cover every customer with invoices (paid ones too);
+  // a customer row shows its own when it's listed
+  var dsoRows = _arVisibleRows(arDso || []);
+  if (q) dsoRows = dsoRows.filter(function(r){ return (r.c || '').toLowerCase().indexOf(q) > -1; });
+  dsoRows.forEach(function(r){
+    grand.dsoB += r.bill; grand.dsoBD += r.bd;
+    var Z = zones[r.z];
+    if (!Z) return;
+    Z.agg.dsoB += r.bill; Z.agg.dsoBD += r.bd;
+    var Cu = Z.cust[r.c];
+    if (Cu) { Cu.agg.dsoB += r.bill; Cu.agg.dsoBD += r.bd; }
+  });
   var sortKey = (state.arSort && state.arSort.key) || 'net', dir = (state.arSort && state.arSort.dir) || -1;
   function val(x){
     return sortKey === 'name' ? x.name.toLowerCase() : sortKey === 'net' ? x.agg.total - x.agg.oa
-      : sortKey === 'due' ? _arOverdue(x.agg) : (x.agg[sortKey] || 0);
+      : sortKey === 'due' ? _arOverdue(x.agg)
+      : sortKey === 'dso' ? (x.agg.dsoB ? x.agg.dsoBD / x.agg.dsoB : -1e9) : (x.agg[sortKey] || 0);
   }
   var zoneList = sortZones(Object.keys(zones)).map(function(zn){
     var Z = zones[zn];
@@ -6271,6 +6306,13 @@ function _arFull(v){
   var sym = state.currency === 'USD' ? '$' : '₹';
   var s = Math.abs(val).toLocaleString(state.currency === 'USD' ? 'en-US' : 'en-IN', { maximumFractionDigits:0 });
   return val < 0 ? '(' + sym + s + ')' : sym + s;
+}
+// Weighted DSO = Σ(Bill Amount × days) ÷ Σ(Bill Amount); days = receipt (or as-on) − (invoice date + credit days)
+function _arDsoTxt(a){
+  if (!a.dsoB) return '<span style="color:#D5DCE6;">–</span>';
+  var v = a.dsoBD / a.dsoB;
+  var d = Math.round(v);   // whole days; the exact value is in the tooltip
+  return '<span title="Weighted DSO: '+v.toFixed(2)+' days" style="color:'+(d > 0 ? '#A3331C' : '#0F7048')+';">'+d+'</span>';
 }
 // AR page: negatives in brackets, e.g. On Account (₹23.89 Cr.)
 function _arCur(v){ return v < 0 ? '(' + fmtCur(-v) + ')' : fmtCur(v); }
@@ -6355,7 +6397,8 @@ function arPage(){
     { key:'due', label:'Outstanding Due' },
     { key:'nd',  label:'Not Due' },
     { key:'oa',  label:'On Account' },
-    { key:'cd',  label:'Credit Days', noSort:true }
+    { key:'cd',  label:'Credit Days', noSort:true },
+    { key:'dso', label:'Weighted DSO (days)' }
   ]);
   // Three sticky header rows with fixed heights: band (26px), column names (36px), Grand Total
   var thBase = 'position:sticky;z-index:3;font-size:10.5px;font-weight:800;letter-spacing:0.02em;padding:0 9px;white-space:nowrap;box-sizing:border-box;';
@@ -6364,7 +6407,7 @@ function arPage(){
     + '<th class="ar-corner" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
     + '<th style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
     + '<th colspan="'+AR_BUCKETS.length+'" style="'+thBase+'top:0;height:26px;text-align:center;background:linear-gradient(90deg,'+C[AR_BUCKETS[0].key].bg+','+C[AR_BUCKETS[AR_BUCKETS.length - 1].key].bg+');color:'+C[AR_BUCKETS[AR_BUCKETS.length - 1].key].fg+';border-bottom:1px solid #F0C9C3;letter-spacing:0.08em;text-transform:uppercase;font-size:9.5px;">Overdue · days past due date</th>'
-    + '<th colspan="4" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th></tr><tr>'
+    + '<th colspan="5" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th></tr><tr>'
     + cols.map(function(c){
         var arrow = (!c.noSort && sk === c.key) ? (sd < 0 ? ' ▾' : ' ▴') : '';
         var tint = C[c.key];
@@ -6376,7 +6419,8 @@ function arPage(){
     // Grand Total stays visible while scrolling
     + '<tr>' + '<th class="ar-corner" style="'+thBase+'top:62px;height:38px;text-align:left;background:#E4ECF8;color:#0D2B5E;font-size:12.5px;border-bottom:1px solid #C9D6E8;">Grand Total <span style="font-weight:600;color:#6B82A0;font-size:11px;">· '+M.customers.toLocaleString('en-IN')+' customers</span></th>'
     + _arCells(G, 'th', 'position:sticky;z-index:3;top:62px;height:38px;padding:0 9px;box-sizing:border-box;white-space:nowrap;font-family:\'DM Mono\',monospace;font-size:12px;background:#E4ECF8;border-bottom:1px solid #C9D6E8;font-weight:700;')
-    + '<th style="'+thBase+'top:62px;height:38px;background:#E4ECF8;border-bottom:1px solid #C9D6E8;"></th></tr>'
+    + '<th style="'+thBase+'top:62px;height:38px;background:#E4ECF8;border-bottom:1px solid #C9D6E8;"></th>'
+    + '<th style="'+thBase+'top:62px;height:38px;background:#E4ECF8;border-bottom:1px solid #C9D6E8;text-align:right;font-family:\'DM Mono\',monospace;font-size:12px;color:#0D2B5E;">'+_arDsoTxt(G)+'</th></tr>'
     + '</thead>';
 
   var td = 'padding:7px 9px;border-bottom:1px solid #EEF2F8;text-align:right;font-family:\'DM Mono\',monospace;font-size:12px;white-space:nowrap;';
@@ -6388,7 +6432,8 @@ function arPage(){
       + '<td style="'+td+'text-align:left;font-family:Inter,sans-serif;font-weight:700;color:#173E76;font-size:13px;border-left:3px solid #2C4E82;padding-left:10px;">'
       + '<span style="display:inline-block;width:14px;color:#6488D6;">'+(open ? '▾' : '▸')+'</span>'+esc(Z.name)
       + ' <span title="'+Z.custList.length+' customer'+(Z.custList.length === 1 ? '' : 's')+'" style="font-weight:600;color:#8A9AB5;font-size:11px;margin-left:4px;">'+Z.custList.length+'</span></td>'
-      + _arCells(Z.agg, 'td', td + 'font-weight:700;', ' data-act="arPgZoneDrill" data-val="'+esc(Z.name)+'" class="ar-zdrill" title="See all invoices in '+esc(Z.name)+'"') + '<td style="'+td+'"></td></tr>';
+      + _arCells(Z.agg, 'td', td + 'font-weight:700;', ' data-act="arPgZoneDrill" data-val="'+esc(Z.name)+'" class="ar-zdrill" title="See all invoices in '+esc(Z.name)+'"') + '<td style="'+td+'"></td>'
+      + '<td style="'+td+'font-weight:700;color:#173E76;">'+_arDsoTxt(Z.agg)+'</td></tr>';
     if (!open) return;
     Z.custList.forEach(function(Cu){
       var i = custIndex.length; custIndex.push({ zone:Z.name, customer:Cu.name });
@@ -6398,7 +6443,8 @@ function arPage(){
         +   (Cu.repList.length ? '<div title="'+esc(Cu.repList.join(', '))+'" style="font-size:10.5px;color:#8A9AB5;font-weight:600;margin-top:2px;">'+esc(Cu.repList.slice(0, 2).join(', '))+(Cu.repList.length > 2 ? ' +'+(Cu.repList.length - 2)+' more' : '')+'</div>' : '')
         + '</td>'
         + _arCells(Cu.agg, 'td', td)
-        + '<td style="'+td+'color:#3C5275;">'+(Cu.creditDays !== null ? esc(Cu.creditDays) : '–')+'</td></tr>';
+        + '<td style="'+td+'color:#3C5275;">'+(Cu.creditDays !== null ? esc(Cu.creditDays) : '–')+'</td>'
+        + '<td style="'+td+'color:#15233B;">'+_arDsoTxt(Cu.agg)+'</td></tr>';
     });
   });
   body += '</tbody>';
@@ -6597,7 +6643,8 @@ var AR_DETAIL_COLS = [
   ['Branch', function(r){ return r.br || r.loc; }], ['Consol No', 'consol'], ['Collection Executive', 'collExec'],
   ['Sales Person', function(r){ return _arRepName(r.sp); }], ['Load Port', 'loadPort'], ['Place Of Receipt', 'por'],
   ['Discharge Port', 'dischargePort'], ['Place Of Delivery', 'pod'], ['ETD', 'etd'], ['ETA', 'eta'],
-  ['ATD', 'atd'], ['ATA', 'ata'], ['Ref No.', 'refNo2']
+  ['ATD', 'atd'], ['ATA', 'ata'], ['Ref No.', 'refNo2'],
+  ['GL Group Name', function(r){ return r.gl; }], ['Receipt Date', 'receiptDate']
 ];
 function _arDetVal(r, col){
   if (typeof col[1] === 'function') return col[1](r) || '';
@@ -6678,7 +6725,7 @@ function arDrillDrawer(){
           + (isZone ? '<td'+fz(0)+' style="'+td+cb+'color:#15233B;font-weight:600;white-space:normal;min-width:180px;max-width:240px;">'+esc(r.c)+'</td>' : '')
           + '<td'+fz(k)+' style="'+td+cb+'font-weight:700;color:#15233B;">'+esc(r.txn || (isOa ? (r.ty || 'On Account').replace(/\n/g, ' · ') : '–'))+'</td>'
           + '<td'+fz(k + 1)+' style="'+td+cb+'color:#3C5275;">'+esc(r.d || '–')+'</td>'
-          + '<td'+fz(k + 2)+' style="'+td+cb+'color:#3C5275;">'+(isOa ? '–' : esc(_arDueDate(r.d, r.cd) || '–'))+'</td>'
+          + '<td'+fz(k + 2)+' style="'+td+cb+'color:#3C5275;"'+(r.bd ? ' title="OVR Receivable: due from arrival ('+esc(r.bd)+') + credit days"' : '')+'>'+(isOa ? '–' : esc(_arDueDate(r.bd || r.d, r.cd) || '–'))+'</td>'
           + AR_DETAIL_COLS.map(function(c, j){
               var v = _arDetVal(r, c);
               return '<td'+fz(k + 3 + j)+' style="'+td+(k + 3 + j < nFrozen ? cb : '')+'color:#3C5275;'+(c[2] ? 'white-space:normal;min-width:150px;max-width:230px;' : '')+'">'
@@ -6764,7 +6811,7 @@ function arExportDrill(){
     var o = {};
     if (!dr.customer) o['Customer'] = r.c;
     o['Invoice No'] = r.txn || (isOa ? String(r.ty || 'On Account').replace(/\n/g, ' ') : '');
-    o['Invoice Date'] = r.d || ''; o['Due Date'] = isOa ? '' : _arDueDate(r.d, r.cd);
+    o['Invoice Date'] = r.d || ''; o['Due Date'] = isOa ? '' : _arDueDate(r.bd || r.d, r.cd);
     AR_DETAIL_COLS.forEach(function(c){ o[c[0]] = String(_arDetVal(r, c)).replace(/\n/g, ', '); });
     o['LOB'] = r.lob;
     o['Bill Amount (INR)'] = Math.round(r.bill || 0); o['Outstanding (INR)'] = Math.round(r.o);
@@ -11018,6 +11065,15 @@ document.addEventListener('click', function(ev){
     state.filterReps = [];
     _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops);
   }
+  else if(act==='toggleFilterGlDrop'){ ev.stopPropagation(); state.filterGlDropOpen=!state.filterGlDropOpen; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterGlAll'){ ev.stopPropagation(); state.filterGl=[]; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='toggleFilterGl'){
+    ev.stopPropagation();
+    var gv = el.getAttribute('data-val') || '';
+    var cur = state.filterGl || [];
+    state.filterGl = cur.indexOf(gv) > -1 ? cur.filter(function(x){ return x !== gv; }) : cur.concat([gv]);
+    render(); requestAnimationFrame(positionAllDrops);
+  }
   else if(act==='toggleFilterRegionDrop'){ state.filterRegionDropOpen=!state.filterRegionDropOpen; state.filterZoneDropOpen=false; state.filterLobDropOpen=false; state.filterRepDropOpen=false; render(); }
         else if(act==='toggleFilterRegion'){ var rv=el.getAttribute('data-val'); var ri2=state.filterRegions||[]; var ix=ri2.indexOf(rv); if(ix>-1)ri2.splice(ix,1); else ri2.push(rv); state.filterRegions=ri2;
           // Selecting/deselecting a Region always takes over from any manually-picked
@@ -11029,7 +11085,7 @@ document.addEventListener('click', function(ev){
         else if(act==='toggleFilterZoneDrop'){ ev.stopPropagation(); state.filterZoneDropOpen=!state.filterZoneDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='filterResetAll'){
     ev.stopPropagation();
-    state.filterLobs=[]; state.filterReps=[]; state.filterZones=[];
+    state.filterLobs=[]; state.filterReps=[]; state.filterZones=[]; state.filterGl=[];
     // Same reasoning as filterZoneAll above — do not strip a Regional
     // Managers actual RLS scope, only reset manual choices for other roles.
     var _raRole = currentUser ? (currentUser.role||'').toLowerCase().trim() : '';
