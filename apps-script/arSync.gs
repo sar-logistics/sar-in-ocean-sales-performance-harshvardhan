@@ -25,7 +25,7 @@ const AR_SOURCE_ID = '1NQbaSffJzMZS6lNHjR6w7xQTCLQ_1X583b5PJ6bWcFI'; // Accounts
 const AR_TAB = 'Accounts Receivable';
 const AR_SUMMARY_TAB = 'Ageing Receivable - Summary';
 const AR_DEFAULT_API = 'https://sar-in-ocean-sales-performance.vercel.app/api/mongo-batch';
-const AR_CHUNK = 2000;
+const AR_CHUNK = 1000; // every column goes up, so keep each request well under Vercel's 4.5 MB body limit
 
 // sheet header → pushed field
 const AR_FIELDS = {
@@ -46,6 +46,15 @@ const AR_FIELDS = {
   'LOB': 'lob',
   'House No.': 'houseNo',
   'Invoice Currency': 'currency',
+  // shipment details for the customer panel
+  'Reference No.': 'refNo',
+  'Shipper Name': 'shipper',
+  'Load Port': 'loadPort',
+  'Origin Port': 'originPort',
+  'Discharge Port': 'dischargePort',
+  'Dest Port': 'destPort',
+  'ETD': 'etd',
+  'ETA': 'eta',
 };
 const AR_NUMERIC = ['billAmt', 'outstanding', 'overdueDays', 'ageingDays', 'creditDays'];
 
@@ -60,6 +69,22 @@ function pushArToDashboard() {
   Object.keys(AR_FIELDS).forEach(function (h) { col[AR_FIELDS[h]] = headers.indexOf(h); });
   ['customer', 'txnNo', 'outstanding'].forEach(function (k) {
     if (col[k] === -1) throw new Error('Column for "' + k + '" not found in ' + AR_TAB);
+  });
+  // Every other column is pushed too, under its sheet header (Mongo keys can't
+  // hold "." or start with "$"; a repeated header gets " 2", " 3"…)
+  const mappedIdx = {};
+  Object.keys(col).forEach(function (k) { if (col[k] > -1) mappedIdx[col[k]] = true; });
+  const extra = [], seen = {};
+  Object.keys(AR_FIELDS).forEach(function (h) { seen[AR_FIELDS[h]] = true; });
+  ['_batch', '_insertedAt', 'inherited'].forEach(function (k) { seen[k] = true; });
+  headers.forEach(function (h, i) {
+    if (!h || mappedIdx[i]) return;
+    const base = h.replace(/\./g, '').replace(/^\$+/, '').trim();
+    if (!base) return;
+    let key = base, n = 1;
+    while (seen[key]) key = base + ' ' + (++n);
+    seen[key] = true;
+    extra.push([key, i]);
   });
 
   // Customer → most frequent Sales Person / LOB (all rows, paid ones too)
@@ -95,6 +120,11 @@ function pushArToDashboard() {
       if (AR_NUMERIC.indexOf(k) > -1) { doc[k] = String(v == null ? '' : v).trim() === '' ? null : arNum_(v); return; }
       if (v instanceof Date) { doc[k] = isNaN(v.getTime()) ? '' : Utilities.formatDate(v, tz, 'dd-MMM-yyyy'); return; }
       doc[k] = String(v == null ? '' : v).replace(/\s*\n\s*/g, '\n').trim();
+    });
+    extra.forEach(function (e) {
+      const v = row[e[1]];
+      if (v instanceof Date) { doc[e[0]] = isNaN(v.getTime()) ? '' : Utilities.formatDate(v, tz, 'dd-MMM-yyyy'); return; }
+      doc[e[0]] = typeof v === 'number' ? v : String(v == null ? '' : v).replace(/\s*\n\s*/g, '\n').trim();
     });
     doc.customer = org;
     const u = usual[doc.customer];
