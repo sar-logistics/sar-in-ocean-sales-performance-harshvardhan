@@ -6291,8 +6291,6 @@ function arPage(){
     +(_arCanEditBuckets() ? '<button data-act="arPgBucketOpen" class="btnq" title="Set the overdue slabs for everyone" style="display:flex;align-items:center;gap:6px;border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
       +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Ageing slabs</button>' : '')
     +'<button data-act="arPgExpandAll" data-val="'+(allOpen ? '0' : '1')+'" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'+(allOpen ? 'Collapse all' : 'Expand all')+'</button>'
-    +'<button data-act="arPgExport" class="btnq" style="display:flex;align-items:center;gap:6px;border:none;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:#fff;cursor:pointer;">'
-      +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download Excel</button>'
     +'</div>';
 
   var cols = [
