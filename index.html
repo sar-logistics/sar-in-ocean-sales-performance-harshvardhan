@@ -6329,7 +6329,7 @@ function arPage(){
     body += '<tr data-act="arPgZone" data-val="'+esc(Z.name)+'" class="arpg-zone" style="cursor:pointer;">'
       + '<td style="'+td+'text-align:left;font-family:Inter,sans-serif;font-weight:700;color:#173E76;font-size:13px;border-left:3px solid #2C4E82;padding-left:10px;">'
       + '<span style="display:inline-block;width:14px;color:#6488D6;">'+(open ? '▾' : '▸')+'</span>'+esc(Z.name)
-      + ' <span style="font-weight:600;color:#8A9AB5;font-size:11px;">· '+Z.custList.length+' customer'+(Z.custList.length === 1 ? '' : 's')+'</span></td>'
+      + ' <span title="'+Z.custList.length+' customer'+(Z.custList.length === 1 ? '' : 's')+'" style="font-weight:600;color:#8A9AB5;font-size:11px;margin-left:4px;">'+Z.custList.length+'</span></td>'
       + _arCells(Z.agg, 'td', td + 'font-weight:700;') + '<td style="'+td+'"></td></tr>';
     if (!open) return;
     Z.custList.forEach(function(Cu){
