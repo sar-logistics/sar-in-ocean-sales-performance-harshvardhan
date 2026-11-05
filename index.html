@@ -6061,8 +6061,10 @@ function _arFull(v){
   var val = state.currency === 'USD' ? v / state.rate : v;
   var sym = state.currency === 'USD' ? '$' : '₹';
   var s = Math.abs(val).toLocaleString(state.currency === 'USD' ? 'en-US' : 'en-IN', { maximumFractionDigits:0 });
-  return (val < 0 ? '-' : '') + sym + s;
+  return val < 0 ? '(' + sym + s + ')' : sym + s;
 }
+// AR page: negatives in brackets, e.g. On Account (₹23.89 Cr.)
+function _arCur(v){ return v < 0 ? '(' + fmtCur(-v) + ')' : fmtCur(v); }
 
 function arPage(){
   if (!arDataReady) {
@@ -6115,8 +6117,8 @@ function arPage(){
     + card('Total Outstanding', fmtCur(G.total), '#2C4E82', G.inv.toLocaleString('en-IN')+' invoices')
     + card('Overdue', fmtCur(overdue), '#D9534F', G.total ? Math.round(overdue / G.total * 100)+'% of outstanding' : '')
     + card('Not Due', fmtCur(G.nd), '#15875A', 'within credit days')
-    + card('On Account', fmtCur(G.oa), '#946312', 'paid extra, not yet adjusted')
-    + card('Net Outstanding', fmtCur(G.total - G.oa), '#0D7C6B', 'total − on account')
+    + card('On Account', _arCur(-G.oa), '#946312', 'paid extra, not yet adjusted')
+    + card('Net Outstanding', _arCur(G.total - G.oa), '#0D7C6B', 'total − on account')
     + card('Customers', M.customers.toLocaleString('en-IN'), '#6488D6', M.zones.length+' zones')
     + '</div>';
 
@@ -6213,7 +6215,8 @@ function _arAmt(v){
     else if (a >= 1e3) { n = (a / 1e3).toFixed(1); u = 'k'; }
     else n = Math.round(a).toLocaleString('en-IN');
   }
-  return (val < 0 ? '-' : '') + (usd ? '$' : '\u20B9') + n + (u ? (u === 'k' ? '' : ' ') + u : '');
+  var out = (usd ? '$' : '\u20B9') + n + (u ? (u === 'k' ? '' : ' ') + u : '');
+  return val < 0 ? '(' + out + ')' : out;
 }
 function _arCells(a, tag, style){
   var C = AR_COLORS;
@@ -6222,7 +6225,7 @@ function _arCells(a, tag, style){
   return '<'+tag+' style="'+style+'text-align:right;">'+amt(a.total)+'</'+tag+'>'
     + AR_BUCKETS.map(function(b){ return '<'+tag+' style="'+style+'text-align:right;">'+amt(a[b.key], C[b.key].fg)+'</'+tag+'>'; }).join('')
     + '<'+tag+' style="'+style+'text-align:right;">'+amt(a.nd, C.nd.fg)+'</'+tag+'>'
-    + '<'+tag+' style="'+style+'text-align:right;">'+amt(a.oa, C.oa.fg)+'</'+tag+'>'
+    + '<'+tag+' style="'+style+'text-align:right;">'+amt(-a.oa, C.oa.fg)+'</'+tag+'>'
     + '<'+tag+' style="'+style+'text-align:right;font-weight:700;">'+amt(net, net < 0 ? C.oa.fg : '#0D2B5E')+'</'+tag+'>';
 }
 
@@ -6343,7 +6346,7 @@ function arDrillDrawer(){
     +       card('Total Outstanding', _arFull(agg.total), '#2C4E82', agg.inv + ' open invoice' + (agg.inv === 1 ? '' : 's'))
     +       card('Overdue', _arFull(overdue), '#D9534F', agg.total ? Math.round(overdue / agg.total * 100) + '% of outstanding' : '')
     +       card('Not Due', _arFull(agg.nd), '#15875A', 'within credit days')
-    +       card('On Account', _arFull(agg.oa), '#946312', agg.oa ? 'paid extra, to adjust' : 'nothing extra paid')
+    +       card('On Account', _arFull(-agg.oa), '#946312', agg.oa ? 'paid extra, to adjust' : 'nothing extra paid')
     +       card('Net Outstanding', _arFull(agg.total - agg.oa), '#0D7C6B', 'total − on account')
     +     '</div>'
     +   '</div>'
@@ -6382,7 +6385,7 @@ function arExportExcel(){
         'Zone': Z.name, 'Customer': C.name, 'Sales Person': C.repList.join(', '),
         'Total Outstanding (INR)': Math.round(a.total),
         '0-30': Math.round(a.b1), '30-60': Math.round(a.b2), '60-90': Math.round(a.b3), '90-120': Math.round(a.b4), '120+': Math.round(a.b5),
-        'Not Due': Math.round(a.nd), 'On Account': Math.round(a.oa), 'Net Outstanding': Math.round(a.total - a.oa),
+        'Not Due': Math.round(a.nd), 'On Account': -Math.round(a.oa), 'Net Outstanding': Math.round(a.total - a.oa),
         'Credit Days': C.creditDays !== null ? Number(C.creditDays) : ''
       });
     });
