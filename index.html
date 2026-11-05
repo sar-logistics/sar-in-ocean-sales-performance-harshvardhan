@@ -5811,6 +5811,12 @@ function fetchIncentiveOutstanding(callback, force){
     .finally(function(){ incOutLoading = false; if (callback) callback(); });
 }
 function incRetry(){ incOutError = ''; fetchIncentiveOutstanding(function(){ render(); }, true); render(); }
+function incToggleZone(z){ state.incZoneOpen = state.incZoneOpen || {}; state.incZoneOpen[z] = !state.incZoneOpen[z]; render(); }
+function incToggleAllZones(open){
+  state.incZoneOpen = {};
+  if (open) (window._incZoneNames || []).forEach(function(z){ state.incZoneOpen[z] = true; });
+  render();
+}
 function _incShipKey(v){ return String(v == null ? '' : v).trim().toUpperCase(); }
 
 function incentivePage(){
@@ -5870,7 +5876,7 @@ function incentivePage(){
     a[ci] += row.g || 0;
     exclShipByRep[row._dn] = (exclShipByRep[row._dn] || 0) + 1;
   });
-  var gOut = new Array(nCols).fill(0), gOutShip = 0;
+  var gOut = new Array(nCols).fill(0), gOutShip = 0, zOut = {}, zOutShip = {};
   var fz = state.filterZones && state.filterZones.length ? state.filterZones : null;
   var fr = state.filterReps && state.filterReps.length ? state.filterReps.map(function(x){ return normalizeName(x); }) : null;
   var rls = _getRLSReps().map(function(n){ return normalizeName(n); });
@@ -5883,6 +5889,9 @@ function incentivePage(){
     var ci = colOf[state.reportView === 'Weekly' ? row._wk : row._ml];
     if (ci === undefined) return;
     gOut[ci] += row.g || 0; gOutShip++;
+    var zk = row._zone || 'Cross Sales';
+    (zOut[zk] || (zOut[zk] = new Array(nCols).fill(0)))[ci] += row.g || 0;
+    zOutShip[zk] = (zOutShip[zk] || 0) + 1;
   });
   reps.forEach(function(r){
     r.outGp = exclByRep[r.name] || new Array(nCols).fill(0);
@@ -5933,46 +5942,82 @@ function incentivePage(){
 
   function fmtMonthYear(d){ var dt = new Date(d); return isNaN(dt) ? null : dt.toLocaleDateString('en-GB', { month:'short', year:'numeric' }); }
   function block(ent){
-    var rowBg = ent.isGrand ? '#EEF3FC' : '#FFFFFF';
+    var rowBg = ent.isGrand ? '#EEF3FC' : ent.isZone ? '#F0F4FB' : '#FFFFFF';
     var parts = particulars(ent);
     var mid = Math.floor((parts.length - 1) / 2);
-    var avatar = ent.isGrand
+    var avatar = ent.isZone
+      ? '<div style="width:28px;height:28px;border-radius:8px;background:'+(ent.avatarBg || BRAND_A1)+';color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 5px rgba(0,0,0,0.15);">'+esc(ent.initials || '')+'</div>'
+      : ent.isGrand
       ? '<div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#3B5BA5,#0D2B5E);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 6px rgba(13,43,94,0.25);">GT</div>'
       : '<div style="width:24px;height:24px;border-radius:50%;background:'+(ent.avatarBg || BRAND_A1)+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.1);">'+esc(ent.initials || initials(ent.name))+'</div>';
     var doj = ent.joinDate ? fmtMonthYear(ent.joinDate) : null, doe = ent.exitDate ? fmtMonthYear(ent.exitDate) : null;
-    var label = ent.isGrand
+    var zoneLabel = '';
+    if (ent.isZone) {
+      var zp = ent.name === 'Cross Sales' ? [null, 'Cross Sales', ''] : (/^(\S+)\s*(.*)$/.exec(ent.name) || [null, ent.name, '']);
+      var zReg = ent.name === 'Cross Sales' ? 'Cross Sales' : (window._zoneRegionMap && window._zoneRegionMap[ent.name] ? window._zoneRegionMap[ent.name] : '');
+      var zOpen = !!(state.incZoneOpen && state.incZoneOpen[ent.name]);
+      zoneLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px;">'
+          +'<div style="display:flex;align-items:center;gap:6px;">'
+            +'<span style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5678C2;text-transform:uppercase;">ZONE</span>'
+            +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">'+esc(zp[1])+'</span>'
+            +(zReg ? '<span style="font-size:8px;font-weight:700;color:#FFFFFF;background:#0D7C6B;border-radius:4px;padding:1px 6px;text-transform:uppercase;">'+esc(zReg)+'</span>' : '')
+          +'</div>'
+          +(zp[2] ? '<div style="font-size:10.5px;font-weight:500;color:#5B6678;line-height:1.3;white-space:normal;word-break:break-word;">'+esc(zp[2])+'</div>' : '')
+          +'<div style="font-size:9.5px;font-weight:600;color:#8A9AB5;">'+ent.repCount+' rep'+(ent.repCount === 1 ? '' : 's')+'</div>'
+        +'</div>'
+        +'<div style="width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 3px rgba(30,58,102,0.3);">'
+          +'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">'+(zOpen ? '<polyline points="6 9 12 15 18 9"/>' : '<polyline points="9 6 15 12 9 18"/>')+'</svg></div>';
+    }
+    var label = ent.isZone ? zoneLabel
+      : ent.isGrand
       ? '<div style="font-size:12px;font-weight:800;color:#0D2B5E;">Grand Total <span style="font-weight:600;color:#6B82A0;font-size:10px;">· '+reps.length+' reps</span></div>'
       : '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:1px;">'
           +'<div style="font-size:11px;font-weight:600;color:#1E3A66;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(ent.name)+'">'+esc(ent.name)+'</div>'
-          +(ent.zone ? '<div style="font-size:9px;color:#94A3B8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(ent.zone)+'">'+esc(ent.zone)+'</div>' : '')
           +(doj || doe ? '<div style="font-size:9px;font-weight:500;white-space:nowrap;">'+(doj ? '<span style="color:#10875A;">DOJ: '+esc(doj)+'</span>' : '')+(doj && doe ? ' <span style="color:#CBD5E1;">·</span> ' : '')+(doe ? '<span style="color:#DC2626;">DOE: '+esc(doe)+'</span>' : '')+'</div>' : '')
         +'</div>';
-    var accent = ent.isGrand ? 'box-shadow:inset 3px 0 0 '+BRAND_A2+', inset -1.5px 0 0 '+BORDER_STRONG+';' : 'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';';
+    var accent = ent.isGrand ? 'box-shadow:inset 3px 0 0 '+BRAND_A2+', inset -1.5px 0 0 '+BORDER_STRONG+';'
+      : ent.isZone ? 'box-shadow:inset 3px 0 0 '+BRAND_A1+', inset -1.5px 0 0 '+BORDER_STRONG+';'
+      : 'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';';
+    var zoneClick = ent.isZone ? ' data-zone="'+esc(ent.name)+'" onclick="incToggleZone(this.getAttribute(\'data-zone\'))"' : '';
     return parts.map(function(p, pi){
-      var topBorder = pi === 0 ? (ent.isGrand ? 'border-top:2px solid '+BORDER_STRONG+';' : 'border-top:1.5px dashed #9AA6B8;') : 'border-top:1px solid #EEF1F6;';
-      var nameCell = '<td style="position:sticky;left:0;z-index:2;background:'+rowBg+';padding:6px 8px 6px 10px;width:'+NAME_W+'px;min-width:'+NAME_W+'px;max-width:'+NAME_W+'px;'+accent+'">'
+      var topBorder = pi === 0 ? ((ent.isGrand || ent.isZone) ? 'border-top:2px solid '+BORDER_STRONG+';' : 'border-top:1.5px dashed #9AA6B8;') : 'border-top:1px solid #EEF1F6;';
+      var nameCell = '<td'+zoneClick+' style="'+(ent.isZone ? 'cursor:pointer;' : '')+'position:sticky;left:0;z-index:2;background:'+rowBg+';padding:6px 8px 6px 10px;width:'+NAME_W+'px;min-width:'+NAME_W+'px;max-width:'+NAME_W+'px;'+accent+'">'
         + (pi === mid ? '<div style="display:flex;align-items:center;gap:6px;min-width:0;">'+avatar+label+'</div>' : '') + '</td>';
       var partCell = '<td style="position:sticky;left:'+NAME_W+'px;z-index:2;background:'+rowBg+';padding:6px 10px;width:'+PART_W+'px;min-width:'+PART_W+'px;white-space:nowrap;font-size:11.5px;font-weight:'+(p.bold ? 600 : 500)+';color:'+(p.bold ? (p.color || '#374151') : '#374151')+';">'+esc(p.label)+(p.note ? ' <span style="font-size:9.5px;font-weight:600;color:#94A3B8;">· '+esc(p.note)+'</span>' : '')+'</td>';
       var cell = 'text-align:right;padding:6px 10px;font-family:\'DM Mono\',monospace;font-size:11px;white-space:nowrap;';
       var tot = fmtVal(p.total, p);
-      var fyCell = '<td style="position:sticky;left:'+FY_LEFT+'px;z-index:2;'+cell+'background:'+(ent.isGrand ? rowBg : '#FCF9EE')+';font-weight:700;color:'+tot.c+';box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">'+tot.t+'</td>';
+      var fyCell = '<td style="position:sticky;left:'+FY_LEFT+'px;z-index:2;'+cell+'background:'+((ent.isGrand || ent.isZone) ? rowBg : '#FCF9EE')+';font-weight:700;color:'+tot.c+';box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">'+tot.t+'</td>';
       var mCells = p.vals.map(function(v){
         var f = fmtVal(v, p);
-        return '<td style="'+cell+'background:'+rowBg+';border-right:1px solid '+BORDER+';font-weight:'+(p.bold || ent.isGrand ? 600 : 500)+';color:'+f.c+';">'+f.t+'</td>';
+        return '<td style="'+cell+'background:'+rowBg+';border-right:1px solid '+BORDER+';font-weight:'+(p.bold || ent.isGrand || ent.isZone ? 600 : 500)+';color:'+f.c+';">'+f.t+'</td>';
       }).join('');
       return '<tr style="background:'+rowBg+';'+topBorder+'">'+nameCell+partCell+fyCell+mCells+'</tr>';
     }).join('');
   }
 
-  var body = block(grand) + reps.map(block).join('');
+  var zones = cap.filter(function(c){ return c.isZone; });
+  window._incZoneNames = zones.map(function(z){ return z.name; });
+  var body = spGrand || !zones.length ? block(grand) : '';
+  if (zones.length) {
+    zones.forEach(function(z){
+      var zReps = reps.filter(function(r){ return (r.zone || 'Cross Sales') === z.name; });
+      body += block({ name:z.name, initials:z.initials, avatarBg:z.avatarBg, isZone:true, gp:z.gp, tgt:z.tgt,
+                      outGp:zOut[z.name] || new Array(nCols).fill(0), outShip:zOutShip[z.name] || 0, repCount:zReps.length });
+      if (state.incZoneOpen && state.incZoneOpen[z.name]) body += zReps.map(block).join('');
+    });
+  } else {
+    body += reps.map(block).join('');
+  }
+  var allOpen = zones.length > 0 && zones.every(function(z){ return state.incZoneOpen && state.incZoneOpen[z.name]; });
   return '<div style="padding:20px 24px 32px;">'
     +'<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);">'
       +'<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid '+BORDER+';flex-wrap:wrap;border-radius:12px 12px 0 0;">'
         +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Incentive</span>'
         +'<span style="font-size:11px;color:#9AAFC8;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+state.reportView+' · '+state.currency+'</span>'
-        +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+reps.length+' sales reps</span>'
+        +(zones.length ? '<button onclick="incToggleAllZones('+(allOpen ? 'false' : 'true')+')" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+(allOpen ? 'Collapse All' : 'Expand All')+'</button>' : '')
+        +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+zones.length+' zones · '+reps.length+' sales reps</span>'
         +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">· Outstanding from ar_outstanding'+(incOutMeta && incOutMeta.asOn ? ' as on <span style="color:#2C4E82;font-weight:700;">'+esc(incOutMeta.asOn)+'</span>' : '')+'</span>'
-        +(incOutMeta && !incOutMeta.docsWithRef ? '<span style="font-size:11px;color:#B83A2B;font-weight:700;">· No “Ref No” found in ar_outstanding'+(incOutMeta.fields ? ' (fields: '+esc(incOutMeta.fields.join(', '))+')' : '')+'</span>' : '')
+        +(incOutMeta && !incOutMeta.docsWithRef ? '<span style="font-size:11px;color:#B83A2B;font-weight:700;">· No Ref No (refNo) found in ar_outstanding'+(incOutMeta.fields ? ' (fields: '+esc(incOutMeta.fields.join(', '))+')' : '')+'</span>' : '')
       +'</div>'
       +'<div style="position:relative;overflow:auto;max-height:calc(100vh - 190px);">'
         +'<table style="width:100%;border-collapse:collapse;min-width:850px;font-variant-numeric:tabular-nums;">'
@@ -7624,7 +7669,7 @@ function tableRows(){
     // computed further up from a FLAT monthly target x number of columns, so for a rep who joined (or left) inside the range
     // the row said e.g. "Target 300" while its Achievement % was measured against 700. The monthly cells already used dispTgt.
     achFy = sum(tgtArr) > 0 ? Math.round(sum(dispGp) / sum(tgtArr) * 100) : 0;
-    if (window._incCapture) window._incCapture.push({ name:e.name, initials:e.initials, avatarBg:e.avatarBg, isRep:isRep, isGrand:!!isGrand, noTarget:!!(isRep && !e.tgt), isBranch:!!e.isBranch, zone:e.zone, joinDate:e.joinDate, exitDate:e.exitDate, gp:dispGp.slice(), tgt:tgtArr.slice() });
+    if (window._incCapture) window._incCapture.push({ name:e.name, initials:e.initials, avatarBg:e.avatarBg, isRep:isRep, isGrand:!!isGrand, isZone:!!(isZone && !isGrand), noTarget:!!(isRep && !e.tgt), isBranch:!!e.isBranch, zone:e.zone, joinDate:e.joinDate, exitDate:e.exitDate, gp:dispGp.slice(), tgt:tgtArr.slice() });
 
     function metric(label, indent, type, color, vals, fy, toggleType, repInfo, drillName){
       // drillName (optional): full metric name sent to the drill-down / used as its title when the row's

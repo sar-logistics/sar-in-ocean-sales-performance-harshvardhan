@@ -3,13 +3,14 @@
 //  Not a route (leading underscore): required by api/mongo-batch.js.
 //
 //  GET action=incentiveOutstanding
-//  Reads "Ref No" straight from the ar_outstanding collection and returns
-//  every Ref No that has a positive outstanding. The Incentive page leaves
+//  Reads the Ref No straight from the ar_outstanding collection and returns
+//  every Ref No that has a positive outstanding. The AR sync stores the sheet's
+//  "Reference No." column as refNo; a field literally named "Ref No" also counts. The Incentive page leaves
 //  those shipments' GP out ("GP (Achieved - Outstanding)").
 // ─────────────────────────────────────────────────────────────────
 
 const AR_COLLECTION = "ar_outstanding";
-const REF_FIELD = "Ref No";
+const REF_FIELDS = ["refNo", "Ref No"];
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 // "1,234.00", "(456.00)", -456 → number
@@ -36,8 +37,8 @@ async function incentiveOutstanding(db, force) {
 
   const col = db.collection(AR_COLLECTION);
   const docs = await col.find(
-    { [REF_FIELD]: { $exists: true, $nin: ["", null] } },
-    { projection: { _id: 0, [REF_FIELD]: 1, outstanding: 1, Outstanding: 1, "Outstanding (INR)": 1 } }
+    { $or: REF_FIELDS.map((f) => ({ [f]: { $exists: true, $nin: ["", null] } })) },
+    { projection: Object.assign({ _id: 0, outstanding: 1, Outstanding: 1, "Outstanding (INR)": 1 }, ...REF_FIELDS.map((f) => ({ [f]: 1 }))) }
   ).toArray();
 
   const refs = {};
@@ -47,7 +48,8 @@ async function incentiveOutstanding(db, force) {
       : d["Outstanding (INR)"];
     if (!(num(raw) > 0)) continue;
     // One cell can list more than one shipment
-    String(d[REF_FIELD]).split(/[\n,;]+/).forEach((part) => {
+    const ref = REF_FIELDS.map((f) => d[f]).filter((v) => v !== undefined && v !== null && v !== "").join("\n");
+    String(ref).split(/[\n,;]+/).forEach((part) => {
       const k = refKey(part);
       if (k) refs[k] = true;
     });
