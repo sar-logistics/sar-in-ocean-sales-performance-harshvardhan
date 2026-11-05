@@ -140,7 +140,7 @@ function pushArToDashboard() {
 
   const asOn = arAsOnDate_(src);
 
-  // Weighted DSO, paid invoices included. Per invoice: days =
+  // Weighted DSO, paid invoices included (per customer / rep / LOB / location / GL group). Per invoice: days =
   //   (Receipt Date, or the "as on" date while anything is still outstanding)
   //   − (Invoice Date + Credit Days), and 0 when that comes out negative
   // Paid invoices have no outstanding so they aren't pushed as rows; instead one
@@ -149,6 +149,9 @@ function pushArToDashboard() {
   //   dsoBill = Σ Bill Amount, dsoBillDays = Σ (Bill Amount × days)
   const asOnDate = arParseDate_(asOn) || new Date();
   const rdCol = headers.indexOf('Receipt Date');
+  // "OVR Receivable" (GL Group Name) counts from arrival: ATA, else ETA, else Trans. Date
+  const glCol = headers.indexOf('GL Group Name'), ataCol = headers.indexOf('ATA'), etaCol = headers.indexOf('ETA');
+  const asDate = function (v) { return v instanceof Date && !isNaN(v.getTime()) ? v : arParseDate_(v); };
   const inv = {};
   for (let r = 1; r < values.length; r++) {
     const row = values[r];
@@ -162,8 +165,11 @@ function pushArToDashboard() {
     let x = inv[key];
     if (!x) {
       const u = usual[org] || { sp: {}, lob: {} };
+      const gl = glCol > -1 ? String(row[glCol] || '').trim() : '';
+      const base = gl.toLowerCase() === 'ovr receivable'
+        ? ((ataCol > -1 && asDate(row[ataCol])) || (etaCol > -1 && asDate(row[etaCol])) || td) : td;
       x = inv[key] = {
-        org: org, bill: bill, td: td, rd: null, open: false,
+        org: org, bill: bill, td: base, rd: null, open: false, gl: gl,
         cd: col.creditDays > -1 ? arNum_(row[col.creditDays]) : 0,
         sp: (col.salesPerson > -1 ? String(row[col.salesPerson] || '').trim() : '') || top(u.sp),
         lob: (col.lob > -1 ? String(row[col.lob] || '').replace(/\s*\n\s*/g, '\n').trim() : '') || top(u.lob),
@@ -180,8 +186,8 @@ function pushArToDashboard() {
     const end = x.open || !x.rd ? asOnDate : x.rd;
     // paid early / not yet due → 0 (only lateness counts)
     const days = Math.max(0, Math.round((end.getTime() - x.td.getTime()) / 86400000) - (x.cd || 0));
-    const gk = [x.org, x.sp, x.lob, x.loc].join('\u0001');
-    const g = dsoGroups[gk] || (dsoGroups[gk] = { customer: x.org, salesPerson: x.sp, lob: x.lob, location: x.loc,
+    const gk = [x.org, x.sp, x.lob, x.loc, x.gl].join('\u0001');
+    const g = dsoGroups[gk] || (dsoGroups[gk] = { customer: x.org, salesPerson: x.sp, lob: x.lob, location: x.loc, glGroup: x.gl,
       outstanding: 0, _dso: true, dsoBill: 0, dsoBillDays: 0, dsoCount: 0 });
     g.dsoBill += x.bill; g.dsoBillDays += x.bill * days; g.dsoCount++;
   });
