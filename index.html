@@ -2823,6 +2823,7 @@ var IC = {
   dollar:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9.8 9.6c0-1 1-1.6 2.2-1.6s2.2.6 2.2 1.6c0 2.4-4.4 1.2-4.4 3.6 0 1 1 1.6 2.2 1.6s2.2-.6 2.2-1.6"/></svg>',
   line:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4M4 16l5-5 4 3 7-7"/></svg>',
   people:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8.5" cy="9" r="2.6"/><circle cx="16" cy="10" r="2.2"/><path d="M3.5 19a5 5 0 0 1 10 0M14 19a4.5 4.5 0 0 1 6.5-4"/></svg>',
+  award:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="5"/><path d="M8.6 12.8L7 21l5-2.8L17 21l-1.6-8.2"/></svg>',
   sliders:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h14"/><circle cx="9" cy="7" r="2" fill="#fff"/><circle cx="15" cy="17" r="2" fill="#fff"/></svg>'
 };
 
@@ -2841,6 +2842,7 @@ function sidebarNav(){
       +navItem('Operation Pendency',state.page==='op',IC.clip,'page','op')
       +navItem('Finance Pendency',state.page==='finance',IC.dollar,'page','finance')
       +navItem('Accounts Receivable',state.page==='ar',IC.clip,'page','ar')
+      +navItem('Incentive',state.page==='incentive',IC.award,'page','incentive')
     +'</div>'
     +(canSeeAdmin ? ('<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:12px 8px 5px;text-transform:uppercase;">Admin</div>'
     +'<div style="display:flex;flex-direction:column;gap:1px;">'
@@ -2900,7 +2902,7 @@ function topbar(){
     // ── SINGLE ROW: View / Dates / Currency / Rate / Filters / Refresh → Feedback / Sign Out ──
     +'<div style="display:flex;align-items:center;gap:10px;padding:7px 16px 7px;overflow:visible;background:linear-gradient(180deg,#F9FBFE,#F2F6FB);">'
       // Report View dropdown — hidden on non-data pages
-      +(['usage','teams','admin','org','ar'].indexOf(state.page) >= 0 ? '' : '<div style="position:relative;display:inline-block;flex-shrink:0;">'
+      +(['usage','teams','admin','org','ar','incentive'].indexOf(state.page) >= 0 ? '' : '<div style="position:relative;display:inline-block;flex-shrink:0;">'
         +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;transition:box-shadow 0.15s;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';'+(state.viewDropOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+pillShadow+';':'')+'">'
           +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="'+(state.viewDropOpen?'#1D5FCC':'#7C93B8')+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>'
           +state.reportView+' View'
@@ -2920,7 +2922,7 @@ function topbar(){
           : '')
       +'</div>')
       // ── View-specific date selector ──────────────────────────────────────
-      +(['usage','teams','admin','org','ar'].indexOf(state.page) >= 0 ? '' : (function(){
+      +(['usage','teams','admin','org','ar','incentive'].indexOf(state.page) >= 0 ? '' : (function(){
         var v = state.reportView;
         var ps = pillShadow;
 
@@ -5786,6 +5788,39 @@ function financePage(){
 }
 
 
+/* ====================== INCENTIVE ====================== */
+// Sales incentive page. Layout matches Accounts Receivable (title row, KPI cards, table card).
+// No incentive data source yet, so the cards show dashes and the table shows an empty state.
+function incentivePage(){
+  function card(label, value, tint, sub){
+    return '<div class="kpi-card" style="position:relative;overflow:hidden;background:rgba(255,255,255,0.66);border:1px solid #E3EAF4;border-radius:16px;padding:12px 14px 11px;">'
+      +'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+tint+';"></div>'
+      +'<div style="font-size:8px;font-weight:800;letter-spacing:0.09em;text-transform:uppercase;color:#5B7298;margin-bottom:6px;">'+label+'</div>'
+      +'<div style="font-family:\'DM Mono\',monospace;font-size:18px;font-weight:600;color:#15233B;">'+value+'</div>'
+      +(sub ? '<div style="font-size:10px;color:#8A9AB5;margin-top:3px;font-weight:600;">'+sub+'</div>' : '')
+      +'</div>';
+  }
+  var header = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">'
+    +'<div><div style="font-size:16px;font-weight:800;color:#15233B;letter-spacing:-0.01em;">Incentive</div>'
+    +'<div style="font-size:11px;font-weight:600;color:#6B82A0;margin-top:2px;">Sales incentive by salesperson</div></div>'
+    +'</div>';
+  var kpis = '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-bottom:12px;">'
+    + card('Total Incentive', '–', '#2C4E82', '')
+    + card('Eligible Salespeople', '–', '#15875A', '')
+    + card('Target Achieved', '–', '#6488D6', '')
+    + card('Pending Payout', '–', '#946312', '')
+    + '</div>';
+  var cols = ['Salesperson','Zone','Target','Achieved','Achievement %','Incentive'];
+  var table = '<div style="background:#FFFFFF;border:1px solid #E3EAF4;border-radius:14px;overflow:hidden;">'
+    +'<table style="width:100%;border-collapse:collapse;">'
+    +'<thead><tr>'+cols.map(function(c, i){
+        return '<th style="height:36px;padding:0 9px;font-size:10.5px;font-weight:800;letter-spacing:0.02em;white-space:nowrap;text-align:'+(i < 2 ? 'left' : 'right')+';background:#F1F5FB;color:#3C5275;border-bottom:2px solid #C9D6E8;">'+c+'</th>';
+      }).join('')+'</tr></thead>'
+    +'<tbody><tr><td colspan="'+cols.length+'" style="padding:60px 24px;text-align:center;color:#6B82A0;font-size:12.5px;font-weight:600;">No incentive data yet.</td></tr></tbody>'
+    +'</table></div>';
+  return '<div style="padding:4px 0 24px;">'+header+kpis+table+'</div>';
+}
+
 /* ====================== ACCOUNTS RECEIVABLE ====================== */
 // Customer outstanding from the AR sheet (pushed by apps-script/arSync.gs).
 // One row per sheet line with a non-zero Outstanding:
@@ -8501,7 +8536,7 @@ function render(){
   computeFilteredRepsRaw();
   buildZoneAggregates(); // pre-compute once per render, used by grandEntity/zoneEntity
   // Skip model() on insight pages — they don't use it, saves CPU
-  var M = (state.page==='customers'||state.page==='agents'||state.page==='tradelane'||state.page==='usage'||state.page==='teams'||state.page==='admin'||state.page==='finance'||state.page==='op'||state.page==='ar') ? null : model();
+  var M = (state.page==='customers'||state.page==='agents'||state.page==='tradelane'||state.page==='usage'||state.page==='teams'||state.page==='admin'||state.page==='finance'||state.page==='op'||state.page==='ar'||state.page==='incentive') ? null : model();
   var app=document.getElementById('app');
   if(!app.querySelector('aside')){
     app.innerHTML = sidebar()
@@ -8535,6 +8570,7 @@ function render(){
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
     : state.page==='ar' ? arPage()
+    : state.page==='incentive' ? incentivePage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
   if(state.page==='teams'){ mainEl.style.overflow='hidden'; mainEl.style.padding='0'; mainEl.style.display='flex'; mainEl.style.flexDirection='column'; }
   else if(state.page==='ar'){ mainEl.style.overflow='hidden'; mainEl.style.padding='4px 18px 14px'; mainEl.style.display=''; mainEl.style.flexDirection=''; } else { mainEl.style.overflow=''; mainEl.style.padding=''; mainEl.style.display=''; mainEl.style.flexDirection=''; }
@@ -8562,6 +8598,7 @@ function renderKeepTopbar(){
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
     : state.page==='ar' ? arPage()
+    : state.page==='incentive' ? incentivePage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
   var drawerEl=document.getElementById('drawer-slot');
   if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal();
