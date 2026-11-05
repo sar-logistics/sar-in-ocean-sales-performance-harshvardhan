@@ -142,7 +142,7 @@ function pushArToDashboard() {
 
   // Weighted DSO, paid invoices included. Per invoice: days =
   //   (Receipt Date, or the "as on" date while anything is still outstanding)
-  //   − (Invoice Date + Credit Days)
+  //   − (Invoice Date + Credit Days), and 0 when that comes out negative
   // Paid invoices have no outstanding so they aren't pushed as rows; instead one
   // small row per customer / sales person / LOB / location carries the totals
   // (_dso: true, outstanding 0 — pages that read outstanding rows skip it):
@@ -178,7 +178,8 @@ function pushArToDashboard() {
   Object.keys(inv).forEach(function (k) {
     const x = inv[k];
     const end = x.open || !x.rd ? asOnDate : x.rd;
-    const days = Math.round((end.getTime() - x.td.getTime()) / 86400000) - (x.cd || 0);
+    // paid early / not yet due → 0 (only lateness counts)
+    const days = Math.max(0, Math.round((end.getTime() - x.td.getTime()) / 86400000) - (x.cd || 0));
     const gk = [x.org, x.sp, x.lob, x.loc].join('\u0001');
     const g = dsoGroups[gk] || (dsoGroups[gk] = { customer: x.org, salesPerson: x.sp, lob: x.lob, location: x.loc,
       outstanding: 0, _dso: true, dsoBill: 0, dsoBillDays: 0, dsoCount: 0 });
