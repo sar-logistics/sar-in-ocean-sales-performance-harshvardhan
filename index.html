@@ -188,7 +188,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'ocean-v166';
+var CACHE_VERSION = 'ocean-v167';
 
 // ── Ocean Zone→Region map (from Ocean Mapping sheet) ─────────────────────────
 // Used by Regional Manager RLS to filter reps by region.
@@ -453,8 +453,9 @@ function _showDashboardBody() {
     setTimeout(function(){
       if (!allPendencyDrillRows) {
         fetchOpData(function(){
-          // If user is on OP/FP in weekly view, re-render with the now-loaded data
-          if ((state.page === 'op' || state.page === 'finance') && state.reportView === 'Weekly') {
+          // If user is on OP/FP, re-render with the now-loaded data — in every
+          // view, so the table never shows older numbers than its drill-through
+          if (state.page === 'op' || state.page === 'finance') {
             render();
           }
         }, false);
@@ -1471,7 +1472,10 @@ function prefetchCustomerRanges() {
 var fetchFinanceData  = makeFetcher('finance',   'finance',   function(d){ financeData  = d; financeDataReady  = true; });
 var fetchOpData = makeFetcher('op', 'op', function(d){ opData = d; opDataReady = true; if (d.allDrillJobRows) { allPendencyDrillRows = d.allDrillJobRows;
     _pendencyDrillCache = {}; // clear stale cache when fresh drill rows arrive
-    delete d.allDrillJobRows; } });
+    delete d.allDrillJobRows;
+    // Fresh drill rows must always be matched by a fresh table
+    if (state.page === 'op' || state.page === 'finance') setTimeout(render, 0);
+  } });
 
 // ── Agent Insights fetch (mirrors customer fetch pattern) ─────────────────────
 var _agentCache = {};
@@ -2204,7 +2208,8 @@ function syncDateRangeToData(){
   state.dateFrom = defaultFrom;
   state.dateTo   = defaultTo;
   if (!state.weeklyMonth || months26.indexOf(state.weeklyMonth) < 0) {
-    state.weeklyMonth = months26[months26.length - 1];
+    // Current month when it has data, not the last month with any data
+    state.weeklyMonth = months26.indexOf(curMonLabel) >= 0 ? curMonLabel : months26[months26.length - 1];
   }
 }
 
@@ -5047,6 +5052,9 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
 /* ====================== FINANCE PENDENCY ====================== */
 function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobOwners, lockType){
   var d = data;
+  // LOB filter, read up front: the weekly indexes below are built before the
+  // original `var _flobs` line further down and saw it as undefined (ignored).
+  var _flobs = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
   var isWeekly = state.reportView === 'Weekly';
   var isQuarterly = state.reportView === 'Quarterly';
   var isYearly = state.reportView === 'Yearly';
@@ -5115,15 +5123,20 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       }
       // Derive ISO week from the correct primary date
       // Use ETD for export-type rows, ETA for import-type rows — same as server
-      var lob = (row.lob || '').toUpperCase();
-      var isImport = lob.indexOf('IMPORT') >= 0;
-      var rawDate = isImport
-        ? (row.etaDischarge || row.etdLoading || row.jobDate || '')
-        : (row.etdLoading  || row.etaDischarge || row.jobDate || '');
-      if (!rawDate) return;
-      var d = new Date(rawDate);
-      if (isNaN(d)) return;
-      var wk = getISOWeek(d).key;
+      // Week from the server (_wk), the same week the drill-through filters on
+      // (new Date() misread DD/MM/YYYY dates and skipped leg-date fallbacks)
+      var wk = row._wk;
+      if (!wk) {
+        var lob = (row.lob || '').toUpperCase();
+        var isImport = lob.indexOf('IMPORT') >= 0;
+        var rawDate = isImport
+          ? (row.etaDischarge || row.etdLoading || row.jobDate || '')
+          : (row.etdLoading  || row.etaDischarge || row.jobDate || '');
+        if (!rawDate) return;
+        var d = new Date(rawDate);
+        if (isNaN(d)) return;
+        wk = getISOWeek(d).key;
+      }
       if (!_wkSet[wk]) return;
       if (!_weeklyPendencyIndex[repName]) _weeklyPendencyIndex[repName] = {};
       if (!_weeklyPendencyIndex[repName][wk]) _weeklyPendencyIndex[repName][wk] = { pending:0, done:0 };
@@ -5438,7 +5451,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         var dtype = isGrand ? 'grand'
           : (entityName && entityName.indexOf('||') > -1) ? 'jobowner'
           : (entityName === 'Cross Sales') ? 'crosssales'
-          : (zoneGroup === 'Cross Sales') ? 'branch'
+          : (zoneGroup === 'Cross Sales' && !repGroup) ? 'branch' // a rep row under Cross Sales is a rep, not a branch
           : (zoneGroup && zoneGroup.startsWith('branch__')) ? 'branch'
           : isZone ? 'zone' : 'rep';
         if (isYearly && _pFyGroups) {
@@ -5482,7 +5495,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       var gtDtype = isGrand ? 'grand'
         : (entityName && entityName.indexOf('||') > -1) ? 'jobowner'
         : (entityName === 'Cross Sales') ? 'crosssales'
-        : (zoneGroup === 'Cross Sales') ? 'branch'
+        : (zoneGroup === 'Cross Sales' && !repGroup) ? 'branch'
         : (zoneGroup && zoneGroup.startsWith('branch__')) ? 'branch'
         : isZone ? 'zone' : 'rep';
       // Use active column range for GT drill so it matches what the table shows
@@ -5767,8 +5780,9 @@ function financePage(){
       +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading finance pendency…</div>'
       +'</div>';
   }
-  // Weekly view needs allPendencyDrillRows — show loading if not ready yet
-  if (state.reportView === 'Weekly' && !allPendencyDrillRows) {
+  // Load the job rows with the page in every view (not only Weekly), so the
+  // table and its drill-through always come from the same data load
+  if (!allPendencyDrillRows) {
     if (!_pendencyDrillLoading) {
       _pendencyDrillLoading = true;
       fetch('/api/mongo-batch?action=op').then(function(r){return r.json();}).then(function(d){
@@ -5779,7 +5793,7 @@ function financePage(){
         _pendencyDrillLoading = false; render();
       }).catch(function(){ _pendencyDrillLoading = false; });
     }
-    return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'      +'<div style="width:18px;height:18px;border:2.5px solid #1D5FCC;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading weekly data…</div>'      +'</div>';
+    return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'      +'<div style="width:18px;height:18px;border:2.5px solid #1D5FCC;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading job data…</div>'      +'</div>';
   }
   return pendencyPage(financeData, 'Finance Pendency', 'FL Pending Jobs', 'FL Done Jobs', '#1D5FCC', false, 'Financial Lock');
 }
@@ -5798,7 +5812,7 @@ function opPage(){
       +'</div>';
   }
   // Weekly view needs allPendencyDrillRows — fetch directly (bypasses makeFetcher sync trap)
-  if (state.reportView === 'Weekly' && !allPendencyDrillRows) {
+  if (!allPendencyDrillRows) {
     if (!_pendencyDrillLoading) {
       _pendencyDrillLoading = true;
       fetch('/api/mongo-batch?action=op').then(function(r){return r.json();}).then(function(d){
@@ -5807,7 +5821,7 @@ function opPage(){
         render();
       }).catch(function(){ _pendencyDrillLoading = false; });
     }
-    return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'      +'<div style="width:18px;height:18px;border:2.5px solid #7C3AED;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading weekly data…</div>'      +'</div>';
+    return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'      +'<div style="width:18px;height:18px;border:2.5px solid #7C3AED;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading job data…</div>'      +'</div>';
   }
   return pendencyPage(opData, 'Operation Pendency', 'OL Pending Jobs', 'OL Done Jobs', '#7C3AED', true, 'Operation Lock');
 }
@@ -6816,7 +6830,7 @@ function salesTable(M){
   if (state.reportView === 'Weekly' && !weekDataLoaded()) {
     if (!_weekDataLoading && !_weekDataFetched) fetchWeekDataIfNeeded(function(){ if(state.reportView==='Weekly') render(); });
     else if (_weekDataFetched && !_weekDataLoading) { _weekDataFetched = false; fetchWeekDataIfNeeded(function(){ if(state.reportView==='Weekly') render(); }); }
-    return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div><div style="font-size:13px;color:#9AAFC8;font-weight:500;">Loading weekly data…</div></div>';
+    return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div><div style="font-size:13px;color:#9AAFC8;font-weight:500;">Loading job data…</div></div>';
   }
 
   // Empty state — no data for the selected filter
@@ -8786,20 +8800,24 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
   // Detect week key format e.g. "2026-W29" — convert to month for _month matching
   var isWeekKey = col && /^\d{4}-W\d+$/.test(col);
   var allowedMonths = null;
+  var _wkRangeSet = null; // Weekly Grand Total column: a range of week keys
+  // Weekly view only counts the selected month's jobs — the drill must too
+  var _weeklyMonthSel = state.weeklyMonth || months26[months26.length-1];
   if (isWeekKey) {
-    // Convert ISO week key to month label using allPendencyDrillRows
-    var _wkMonthSet = {};
-    if (allPendencyDrillRows) {
-      allPendencyDrillRows.forEach(function(r){ if (r._wk === col && r._month) _wkMonthSet[r._month] = true; });
-    }
-    allowedMonths = Object.keys(_wkMonthSet).length > 0 ? new Set(Object.keys(_wkMonthSet)) : null;
-    // Also store week key for week-level filtering
+    allowedMonths = new Set([_weeklyMonthSel]);
   } else if (!isFY && !isRange && col) {
     allowedMonths = new Set([col]);
   } else if (isRange) {
     var parts = col.split(':');
-    var fi = FY_ALL.indexOf(parts[1]), ti = FY_ALL.indexOf(parts[2]);
-    if (fi >= 0 && ti >= 0) allowedMonths = new Set(FY_ALL.slice(fi, ti+1));
+    if (/^\d{4}-W\d+$/.test(parts[1] || '')) {
+      var _wks = filteredWeekKeys();
+      var wfi = _wks.indexOf(parts[1]), wti = _wks.indexOf(parts[2]);
+      _wkRangeSet = new Set(wfi >= 0 && wti >= 0 ? _wks.slice(wfi, wti + 1) : _wks);
+      allowedMonths = new Set([_weeklyMonthSel]);
+    } else {
+      var fi = FY_ALL.indexOf(parts[1]), ti = FY_ALL.indexOf(parts[2]);
+      if (fi >= 0 && ti >= 0) allowedMonths = new Set(FY_ALL.slice(fi, ti+1));
+    }
   }
 
   // salesZoneSet: zones that appear in Sales Performance (repsRaw)
@@ -8812,8 +8830,12 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
     repsRawOriginal.forEach(function(r){ if (r.zone) salesZoneSet[r.zone] = true; });
   }
   function isCrossSalesRep(drillRow) {
-    // A row belongs to Cross Sales if its zone is not a known Sales Performance zone
-    return !salesZoneSet[drillRow._zone];
+    // Cross Sales = genuinely unmapped (Unassigned/empty zone) — the SAME rule
+    // the table uses. Checking "zone not in Sales Performance's zone list"
+    // made the drill disagree whenever a mapped zone's name differs between
+    // financial years (e.g. INZ07 Sudip Mazumder vs INZ07 Tapan Sengupta).
+    var z = drillRow._zone;
+    return !z || z === 'Unassigned' || z === 'Unspecified';
   }
 
   var repNorm = normalizeName(rep);
@@ -8850,6 +8872,7 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
     if (allowedMonths && !allowedMonths.has(r._month)) continue;
     // Week key filter — for weekly view, further restrict to the specific week
     if (isWeekKey && r._wk !== col) continue;
+    if (_wkRangeSet && !_wkRangeSet.has(r._wk)) continue;
 
     // Entity filter
     if (type === 'grand') {

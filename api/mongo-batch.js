@@ -2648,11 +2648,14 @@ async function computeBothPendency(db) {
     const normDis = normalizeName(display);
     for (const key of [normRaw, normDis]) {
       if (!key) continue;
-      // Prefer real zone over Unassigned — FY26 takes priority
+      // Prefer real zone over Unassigned — the CURRENT FY (FY27) takes
+      // priority. Preferring FY26 filed reps whose zone was renamed for FY27
+      // (e.g. INZ07 Sudip Mazumder -> INZ07 Tapan Sengupta) under an old zone
+      // that no longer exists in Sales Performance's zone list.
       const existingZone = repZoneMap[key];
       const existingIsReal = existingZone && existingZone !== 'Unassigned';
       const newIsReal = zone && zone !== 'Unassigned';
-      if (!existingZone || (isFY26 && newIsReal) || (!existingIsReal && newIsReal)) {
+      if (!existingZone || (!isFY26 && newIsReal) || (!existingIsReal && newIsReal)) {
         repZoneMap[key]    = zone;
         repDisplayMap[key] = display;
       }
