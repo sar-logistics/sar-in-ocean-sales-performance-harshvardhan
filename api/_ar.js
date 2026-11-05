@@ -206,23 +206,47 @@ async function arBucketsSave(db, body) {
   return { status: 200, json: { success: true, buckets: doc } };
 }
 
-// GET action=arDetail&customer=… → shipment details for one customer's lines:
-// [txnNo, houseNo, outstanding, shipmentNo (Reference No.), shipper, POL, POD, ETD, ETA]
-async function arDetail(db, customer) {
-  const name = String(customer || "").trim();
-  if (!name) return { status: 400, json: { success: false, error: "customer required" } };
+// Detail-view columns: output key → stored field (mapped name, or the sheet
+// header with dots removed, as the sync stores every column)
+const AR_DETAIL_FIELDS = [
+  ["ref", "refNo"],                 // Reference No.
+  ["master", "Master No"],
+  ["shipper", "shipper"],           // Shipper Name
+  ["consignee", "Consignee Name"],
+  ["custName", "Customer Name"],
+  ["consol", "Consol No"],
+  ["collExec", "collectionExec"],   // Collection Executive
+  ["loadPort", "loadPort"],
+  ["por", "Place Of Receipt"],
+  ["dischargePort", "dischargePort"],
+  ["pod", "Place Of Delivery"],
+  ["etd", "etd"],
+  ["eta", "eta"],
+  ["atd", "ATD"],
+  ["ata", "ATA"],
+  ["refNo2", "Ref No"],             // Ref No.
+];
+
+// action=arDetail → detail columns for some customers' lines.
+// GET ?customer=… (one) or POST { customers:[…] } (a zone's worth, up to 2000).
+// Rows: [customer, txnNo, houseNo, outstanding, ...AR_DETAIL_FIELDS values]
+async function arDetail(db, customers) {
+  const names = [...new Set((Array.isArray(customers) ? customers : [customers]).map((c) => String(c || "").trim()).filter(Boolean))];
+  if (!names.length) return { status: 400, json: { success: false, error: "customer required" } };
+  if (names.length > 2000) return { status: 400, json: { success: false, error: "too many customers" } };
+  const fields = AR_DETAIL_FIELDS.map((f) => f[0]);
   const meta = await db.collection("_meta").findOne({ _id: AR_META_ID });
-  if (!meta || !meta.currentBatch) return { status: 200, json: { success: true, rows: [] } };
+  if (!meta || !meta.currentBatch) return { status: 200, json: { success: true, fields, rows: [] } };
+  const projection = { _id: 0, customer: 1, txnNo: 1, houseNo: 1, outstanding: 1 };
+  AR_DETAIL_FIELDS.forEach((f) => { projection[f[1]] = 1; });
   const docs = await db.collection(AR_COLLECTION).find(
-    { _batch: meta.currentBatch, customer: name },
-    { projection: { _id: 0, txnNo: 1, houseNo: 1, outstanding: 1, refNo: 1, shipper: 1, loadPort: 1, originPort: 1, dischargePort: 1, destPort: 1, etd: 1, eta: 1 } }
+    { _batch: meta.currentBatch, customer: names.length === 1 ? names[0] : { $in: names } },
+    { projection }
   ).toArray();
   const s = (v) => String(v == null ? "" : v).trim();
-  const rows = docs.map((d) => [
-    s(d.txnNo), s(d.houseNo), Number(d.outstanding) || 0,
-    s(d.refNo), s(d.shipper), s(d.loadPort) || s(d.originPort), s(d.dischargePort) || s(d.destPort), s(d.etd), s(d.eta),
-  ]);
-  return { status: 200, json: { success: true, rows } };
+  const rows = docs.map((d) => [s(d.customer), s(d.txnNo), s(d.houseNo), Number(d.outstanding) || 0]
+    .concat(AR_DETAIL_FIELDS.map((f) => s(d[f[1]]))));
+  return { status: 200, json: { success: true, fields, rows } };
 }
 
 module.exports = { arPush, arGet, arBucketsGet, arBucketsSave, arDetail, buildArPayload, arLobKey, normalizeName };

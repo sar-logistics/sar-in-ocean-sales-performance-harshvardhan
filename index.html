@@ -6072,7 +6072,8 @@ var arRows = null, arMeta = null, arDataReady = false, arDataLoading = false, ar
 var AR_COLORS = {
   nd: { fg:'#0F7048', bg:'#E6F5EC' },
   oa: { fg:'#7A510E', bg:'#FBF1DA' },
-  net:{ fg:'#0D2B5E', bg:'#E4ECF8' }
+  net:{ fg:'#0D2B5E', bg:'#E4ECF8' },
+  due:{ fg:'#8E1F1B', bg:'#FBE4E1' }   // Outstanding Due = all overdue slabs
 };
 // Overdue buckets, set as "slabs" like the Logisys report: up to 9 slabs, each
 // ticked on/off with a day limit. Every ticked slab closes a bucket:
@@ -6215,8 +6216,11 @@ function _arModel(){
     if (r.sp) C.reps[r.sp] = 1;
     if (!_arIsOa(r) && r.o > 0 && r.cd !== null && r.cd !== undefined) C.cd[r.cd] = (C.cd[r.cd] || 0) + 1;
   });
-  var sortKey = (state.arSort && state.arSort.key) || 'total', dir = (state.arSort && state.arSort.dir) || -1;
-  function val(x){ return sortKey === 'name' ? x.name.toLowerCase() : sortKey === 'net' ? x.agg.total - x.agg.oa : (x.agg[sortKey] || 0); }
+  var sortKey = (state.arSort && state.arSort.key) || 'net', dir = (state.arSort && state.arSort.dir) || -1;
+  function val(x){
+    return sortKey === 'name' ? x.name.toLowerCase() : sortKey === 'net' ? x.agg.total - x.agg.oa
+      : sortKey === 'due' ? _arOverdue(x.agg) : (x.agg[sortKey] || 0);
+  }
   var zoneList = sortZones(Object.keys(zones)).map(function(zn){
     var Z = zones[zn];
     Z.custList = Object.keys(Z.cust).map(function(k){
@@ -6278,6 +6282,7 @@ function arPage(){
     + '.arpg-row:hover td{background:#EEF4FF !important;}'
     + '.arpg-zone td{background:#F3F7FD;}'
     + '.arpg-zone:hover td{background:#E8EFFB;}'
+    + '.arpg-zone td.ar-zdrill:hover{background:#D6E3F8 !important;text-decoration:underline;text-underline-offset:3px;}'
     + '.arpg-th-sort:hover{color:#173E76 !important;}'
     + '#ar-table-scroll th,#ar-table-scroll td{border-right:1px solid #DDE5F0;}'
     + '#ar-table-scroll th:last-child,#ar-table-scroll td:last-child{border-right:none;}'
@@ -6315,22 +6320,20 @@ function arPage(){
     +(_arCanEditBuckets() ? '<button data-act="arPgBucketOpen" class="btnq" title="Set the overdue slabs for everyone" style="display:flex;align-items:center;gap:6px;border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
       +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Ageing slabs</button>' : '')
     +'<button data-act="arPgExpandAll" data-val="'+(allOpen ? '0' : '1')+'" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'+(allOpen ? 'Collapse all' : 'Expand all')+'</button>'
-    +'<button data-act="arPgExport" class="btnq" style="display:flex;align-items:center;gap:6px;border:none;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:#fff;cursor:pointer;">'
-      +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download Excel</button>'
     +'</div>';
 
   var cols = [
     { key:'name',  label:'Customer', left:true },
-    { key:'total', label:'Total Outstanding' },
+    { key:'net', label:'Net Outstanding' },
   ].concat(AR_BUCKETS.map(function(b){ return { key:b.key, label:b.label }; }), [
+    { key:'due', label:'Outstanding Due' },
     { key:'nd',  label:'Not Due' },
     { key:'oa',  label:'On Account' },
-    { key:'net', label:'Net Outstanding' },
     { key:'cd',  label:'Credit Days', noSort:true }
   ]);
   // Three sticky header rows with fixed heights: band (26px), column names (36px), Grand Total
   var thBase = 'position:sticky;z-index:3;font-size:10.5px;font-weight:800;letter-spacing:0.02em;padding:0 9px;white-space:nowrap;box-sizing:border-box;';
-  var sk = (state.arSort && state.arSort.key) || 'total', sd = (state.arSort && state.arSort.dir) || -1;
+  var sk = (state.arSort && state.arSort.key) || 'net', sd = (state.arSort && state.arSort.dir) || -1;
   var head = '<thead><tr>'
     + '<th class="ar-corner" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
     + '<th style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
@@ -6359,7 +6362,7 @@ function arPage(){
       + '<td style="'+td+'text-align:left;font-family:Inter,sans-serif;font-weight:700;color:#173E76;font-size:13px;border-left:3px solid #2C4E82;padding-left:10px;">'
       + '<span style="display:inline-block;width:14px;color:#6488D6;">'+(open ? '▾' : '▸')+'</span>'+esc(Z.name)
       + ' <span title="'+Z.custList.length+' customer'+(Z.custList.length === 1 ? '' : 's')+'" style="font-weight:600;color:#8A9AB5;font-size:11px;margin-left:4px;">'+Z.custList.length+'</span></td>'
-      + _arCells(Z.agg, 'td', td + 'font-weight:700;') + '<td style="'+td+'"></td></tr>';
+      + _arCells(Z.agg, 'td', td + 'font-weight:700;', ' data-act="arPgZoneDrill" data-val="'+esc(Z.name)+'" class="ar-zdrill" title="See all invoices in '+esc(Z.name)+'"') + '<td style="'+td+'"></td></tr>';
     if (!open) return;
     Z.custList.forEach(function(Cu){
       var i = custIndex.length; custIndex.push({ zone:Z.name, customer:Cu.name });
@@ -6494,15 +6497,16 @@ function _arAmt(v){
   var out = (usd ? '$' : '\u20B9') + n + (u ? (u === 'k' ? '' : ' ') + u : '');
   return val < 0 ? '(' + out + ')' : out;
 }
-function _arCells(a, tag, style){
+function _arCells(a, tag, style, attr){
+  attr = attr || '';
   var C = AR_COLORS;
   function amt(v, color){ return v ? '<span style="color:'+(color || '#15233B')+';">'+_arAmt(v)+'</span>' : '<span style="color:#D5DCE6;">–</span>'; }
   var net = a.total - a.oa;
-  return '<'+tag+' style="'+style+'text-align:right;">'+amt(a.total)+'</'+tag+'>'
-    + AR_BUCKETS.map(function(b){ return '<'+tag+' style="'+style+'text-align:right;">'+amt(a[b.key], C[b.key].fg)+'</'+tag+'>'; }).join('')
-    + '<'+tag+' style="'+style+'text-align:right;">'+amt(a.nd, C.nd.fg)+'</'+tag+'>'
-    + '<'+tag+' style="'+style+'text-align:right;">'+amt(-a.oa, C.oa.fg)+'</'+tag+'>'
-    + '<'+tag+' style="'+style+'text-align:right;font-weight:700;">'+amt(net, net < 0 ? C.oa.fg : '#0D2B5E')+'</'+tag+'>';
+  return '<'+tag+attr+' style="'+style+'text-align:right;font-weight:700;">'+amt(net, net < 0 ? C.oa.fg : '#0D2B5E')+'</'+tag+'>'
+    + AR_BUCKETS.map(function(b){ return '<'+tag+attr+' style="'+style+'text-align:right;">'+amt(a[b.key], C[b.key].fg)+'</'+tag+'>'; }).join('')
+    + '<'+tag+attr+' style="'+style+'text-align:right;font-weight:700;background:'+C.due.bg+';">'+amt(_arOverdue(a), C.due.fg)+'</'+tag+'>'
+    + '<'+tag+attr+' style="'+style+'text-align:right;">'+amt(a.nd, C.nd.fg)+'</'+tag+'>'
+    + '<'+tag+attr+' style="'+style+'text-align:right;">'+amt(-a.oa, C.oa.fg)+'</'+tag+'>';
 }
 
 // Zones start collapsed; a single visible zone (e.g. a zonal manager) starts open
@@ -6512,12 +6516,14 @@ function _arZoneIsOpen(zone, M){
   return M && M.zones.length === 1;
 }
 
-// Rows behind the open customer panel (current filters + that customer + zone)
+// Rows behind the open panel: one customer in a zone, or (customer null) the whole zone
 function _arDrillRows(){
   var dr = state.arDrill;
   if (!dr) return [];
-  return _arVisibleRows().filter(function(r){ return r.c === dr.customer && r.z === dr.zone; })
-    .sort(function(a, b){ return (b.o > 0) - (a.o > 0) || (b.od || 0) - (a.od || 0); });
+  return _arVisibleRows().filter(function(r){ return r.z === dr.zone && (!dr.customer || r.c === dr.customer); })
+    .sort(function(a, b){
+      return (dr.customer ? 0 : String(a.c).localeCompare(String(b.c))) || (b.o > 0) - (a.o > 0) || (b.od || 0) - (a.od || 0);
+    });
 }
 
 // "21-Sep-2026" + 30 days → "21-Oct-2026" ('' when the date can't be read)
@@ -6532,38 +6538,59 @@ function _arDueDate(d, cd){
 }
 function _arRepName(sp){ return String(sp || '').split('|')[0].trim(); }
 
-// Shipment details for the customer panel, fetched per customer on open
-// (kept out of the main payload to keep it small). Keyed by invoice line.
-var arDetailCache = {};
-function _arDetKey(txn, h, o){ return String(txn || '') + '|' + String(h || '') + '|' + Math.round((Number(o) || 0) * 100); }
-function _arLoadDetail(customer){
-  if (arDetailCache[customer]) return;
-  arDetailCache[customer] = { loading:true, map:{} };
-  fetch('/api/mongo-batch?action=arDetail&customer=' + encodeURIComponent(customer))
+// Detail columns for the panel, fetched on open for the customers shown (kept
+// out of the main payload to keep it small). Keyed by customer + invoice line.
+var arDetailCache = {};   // customer → { loading } | { map } | { error }
+function _arDetKey(c, txn, h, o){ return String(c || '') + '|' + String(txn || '') + '|' + String(h || '') + '|' + Math.round((Number(o) || 0) * 100); }
+var arDetailMap = {};
+function _arLoadDetail(customers){
+  var need = customers.filter(function(c){ return c && !arDetailCache[c]; });
+  if (!need.length) return;
+  need.forEach(function(c){ arDetailCache[c] = { loading:true }; });
+  fetch('/api/mongo-batch?action=arDetail', { method:'POST', headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ action:'arDetail', customers:need }) })
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (!d || !d.success) throw new Error((d && d.error) || 'failed');
-      var map = {};
+      var F = d.fields || [];
       (d.rows || []).forEach(function(x){
-        map[_arDetKey(x[0], x[1], x[2])] = { ref:x[3], shipper:x[4], pol:x[5], pod:x[6], etd:x[7], eta:x[8] };
+        var o = {};
+        F.forEach(function(k, i){ o[k] = x[4 + i]; });
+        arDetailMap[_arDetKey(x[0], x[1], x[2], x[3])] = o;
       });
-      arDetailCache[customer] = { map:map };
+      need.forEach(function(c){ arDetailCache[c] = { done:true }; });
     })
-    .catch(function(){ arDetailCache[customer] = { error:true, map:{} }; })
-    .finally(function(){ if (state.arDrill && state.arDrill.customer === customer) render(); });
+    .catch(function(){ need.forEach(function(c){ arDetailCache[c] = { error:true }; }); })
+    .finally(function(){ if (state.arDrill) render(); });
 }
-function _arDet(r){
-  var c = arDetailCache[r.c];
-  return (c && c.map[_arDetKey(r.txn, r.h, r.o)]) || null;
+function _arDet(r){ return arDetailMap[_arDetKey(r.c, r.txn, r.h, r.o)] || null; }
+// Panel columns after Invoice No / Date / Due Date (k = detail field, or a fn of the row)
+var AR_DETAIL_COLS = [
+  ['Reference No.', 'ref'], ['House No.', function(r){ return r.h; }], ['Master No.', 'master'],
+  ['Shipper Name', 'shipper', 1], ['Consignee Name', 'consignee', 1], ['Customer Name', 'custName', 1],
+  ['Branch', function(r){ return r.br || r.loc; }], ['Consol No', 'consol'], ['Collection Executive', 'collExec'],
+  ['Sales Person', function(r){ return _arRepName(r.sp); }], ['Load Port', 'loadPort'], ['Place Of Receipt', 'por'],
+  ['Discharge Port', 'dischargePort'], ['Place Of Delivery', 'pod'], ['ETD', 'etd'], ['ETA', 'eta'],
+  ['ATD', 'atd'], ['ATA', 'ata'], ['Ref No.', 'refNo2']
+];
+function _arDetVal(r, col){
+  if (typeof col[1] === 'function') return col[1](r) || '';
+  var x = _arDet(r);
+  return (x && x[col[1]]) || '';
 }
+var AR_DRILL_MAX_ROWS = 1500;
 
 function arDrillDrawer(){
   var dr = state.arDrill;
   if (!dr) return '';
-  _arLoadDetail(dr.customer);
-  var detState = arDetailCache[dr.customer] || {};
+  var isZone = !dr.customer;
   var C = AR_COLORS;
   var rows = _arDrillRows();
+  var custs = {};
+  rows.forEach(function(r){ custs[r.c] = 1; });
+  var custList = Object.keys(custs);
+  _arLoadDetail(custList);
+  var detLoading = custList.some(function(c){ return arDetailCache[c] && arDetailCache[c].loading; });
   var agg = _arEmptyAgg(), bill = 0, reps = {}, cds = {};
   rows.forEach(function(r){
     _arAdd(agg, r);
@@ -6597,56 +6624,68 @@ function arDrillDrawer(){
       + '</div>';
   }
 
-  var th = 'position:sticky;top:0;z-index:2;background:#F1F5FB;color:#3C5275;font-size:10.5px;font-weight:800;padding:9px 10px;border-bottom:2px solid #C9D6E8;white-space:nowrap;';
-  var td = 'padding:8px 10px;border-bottom:1px solid #EEF2F8;font-size:12px;white-space:nowrap;';
+  var th = 'position:sticky;top:0;z-index:2;background:#F1F5FB;color:#3C5275;font-size:10.5px;font-weight:800;padding:9px 10px;border-bottom:2px solid #C9D6E8;border-right:1px solid #D5DEEA;white-space:nowrap;';
+  var td = 'padding:8px 10px;border-bottom:1px solid #DDE5F0;border-right:1px solid #DDE5F0;font-size:12px;white-space:nowrap;';
+  // Frozen on the left: Invoice No, Invoice Date, Due Date, Reference No. (+ Customer for a zone)
+  var nFrozen = isZone ? 5 : 4;
+  function fz(i){ return i < nFrozen ? ' class="ard-fz'+(i === nFrozen - 1 ? ' ard-fz-last' : '')+'" data-fz="'+i+'"' : ''; }
   var num = 'text-align:right;font-family:\'DM Mono\',monospace;';
-  var heads = [['Invoice No'],['Invoice Date'],['Due Date'],['Shipment No'],['House No'],['Shipper Name'],['POL'],['POD'],['ETD'],['ETA'],['Sales Person'],['LOB'],['Branch'],['Bill Amount',1],['Outstanding',1],['Status']];
-  var dash = detState.loading ? '<span style="color:#B8C4D6;">…</span>' : '–';
-  function det(r, k){ var x = _arDet(r); return x && x[k] ? esc(x[k]) : dash; }
-  var table = '<table style="width:100%;border-collapse:separate;border-spacing:0;"><thead><tr>'
-    + heads.map(function(h){ return '<th style="'+th+'text-align:'+(h[1] ? 'right' : 'left')+';">'+h[0]+'</th>'; }).join('')
+  var heads = (isZone ? [['Customer']] : []).concat([['Invoice No'],['Invoice Date'],['Due Date']],
+    AR_DETAIL_COLS.map(function(c){ return [c[0]]; }), [['LOB'],['Bill Amount',1],['Outstanding',1],['Status']]);
+  var dash = detLoading ? '<span style="color:#B8C4D6;">…</span>' : '–';
+  var shown = rows.length > AR_DRILL_MAX_ROWS ? rows.slice(0, AR_DRILL_MAX_ROWS) : rows;
+  var table = '<style>'
+    // !important: the header cells carry an inline z-index:2
+    + '#ard-table .ard-fz{position:sticky;left:0;z-index:1;}'
+    + '#ard-table thead .ard-fz{z-index:4 !important;}'
+    + '#ard-table .ard-fz-last{box-shadow:inset -1px 0 0 #C9D6E8,4px 0 6px -4px rgba(13,43,94,0.22);}'
+    + '#ard-table tbody tr:hover td{background:#EEF4FF !important;}'
+    + '</style>'
+    + '<table id="ard-table" style="width:100%;border-collapse:separate;border-spacing:0;"><thead><tr>'
+    + heads.map(function(h, i){ return '<th'+fz(i)+' style="'+th+'text-align:'+(h[1] ? 'right' : 'left')+';">'+h[0]+'</th>'; }).join('')
     + '</tr></thead><tbody>'
-    + rows.map(function(r, i){
+    + shown.map(function(r, i){
         var bg = i % 2 ? '#FBFCFE' : '#FFFFFF';
         var isOa = _arIsOa(r);
+        var k = isZone ? 1 : 0, cb = 'background:'+bg+';';
         return '<tr style="background:'+bg+';">'
-          + '<td style="'+td+'font-weight:700;color:#15233B;">'+esc(r.txn || (isOa ? (r.ty || 'On Account').replace(/\n/g, ' · ') : '–'))+'</td>'
-          + '<td style="'+td+'color:#3C5275;">'+esc(r.d || '–')+'</td>'
-          + '<td style="'+td+'color:#3C5275;">'+(isOa ? '–' : esc(_arDueDate(r.d, r.cd) || '–'))+'</td>'
-          + '<td style="'+td+'color:#15233B;font-weight:600;">'+det(r, 'ref')+'</td>'
-          + '<td style="'+td+'color:#3C5275;">'+esc(r.h || '–')+'</td>'
-          + '<td style="'+td+'color:#3C5275;white-space:normal;min-width:160px;max-width:240px;">'+det(r, 'shipper')+'</td>'
-          + '<td style="'+td+'color:#3C5275;">'+det(r, 'pol')+'</td>'
-          + '<td style="'+td+'color:#3C5275;">'+det(r, 'pod')+'</td>'
-          + '<td style="'+td+'color:#3C5275;">'+det(r, 'etd')+'</td>'
-          + '<td style="'+td+'color:#3C5275;">'+det(r, 'eta')+'</td>'
-          + '<td style="'+td+'color:#3C5275;">'+esc(_arRepName(r.sp) || '–')+'</td>'
+          + (isZone ? '<td'+fz(0)+' style="'+td+cb+'color:#15233B;font-weight:600;white-space:normal;min-width:180px;max-width:240px;">'+esc(r.c)+'</td>' : '')
+          + '<td'+fz(k)+' style="'+td+cb+'font-weight:700;color:#15233B;">'+esc(r.txn || (isOa ? (r.ty || 'On Account').replace(/\n/g, ' · ') : '–'))+'</td>'
+          + '<td'+fz(k + 1)+' style="'+td+cb+'color:#3C5275;">'+esc(r.d || '–')+'</td>'
+          + '<td'+fz(k + 2)+' style="'+td+cb+'color:#3C5275;">'+(isOa ? '–' : esc(_arDueDate(r.d, r.cd) || '–'))+'</td>'
+          + AR_DETAIL_COLS.map(function(c, j){
+              var v = _arDetVal(r, c);
+              return '<td'+fz(k + 3 + j)+' style="'+td+(k + 3 + j < nFrozen ? cb : '')+'color:#3C5275;'+(c[2] ? 'white-space:normal;min-width:150px;max-width:230px;' : '')+'">'
+                + (v ? esc(String(v).replace(/\n/g, ', ')) : (typeof c[1] === 'function' ? '–' : dash)) + '</td>';
+            }).join('')
           + '<td style="'+td+'color:#3C5275;">'+esc(lobLbl[r.lob] || r.lob)+'</td>'
-          + '<td style="'+td+'color:#3C5275;">'+esc(r.br || r.loc || '–')+'</td>'
           + '<td style="'+td+num+'color:#3C5275;">'+(r.bill ? _arFull(r.bill) : '–')+'</td>'
           + '<td style="'+td+num+'font-weight:700;color:'+(isOa ? C.oa.fg : '#15233B')+';">'+_arFull(r.o)+'</td>'
           + '<td style="'+td+'">'+chip(r)+'</td></tr>';
       }).join('')
     + '</tbody><tfoot><tr>'
-    + '<td colspan="13" style="position:sticky;bottom:0;background:#E4ECF8;padding:9px 10px;font-size:12px;font-weight:800;color:#0D2B5E;border-top:2px solid #C9D6E8;">Total · '+rows.length+' line'+(rows.length === 1 ? '' : 's')+'</td>'
+    + '<td colspan="'+(heads.length - 3)+'" style="position:sticky;bottom:0;z-index:3;background:#E4ECF8;padding:9px 10px;font-size:12px;font-weight:800;color:#0D2B5E;border-top:2px solid #C9D6E8;">'
+    +   '<span style="position:sticky;left:10px;">Total · '+rows.length.toLocaleString('en-IN')+' line'+(rows.length === 1 ? '' : 's')
+    +   (shown.length < rows.length ? ' <span style="font-weight:600;color:#6B82A0;">(first '+shown.length.toLocaleString('en-IN')+' shown — Excel has all)</span>' : '')+'</span></td>'
     + '<td style="position:sticky;bottom:0;background:#E4ECF8;padding:9px 10px;'+num+'font-size:12px;font-weight:800;color:#0D2B5E;border-top:2px solid #C9D6E8;">'+_arFull(bill)+'</td>'
     + '<td style="position:sticky;bottom:0;background:#E4ECF8;padding:9px 10px;'+num+'font-size:12px;font-weight:800;color:#0D2B5E;border-top:2px solid #C9D6E8;">'+_arFull(agg.total - agg.oa)+'</td>'
     + '<td style="position:sticky;bottom:0;background:#E4ECF8;border-top:2px solid #C9D6E8;"></td>'
     + '</tr></tfoot></table>';
 
-  var sub = [esc(dr.zone)];
+  var sub = isZone ? [custList.length.toLocaleString('en-IN') + ' customer' + (custList.length === 1 ? '' : 's')] : [esc(dr.zone)];
   var repList = Object.keys(reps);
   if (repList.length) sub.push(esc(repList.slice(0, 3).join(', ')) + (repList.length > 3 ? ' +' + (repList.length - 3) : ''));
-  if (creditDays !== undefined) sub.push('Credit ' + esc(creditDays) + ' days');
+  if (!isZone && creditDays !== undefined) sub.push('Credit ' + esc(creditDays) + ' days');
   if (arMeta && arMeta.asOn) sub.push('as on ' + esc(arMeta.asOn));
+  requestAnimationFrame(_arFreezeDrill);
 
   return '<div data-act="arPgDrillClose" style="position:fixed;inset:0;background:rgba(13,43,94,0.28);z-index:900;"></div>'
     + '<div data-stop="1" style="position:fixed;top:0;right:0;bottom:0;width:min(1440px,96vw);background:#F7F9FC;z-index:901;box-shadow:-12px 0 40px rgba(13,43,94,0.18);display:flex;flex-direction:column;">'
     +   '<div style="padding:18px 22px 14px;background:#FFFFFF;border-bottom:1px solid #E3EAF4;">'
     +     '<div style="display:flex;align-items:flex-start;gap:10px;">'
     +       '<div style="flex:1;min-width:0;">'
-    +         '<div style="font-size:11px;font-weight:700;color:#6488D6;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:3px;">Customer invoices</div>'
-    +         '<div style="font-size:17px;font-weight:800;color:#15233B;">'+esc(dr.customer)+'</div>'
+    +         '<div style="font-size:11px;font-weight:700;color:#6488D6;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:3px;">'+(isZone ? 'Zone invoices' : 'Customer invoices')+'</div>'
+    +         '<div style="font-size:17px;font-weight:800;color:#15233B;">'+esc(isZone ? dr.zone : dr.customer)+'</div>'
     +         '<div style="font-size:11.5px;color:#6B82A0;font-weight:600;margin-top:3px;">'+sub.join(' · ')+'</div>'
     +       '</div>'
     +       '<button data-act="arPgDrillExport" class="btnq" style="display:flex;align-items:center;gap:6px;border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:7px 13px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
@@ -6654,7 +6693,7 @@ function arDrillDrawer(){
     +       '<button data-act="arPgDrillClose" title="Close" style="border:none;background:#F1F5FB;border-radius:999px;width:32px;height:32px;cursor:pointer;color:#3C5275;font-size:16px;line-height:1;">×</button>'
     +     '</div>'
     +     '<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:14px;">'
-    +       card('Total Outstanding', _arFull(agg.total), '#2C4E82', agg.inv + ' open invoice' + (agg.inv === 1 ? '' : 's'))
+    +       card('Total Outstanding', _arFull(agg.total), '#2C4E82', agg.inv.toLocaleString('en-IN') + ' open invoice' + (agg.inv === 1 ? '' : 's'))
     +       card('Overdue', _arFull(overdue), '#D9534F', agg.total ? Math.round(overdue / agg.total * 100) + '% of outstanding' : '')
     +       card('Not Due', _arFull(agg.nd), '#15875A', 'within credit days')
     +       card('On Account', _arFull(-agg.oa), '#946312', agg.oa ? 'paid extra, to adjust' : 'nothing extra paid')
@@ -6667,25 +6706,48 @@ function arDrillDrawer(){
     + '</div>';
 }
 
+// Frozen columns: each one's left edge = the widths of the frozen columns before it.
+// On a narrow screen only as many as fit in ~55% of the width stay frozen (at least one).
+function _arFreezeDrill(){
+  var t = document.getElementById('ard-table');
+  if (!t) return;
+  var box = t.parentElement, room = (box ? box.clientWidth : 0) * 0.55;
+  var heads = t.querySelectorAll('thead th.ard-fz'), left = 0, lefts = [], keep = 0;
+  for (var i = 0; i < heads.length; i++) {
+    var w = heads[i].getBoundingClientRect().width;
+    if (i === 0 || left + w <= room) keep = i + 1;
+    lefts.push(left); left += w;
+  }
+  var cells = t.querySelectorAll('.ard-fz');
+  for (var j = 0; j < cells.length; j++) {
+    var k = +cells[j].getAttribute('data-fz'), on = k < keep;
+    // a header cell keeps sticking to the top even when it isn't frozen
+    cells[j].style.position = on ? '' : (cells[j].tagName === 'TH' ? 'sticky' : 'static');
+    cells[j].style.left = on ? lefts[k] + 'px' : 'auto';
+    cells[j].style.boxShadow = k === keep - 1 ? 'inset -1px 0 0 #C9D6E8,4px 0 6px -4px rgba(13,43,94,0.22)' : (on ? 'none' : '');
+  }
+}
+window.addEventListener('resize', function(){ if (state.arDrill) _arFreezeDrill(); });
+
 function arExportDrill(){
   var dr = state.arDrill;
   if (!dr) return;
   var data = _arDrillRows().map(function(r){
     var isOa = _arIsOa(r);
     var b = isOa ? 'On Account' : (_arBucket(r.od) === 'nd' ? 'Not Due' : 'Overdue');
-    return {
-      'Invoice No': r.txn || (isOa ? String(r.ty || 'On Account').replace(/\n/g, ' ') : ''),
-      'Invoice Date': r.d || '', 'Due Date': isOa ? '' : _arDueDate(r.d, r.cd),
-      'Shipment No': (_arDet(r) || {}).ref || '', 'House No': r.h || '', 'Shipper Name': (_arDet(r) || {}).shipper || '',
-      'POL': (_arDet(r) || {}).pol || '', 'POD': (_arDet(r) || {}).pod || '', 'ETD': (_arDet(r) || {}).etd || '', 'ETA': (_arDet(r) || {}).eta || '',
-      'Sales Person': _arRepName(r.sp), 'LOB': r.lob, 'Branch': r.br || r.loc || '',
-      'Bill Amount (INR)': Math.round(r.bill || 0), 'Outstanding (INR)': Math.round(r.o),
-      'Credit Days': r.cd !== null && r.cd !== undefined ? r.cd : '', 'Overdue Days': isOa ? '' : r.od, 'Status': b
-    };
+    var o = {};
+    if (!dr.customer) o['Customer'] = r.c;
+    o['Invoice No'] = r.txn || (isOa ? String(r.ty || 'On Account').replace(/\n/g, ' ') : '');
+    o['Invoice Date'] = r.d || ''; o['Due Date'] = isOa ? '' : _arDueDate(r.d, r.cd);
+    AR_DETAIL_COLS.forEach(function(c){ o[c[0]] = String(_arDetVal(r, c)).replace(/\n/g, ', '); });
+    o['LOB'] = r.lob;
+    o['Bill Amount (INR)'] = Math.round(r.bill || 0); o['Outstanding (INR)'] = Math.round(r.o);
+    o['Credit Days'] = r.cd !== null && r.cd !== undefined ? r.cd : ''; o['Overdue Days'] = isOa ? '' : r.od; o['Status'] = b;
+    return o;
   });
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Invoices');
-  XLSX.writeFile(wb, ('AR_' + dr.customer).replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '_').slice(0, 60) + (arMeta && arMeta.asOn ? '_' + arMeta.asOn : '') + '.xlsx');
+  XLSX.writeFile(wb, ('AR_' + (dr.customer || dr.zone)).replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '_').slice(0, 60) + (arMeta && arMeta.asOn ? '_' + arMeta.asOn : '') + '.xlsx');
 }
 
 function arExportExcel(){
@@ -6696,11 +6758,11 @@ function arExportExcel(){
       var a = C.agg;
       data.push({
         'Zone': Z.name, 'Customer': C.name, 'Sales Person': C.repList.join(', '),
-        'Total Outstanding (INR)': Math.round(a.total),
+        'Net Outstanding': Math.round(a.total - a.oa),
       });
       var row = data[data.length - 1];
       AR_BUCKETS.forEach(function(b){ row[b.label] = Math.round(a[b.key]); });
-      row['Not Due'] = Math.round(a.nd); row['On Account'] = -Math.round(a.oa); row['Net Outstanding'] = Math.round(a.total - a.oa);
+      row['Outstanding Due'] = Math.round(_arOverdue(a)); row['Not Due'] = Math.round(a.nd); row['On Account'] = -Math.round(a.oa);
       row['Credit Days'] = C.creditDays !== null ? Number(C.creditDays) : '';
     });
   });
@@ -6744,9 +6806,11 @@ function arHandleAct(act, el){
     (window._arLastModel ? window._arLastModel.zones : []).forEach(function(Z){ state.arZoneOpen[Z.name] = v === '1'; });
     _arRerenderMain(false);
   } else if (act === 'arPgSort') {
-    var cur = state.arSort || { key:'total', dir:-1 };
+    var cur = state.arSort || { key:'net', dir:-1 };
     state.arSort = cur.key === v ? { key:v, dir:-cur.dir } : { key:v, dir:(v === 'name' ? 1 : -1) };
     _arRerenderMain(false);
+  } else if (act === 'arPgZoneDrill') {
+    state.arDrill = { zone:v, customer:null }; render();
   } else if (act === 'arPgCust') {
     var c = (window._arCustIndex || [])[+v];
     if (c) { state.arDrill = c; render(); }

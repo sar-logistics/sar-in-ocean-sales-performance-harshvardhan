@@ -2937,7 +2937,7 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ...data, buckets });
     }
     if (action === "arDetail") {
-      const r = await arDetail(db, req.query?.customer);
+      const r = await arDetail(db, req.method === "POST" ? (req.body || {}).customers : req.query?.customer);
       return res.status(r.status).json(r.json);
     }
     if (action === "arBuckets") {
