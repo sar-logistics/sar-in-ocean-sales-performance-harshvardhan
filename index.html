@@ -6268,7 +6268,8 @@ function _arFull(v){
 function _arDsoTxt(a){
   if (!a.dsoB) return '<span style="color:#D5DCE6;">–</span>';
   var v = a.dsoBD / a.dsoB;
-  return '<span title="Weighted DSO: '+v.toFixed(2)+' days" style="color:'+(v > 0 ? '#A3331C' : '#0F7048')+';">'+v.toFixed(1)+'</span>';
+  var d = Math.round(v);   // whole days; the exact value is in the tooltip
+  return '<span title="Weighted DSO: '+v.toFixed(2)+' days" style="color:'+(d > 0 ? '#A3331C' : '#0F7048')+';">'+d+'</span>';
 }
 // AR page: negatives in brackets, e.g. On Account (₹23.89 Cr.)
 function _arCur(v){ return v < 0 ? '(' + fmtCur(-v) + ')' : fmtCur(v); }
