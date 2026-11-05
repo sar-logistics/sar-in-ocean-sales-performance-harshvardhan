@@ -6126,8 +6126,10 @@ function arPage(){
   var css = '<style>'
     + '.arpg-row td{transition:background .12s;background:#FFFFFF;}'
     // Customer column stays put when the table scrolls sideways on smaller screens
-    + '#ar-table-scroll tbody td:first-child{position:sticky;left:0;z-index:1;}'
-    + '#ar-table-scroll thead tr:nth-child(n+2) th:first-child{left:0;z-index:4;}'
+    // (!important: the header cells carry an inline z-index:3, which would let the
+    // cells scrolling past paint over the corner and squash "Customer" / "Grand Total")
+    + '#ar-table-scroll tbody td:first-child{position:sticky;left:0;z-index:1;box-shadow:inset -1px 0 0 #C9D6E8,4px 0 6px -4px rgba(13,43,94,0.22);}'
+    + '#ar-table-scroll thead th.ar-corner{position:sticky;left:0;z-index:5 !important;box-shadow:inset -1px 0 0 #C9D6E8,4px 0 6px -4px rgba(13,43,94,0.22);}'
     + '.arpg-row:nth-child(even) td{background:#FBFCFE;}'
     + '.arpg-row:hover td{background:#EEF4FF !important;}'
     + '.arpg-zone td{background:#F3F7FD;}'
@@ -6186,19 +6188,20 @@ function arPage(){
   var thBase = 'position:sticky;z-index:3;font-size:10.5px;font-weight:800;letter-spacing:0.02em;padding:0 9px;white-space:nowrap;box-sizing:border-box;';
   var sk = (state.arSort && state.arSort.key) || 'total', sd = (state.arSort && state.arSort.dir) || -1;
   var head = '<thead><tr>'
-    + '<th colspan="2" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
+    + '<th class="ar-corner" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
+    + '<th style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
     + '<th colspan="'+AR_BUCKETS.length+'" style="'+thBase+'top:0;height:26px;text-align:center;background:linear-gradient(90deg,'+C[AR_BUCKETS[0].key].bg+','+C[AR_BUCKETS[AR_BUCKETS.length - 1].key].bg+');color:'+C[AR_BUCKETS[AR_BUCKETS.length - 1].key].fg+';border-bottom:1px solid #F0C9C3;letter-spacing:0.08em;text-transform:uppercase;font-size:9.5px;">Overdue · days past due date</th>'
     + '<th colspan="4" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th></tr><tr>'
     + cols.map(function(c){
         var arrow = (!c.noSort && sk === c.key) ? (sd < 0 ? ' ▾' : ' ▴') : '';
         var tint = C[c.key];
-        return '<th '+(c.noSort ? '' : 'data-act="arPgSort" data-val="'+c.key+'" class="arpg-th-sort" ')
+        return '<th '+(c.noSort ? '' : 'data-act="arPgSort" data-val="'+c.key+'" class="arpg-th-sort'+(c.key === 'name' ? ' ar-corner' : '')+'" ')
           +'style="'+thBase+'top:26px;height:36px;white-space:normal;line-height:1.15;text-align:'+(c.left ? 'left' : 'right')+';'+(c.noSort ? '' : 'cursor:pointer;')
           +'background:'+(tint ? tint.bg : '#F1F5FB')+';color:'+(tint ? tint.fg : '#3C5275')+';border-bottom:2px solid '+(tint ? tint.fg : '#C9D6E8')+';">'+c.label+arrow+'</th>';
       }).join('')
     + '</tr>'
     // Grand Total stays visible while scrolling
-    + '<tr>' + '<th style="'+thBase+'top:62px;height:38px;text-align:left;background:#E4ECF8;color:#0D2B5E;font-size:12.5px;border-bottom:1px solid #C9D6E8;">Grand Total <span style="font-weight:600;color:#6B82A0;font-size:11px;">· '+M.customers.toLocaleString('en-IN')+' customers</span></th>'
+    + '<tr>' + '<th class="ar-corner" style="'+thBase+'top:62px;height:38px;text-align:left;background:#E4ECF8;color:#0D2B5E;font-size:12.5px;border-bottom:1px solid #C9D6E8;">Grand Total <span style="font-weight:600;color:#6B82A0;font-size:11px;">· '+M.customers.toLocaleString('en-IN')+' customers</span></th>'
     + _arCells(G, 'th', 'position:sticky;z-index:3;top:62px;height:38px;padding:0 9px;box-sizing:border-box;white-space:nowrap;font-family:\'DM Mono\',monospace;font-size:12px;background:#E4ECF8;border-bottom:1px solid #C9D6E8;font-weight:700;')
     + '<th style="'+thBase+'top:62px;height:38px;background:#E4ECF8;border-bottom:1px solid #C9D6E8;"></th></tr>'
     + '</thead>';
