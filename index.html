@@ -6593,27 +6593,38 @@ function arDrillDrawer(){
       + '</div>';
   }
 
-  var th = 'position:sticky;top:0;z-index:2;background:#F1F5FB;color:#3C5275;font-size:10.5px;font-weight:800;padding:9px 10px;border-bottom:2px solid #C9D6E8;white-space:nowrap;';
-  var td = 'padding:8px 10px;border-bottom:1px solid #EEF2F8;font-size:12px;white-space:nowrap;';
+  var th = 'position:sticky;top:0;z-index:2;background:#F1F5FB;color:#3C5275;font-size:10.5px;font-weight:800;padding:9px 10px;border-bottom:2px solid #C9D6E8;border-right:1px solid #D5DEEA;white-space:nowrap;';
+  var td = 'padding:8px 10px;border-bottom:1px solid #DDE5F0;border-right:1px solid #DDE5F0;font-size:12px;white-space:nowrap;';
+  // Frozen on the left: Invoice No, Invoice Date, Due Date, Reference No. (+ Customer for a zone)
+  var nFrozen = isZone ? 5 : 4;
+  function fz(i){ return i < nFrozen ? ' class="ard-fz'+(i === nFrozen - 1 ? ' ard-fz-last' : '')+'" data-fz="'+i+'"' : ''; }
   var num = 'text-align:right;font-family:\'DM Mono\',monospace;';
   var heads = (isZone ? [['Customer']] : []).concat([['Invoice No'],['Invoice Date'],['Due Date']],
     AR_DETAIL_COLS.map(function(c){ return [c[0]]; }), [['LOB'],['Bill Amount',1],['Outstanding',1],['Status']]);
   var dash = detLoading ? '<span style="color:#B8C4D6;">…</span>' : '–';
   var shown = rows.length > AR_DRILL_MAX_ROWS ? rows.slice(0, AR_DRILL_MAX_ROWS) : rows;
-  var table = '<table style="width:100%;border-collapse:separate;border-spacing:0;"><thead><tr>'
-    + heads.map(function(h){ return '<th style="'+th+'text-align:'+(h[1] ? 'right' : 'left')+';">'+h[0]+'</th>'; }).join('')
+  var table = '<style>'
+    // !important: the header cells carry an inline z-index:2
+    + '#ard-table .ard-fz{position:sticky;left:0;z-index:1;}'
+    + '#ard-table thead .ard-fz{z-index:4 !important;}'
+    + '#ard-table .ard-fz-last{box-shadow:inset -1px 0 0 #C9D6E8,4px 0 6px -4px rgba(13,43,94,0.22);}'
+    + '#ard-table tbody tr:hover td{background:#EEF4FF !important;}'
+    + '</style>'
+    + '<table id="ard-table" style="width:100%;border-collapse:separate;border-spacing:0;"><thead><tr>'
+    + heads.map(function(h, i){ return '<th'+fz(i)+' style="'+th+'text-align:'+(h[1] ? 'right' : 'left')+';">'+h[0]+'</th>'; }).join('')
     + '</tr></thead><tbody>'
     + shown.map(function(r, i){
         var bg = i % 2 ? '#FBFCFE' : '#FFFFFF';
         var isOa = _arIsOa(r);
+        var k = isZone ? 1 : 0, cb = 'background:'+bg+';';
         return '<tr style="background:'+bg+';">'
-          + (isZone ? '<td style="'+td+'color:#15233B;font-weight:600;white-space:normal;min-width:180px;max-width:260px;">'+esc(r.c)+'</td>' : '')
-          + '<td style="'+td+'font-weight:700;color:#15233B;">'+esc(r.txn || (isOa ? (r.ty || 'On Account').replace(/\n/g, ' · ') : '–'))+'</td>'
-          + '<td style="'+td+'color:#3C5275;">'+esc(r.d || '–')+'</td>'
-          + '<td style="'+td+'color:#3C5275;">'+(isOa ? '–' : esc(_arDueDate(r.d, r.cd) || '–'))+'</td>'
-          + AR_DETAIL_COLS.map(function(c){
+          + (isZone ? '<td'+fz(0)+' style="'+td+cb+'color:#15233B;font-weight:600;white-space:normal;min-width:180px;max-width:240px;">'+esc(r.c)+'</td>' : '')
+          + '<td'+fz(k)+' style="'+td+cb+'font-weight:700;color:#15233B;">'+esc(r.txn || (isOa ? (r.ty || 'On Account').replace(/\n/g, ' · ') : '–'))+'</td>'
+          + '<td'+fz(k + 1)+' style="'+td+cb+'color:#3C5275;">'+esc(r.d || '–')+'</td>'
+          + '<td'+fz(k + 2)+' style="'+td+cb+'color:#3C5275;">'+(isOa ? '–' : esc(_arDueDate(r.d, r.cd) || '–'))+'</td>'
+          + AR_DETAIL_COLS.map(function(c, j){
               var v = _arDetVal(r, c);
-              return '<td style="'+td+'color:#3C5275;'+(c[2] ? 'white-space:normal;min-width:150px;max-width:230px;' : '')+'">'
+              return '<td'+fz(k + 3 + j)+' style="'+td+(k + 3 + j < nFrozen ? cb : '')+'color:#3C5275;'+(c[2] ? 'white-space:normal;min-width:150px;max-width:230px;' : '')+'">'
                 + (v ? esc(String(v).replace(/\n/g, ', ')) : (typeof c[1] === 'function' ? '–' : dash)) + '</td>';
             }).join('')
           + '<td style="'+td+'color:#3C5275;">'+esc(lobLbl[r.lob] || r.lob)+'</td>'
@@ -6622,8 +6633,9 @@ function arDrillDrawer(){
           + '<td style="'+td+'">'+chip(r)+'</td></tr>';
       }).join('')
     + '</tbody><tfoot><tr>'
-    + '<td colspan="'+(heads.length - 3)+'" style="position:sticky;bottom:0;background:#E4ECF8;padding:9px 10px;font-size:12px;font-weight:800;color:#0D2B5E;border-top:2px solid #C9D6E8;">Total · '+rows.length.toLocaleString('en-IN')+' line'+(rows.length === 1 ? '' : 's')
-    +   (shown.length < rows.length ? ' <span style="font-weight:600;color:#6B82A0;">(first '+shown.length.toLocaleString('en-IN')+' shown — Excel has all)</span>' : '')+'</td>'
+    + '<td colspan="'+(heads.length - 3)+'" style="position:sticky;bottom:0;z-index:3;background:#E4ECF8;padding:9px 10px;font-size:12px;font-weight:800;color:#0D2B5E;border-top:2px solid #C9D6E8;">'
+    +   '<span style="position:sticky;left:10px;">Total · '+rows.length.toLocaleString('en-IN')+' line'+(rows.length === 1 ? '' : 's')
+    +   (shown.length < rows.length ? ' <span style="font-weight:600;color:#6B82A0;">(first '+shown.length.toLocaleString('en-IN')+' shown — Excel has all)</span>' : '')+'</span></td>'
     + '<td style="position:sticky;bottom:0;background:#E4ECF8;padding:9px 10px;'+num+'font-size:12px;font-weight:800;color:#0D2B5E;border-top:2px solid #C9D6E8;">'+_arFull(bill)+'</td>'
     + '<td style="position:sticky;bottom:0;background:#E4ECF8;padding:9px 10px;'+num+'font-size:12px;font-weight:800;color:#0D2B5E;border-top:2px solid #C9D6E8;">'+_arFull(agg.total - agg.oa)+'</td>'
     + '<td style="position:sticky;bottom:0;background:#E4ECF8;border-top:2px solid #C9D6E8;"></td>'
@@ -6634,6 +6646,7 @@ function arDrillDrawer(){
   if (repList.length) sub.push(esc(repList.slice(0, 3).join(', ')) + (repList.length > 3 ? ' +' + (repList.length - 3) : ''));
   if (!isZone && creditDays !== undefined) sub.push('Credit ' + esc(creditDays) + ' days');
   if (arMeta && arMeta.asOn) sub.push('as on ' + esc(arMeta.asOn));
+  requestAnimationFrame(_arFreezeDrill);
 
   return '<div data-act="arPgDrillClose" style="position:fixed;inset:0;background:rgba(13,43,94,0.28);z-index:900;"></div>'
     + '<div data-stop="1" style="position:fixed;top:0;right:0;bottom:0;width:min(1440px,96vw);background:#F7F9FC;z-index:901;box-shadow:-12px 0 40px rgba(13,43,94,0.18);display:flex;flex-direction:column;">'
@@ -6661,6 +6674,29 @@ function arDrillDrawer(){
     +   '</div>'
     + '</div>';
 }
+
+// Frozen columns: each one's left edge = the widths of the frozen columns before it.
+// On a narrow screen only as many as fit in ~55% of the width stay frozen (at least one).
+function _arFreezeDrill(){
+  var t = document.getElementById('ard-table');
+  if (!t) return;
+  var box = t.parentElement, room = (box ? box.clientWidth : 0) * 0.55;
+  var heads = t.querySelectorAll('thead th.ard-fz'), left = 0, lefts = [], keep = 0;
+  for (var i = 0; i < heads.length; i++) {
+    var w = heads[i].getBoundingClientRect().width;
+    if (i === 0 || left + w <= room) keep = i + 1;
+    lefts.push(left); left += w;
+  }
+  var cells = t.querySelectorAll('.ard-fz');
+  for (var j = 0; j < cells.length; j++) {
+    var k = +cells[j].getAttribute('data-fz'), on = k < keep;
+    // a header cell keeps sticking to the top even when it isn't frozen
+    cells[j].style.position = on ? '' : (cells[j].tagName === 'TH' ? 'sticky' : 'static');
+    cells[j].style.left = on ? lefts[k] + 'px' : 'auto';
+    cells[j].style.boxShadow = k === keep - 1 ? 'inset -1px 0 0 #C9D6E8,4px 0 6px -4px rgba(13,43,94,0.22)' : (on ? 'none' : '');
+  }
+}
+window.addEventListener('resize', function(){ if (state.arDrill) _arFreezeDrill(); });
 
 function arExportDrill(){
   var dr = state.arDrill;
