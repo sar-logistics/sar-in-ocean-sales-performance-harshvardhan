@@ -2923,7 +2923,7 @@ function topbar(){
       +'</div>')
       // ── View-specific date selector ──────────────────────────────────────
       +(['usage','teams','admin','org','ar'].indexOf(state.page) >= 0 ? '' : (function(){
-        var v = state.reportView;
+        var v = (state.page === 'incentive' && state.reportView === 'Quarterly') ? 'Monthly' : state.reportView; // Incentive Quarterly: FY quarters of the picked months
         var ps = pillShadow;
 
         // Shared dropdown pill builder
@@ -5835,7 +5835,14 @@ function incDrill(el){
 }
 function _incShipKey(v){ return String(v == null ? '' : v).trim().toUpperCase(); }
 
+// Quarterly view on this page: FY quarters (Q1 Apr–Jun … Q4 Jan–Mar) side by side for the months picked
+// in From/To, added up from Sales Performance's monthly columns. Monthly and Yearly follow Sales Performance.
 function incentivePage(){
+  if (state.reportView !== 'Quarterly') return _incentivePageInner(false);
+  state.reportView = 'Monthly';
+  try { return _incentivePageInner(true); } finally { state.reportView = 'Quarterly'; }
+}
+function _incentivePageInner(foldQ){
   var idxs = filteredMonthIndices();
   function spinner(msg){
     return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div><div style="font-size:13px;color:#9AAFC8;font-weight:500;">'+msg+'</div></div>';
@@ -5868,13 +5875,32 @@ function incentivePage(){
   if (tr.length === 1 && tr[0].noData) return emptyBox('No data for this quarter', esc(tr[0].msg));
   var gpRows = tr.filter(function(r){ return r.toggleType === 'gp'; });
   if (gpRows.length === cap.length) cap.forEach(function(c, i){ c.drillCells = gpRows[i].cells; });
+  var qCols = null;
+  if (foldQ) {
+    var qByKey = {}; qCols = [];
+    filteredMonths().forEach(function(m, i){
+      var b = m.split('-'), mi = MONTH_NAME_TO_IDX[b[0]], yy = parseInt(b[1], 10);
+      var fy = mi >= 3 ? yy + 1 : yy, q = mi >= 3 ? Math.floor((mi - 3) / 3) + 1 : 4, k = q + '-' + fy;
+      if (!qByKey[k]) { qByKey[k] = { label:'Q' + q + ' FY' + fy, idxs:[], months:[] }; qCols.push(qByKey[k]); }
+      qByKey[k].idxs.push(i); qByKey[k].months.push(m);
+    });
+    var fold = function(arr){ return qCols.map(function(g){ return sum(g.idxs.map(function(i){ return arr[i] || 0; })); }); };
+    cap.forEach(function(c){
+      c.gp = fold(c.gp); c.tgt = fold(c.tgt);
+      if (c.drillCells) c.drillCells = [c.drillCells[0]].concat(qCols.map(function(g){
+        var a = g.months[0], z = g.months[g.months.length - 1];
+        return { entity:c.drillCells[0].entity, col: a === z ? a : 'RANGE:' + a + ':' + z };
+      }));
+    });
+  }
   var reps = cap.filter(function(c){ return c.isRep && !c.isBranch; });
   if (!reps.length) return emptyBox('No sales reps', 'No sales reps match the current filters.');
 
   // Column headers — same as Sales Performance
   var isY = state.reportView === 'Yearly', isQ = state.reportView === 'Quarterly';
   var groups = isY ? yearGroups() : isQ ? quarterGroups() : null;
-  var heads = groups ? groups.map(function(g){ return { top:g.label, sub:g.range || '' }; })
+  var heads = qCols ? qCols.map(function(g){ var a = g.months[0], z = g.months[g.months.length - 1]; return { top:g.label, sub: a === z ? a : a + ' – ' + z }; })
+    : groups ? groups.map(function(g){ return { top:g.label, sub:g.range || '' }; })
     : filteredMonths().map(colDisplayLabel).map(function(l){ var p = String(l).split('||'); return { top:p[0], sub:p[1] || '' }; });
   var nCols = reps[0].gp.length;
 
@@ -5882,6 +5908,7 @@ function incentivePage(){
   var colOf = {};
   if (state.reportView === 'Weekly') filteredMonths().forEach(function(k, i){ colOf[k] = i; });
   else if (groups) groups.forEach(function(g, i){ g.idxs.forEach(function(mi){ colOf[months26[mi]] = i; }); });
+  else if (qCols) qCols.forEach(function(g, i){ g.months.forEach(function(m){ colOf[m] = i; }); });
   else filteredMonths().forEach(function(m, i){ colOf[m] = i; });
   var lobF = state.filterLobs && state.filterLobs.length ? state.filterLobs : null;
   var exclByRep = {}, exclShipByRep = {};
@@ -6061,7 +6088,7 @@ function incentivePage(){
     +'<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);">'
       +'<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid '+BORDER+';flex-wrap:wrap;border-radius:12px 12px 0 0;">'
         +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Incentive</span>'
-        +'<span style="font-size:11px;color:#9AAFC8;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+state.reportView+' · '+state.currency+'</span>'
+        +'<span style="font-size:11px;color:#9AAFC8;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+(foldQ ? 'Quarterly' : state.reportView)+' · '+state.currency+'</span>'
         +(zones.length ? '<button onclick="incToggleAllZones('+(allOpen ? 'false' : 'true')+')" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+(allOpen ? 'Collapse All' : 'Expand All')+'</button>' : '')
         +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+zones.length+' zones · '+reps.length+' sales reps</span>'
         +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">· Outstanding from ar_outstanding'+(incOutMeta && incOutMeta.asOn ? ' as on <span style="color:#2C4E82;font-weight:700;">'+esc(incOutMeta.asOn)+'</span>' : '')+'</span>'
