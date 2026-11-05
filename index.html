@@ -6043,7 +6043,8 @@ var arRows = null, arMeta = null, arDataReady = false, arDataLoading = false, ar
 var AR_COLORS = {
   nd: { fg:'#0F7048', bg:'#E6F5EC' },
   oa: { fg:'#7A510E', bg:'#FBF1DA' },
-  net:{ fg:'#0D2B5E', bg:'#E4ECF8' }
+  net:{ fg:'#0D2B5E', bg:'#E4ECF8' },
+  due:{ fg:'#8E1F1B', bg:'#FBE4E1' }   // Outstanding Due = all overdue slabs
 };
 // Overdue buckets, set as "slabs" like the Logisys report: up to 9 slabs, each
 // ticked on/off with a day limit. Every ticked slab closes a bucket:
@@ -6186,8 +6187,11 @@ function _arModel(){
     if (r.sp) C.reps[r.sp] = 1;
     if (!_arIsOa(r) && r.o > 0 && r.cd !== null && r.cd !== undefined) C.cd[r.cd] = (C.cd[r.cd] || 0) + 1;
   });
-  var sortKey = (state.arSort && state.arSort.key) || 'total', dir = (state.arSort && state.arSort.dir) || -1;
-  function val(x){ return sortKey === 'name' ? x.name.toLowerCase() : sortKey === 'net' ? x.agg.total - x.agg.oa : (x.agg[sortKey] || 0); }
+  var sortKey = (state.arSort && state.arSort.key) || 'net', dir = (state.arSort && state.arSort.dir) || -1;
+  function val(x){
+    return sortKey === 'name' ? x.name.toLowerCase() : sortKey === 'net' ? x.agg.total - x.agg.oa
+      : sortKey === 'due' ? _arOverdue(x.agg) : (x.agg[sortKey] || 0);
+  }
   var zoneList = sortZones(Object.keys(zones)).map(function(zn){
     var Z = zones[zn];
     Z.custList = Object.keys(Z.cust).map(function(k){
@@ -6293,16 +6297,16 @@ function arPage(){
 
   var cols = [
     { key:'name',  label:'Customer', left:true },
-    { key:'total', label:'Total Outstanding' },
+    { key:'net', label:'Net Outstanding' },
   ].concat(AR_BUCKETS.map(function(b){ return { key:b.key, label:b.label }; }), [
+    { key:'due', label:'Outstanding Due' },
     { key:'nd',  label:'Not Due' },
     { key:'oa',  label:'On Account' },
-    { key:'net', label:'Net Outstanding' },
     { key:'cd',  label:'Credit Days', noSort:true }
   ]);
   // Three sticky header rows with fixed heights: band (26px), column names (36px), Grand Total
   var thBase = 'position:sticky;z-index:3;font-size:10.5px;font-weight:800;letter-spacing:0.02em;padding:0 9px;white-space:nowrap;box-sizing:border-box;';
-  var sk = (state.arSort && state.arSort.key) || 'total', sd = (state.arSort && state.arSort.dir) || -1;
+  var sk = (state.arSort && state.arSort.key) || 'net', sd = (state.arSort && state.arSort.dir) || -1;
   var head = '<thead><tr>'
     + '<th class="ar-corner" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
     + '<th style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
@@ -6471,11 +6475,11 @@ function _arCells(a, tag, style, attr){
   var C = AR_COLORS;
   function amt(v, color){ return v ? '<span style="color:'+(color || '#15233B')+';">'+_arAmt(v)+'</span>' : '<span style="color:#D5DCE6;">–</span>'; }
   var net = a.total - a.oa;
-  return '<'+tag+attr+' style="'+style+'text-align:right;">'+amt(a.total)+'</'+tag+'>'
+  return '<'+tag+attr+' style="'+style+'text-align:right;font-weight:700;">'+amt(net, net < 0 ? C.oa.fg : '#0D2B5E')+'</'+tag+'>'
     + AR_BUCKETS.map(function(b){ return '<'+tag+attr+' style="'+style+'text-align:right;">'+amt(a[b.key], C[b.key].fg)+'</'+tag+'>'; }).join('')
+    + '<'+tag+attr+' style="'+style+'text-align:right;font-weight:700;background:'+C.due.bg+';">'+amt(_arOverdue(a), C.due.fg)+'</'+tag+'>'
     + '<'+tag+attr+' style="'+style+'text-align:right;">'+amt(a.nd, C.nd.fg)+'</'+tag+'>'
-    + '<'+tag+attr+' style="'+style+'text-align:right;">'+amt(-a.oa, C.oa.fg)+'</'+tag+'>'
-    + '<'+tag+attr+' style="'+style+'text-align:right;font-weight:700;">'+amt(net, net < 0 ? C.oa.fg : '#0D2B5E')+'</'+tag+'>';
+    + '<'+tag+attr+' style="'+style+'text-align:right;">'+amt(-a.oa, C.oa.fg)+'</'+tag+'>';
 }
 
 // Zones start collapsed; a single visible zone (e.g. a zonal manager) starts open
@@ -6727,11 +6731,11 @@ function arExportExcel(){
       var a = C.agg;
       data.push({
         'Zone': Z.name, 'Customer': C.name, 'Sales Person': C.repList.join(', '),
-        'Total Outstanding (INR)': Math.round(a.total),
+        'Net Outstanding': Math.round(a.total - a.oa),
       });
       var row = data[data.length - 1];
       AR_BUCKETS.forEach(function(b){ row[b.label] = Math.round(a[b.key]); });
-      row['Not Due'] = Math.round(a.nd); row['On Account'] = -Math.round(a.oa); row['Net Outstanding'] = Math.round(a.total - a.oa);
+      row['Outstanding Due'] = Math.round(_arOverdue(a)); row['Not Due'] = Math.round(a.nd); row['On Account'] = -Math.round(a.oa);
       row['Credit Days'] = C.creditDays !== null ? Number(C.creditDays) : '';
     });
   });
@@ -6775,7 +6779,7 @@ function arHandleAct(act, el){
     (window._arLastModel ? window._arLastModel.zones : []).forEach(function(Z){ state.arZoneOpen[Z.name] = v === '1'; });
     _arRerenderMain(false);
   } else if (act === 'arPgSort') {
-    var cur = state.arSort || { key:'total', dir:-1 };
+    var cur = state.arSort || { key:'net', dir:-1 };
     state.arSort = cur.key === v ? { key:v, dir:-cur.dir } : { key:v, dir:(v === 'name' ? 1 : -1) };
     _arRerenderMain(false);
   } else if (act === 'arPgZoneDrill') {
