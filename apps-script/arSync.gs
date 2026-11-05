@@ -211,12 +211,18 @@ function pushArToDashboard() {
   Logger.log('Done in ' + Math.round((Date.now() - t0) / 1000) + 's (as on ' + asOn + ')');
 }
 
-// "02-Nov-2026" → Date (null when it can't be read)
+// "02-Nov-2026", or the sheet's ETD/ETA/ATD/ATA text "22-09-2026" / "22/09/2026"
+// (day-month-year) → Date (null when it can't be read)
 function arParseDate_(s) {
-  const m = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/.exec(String(s || '').trim());
-  if (!m) return null;
-  const mon = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(m[2].toLowerCase());
-  return mon < 0 ? null : new Date(+m[3], mon, +m[1]);
+  const t = String(s || '').trim();
+  let m = /^(\d{1,2})[-\/ ]([A-Za-z]{3})[-\/ ](\d{4})$/.exec(t);
+  if (m) {
+    const mon = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(m[2].toLowerCase());
+    return mon < 0 ? null : new Date(+m[3], mon, +m[1]);
+  }
+  m = /^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/.exec(t);
+  if (m && +m[2] >= 1 && +m[2] <= 12 && +m[1] >= 1 && +m[1] <= 31) return new Date(+m[3], +m[2] - 1, +m[1]);
+  return null;
 }
 
 // "1,234.00", "(456.00)", " ", -456, "(1)" → number

@@ -115,12 +115,21 @@ function buildArPayload(rows, repLookup, meta) {
   }
   const num = (v) => { const n = Number(v); return isFinite(n) ? n : 0; };
   // "OVR Receivable" counts from arrival: base date = ATA, else ETA (else Trans. Date as in the report)
+  // Dates arrive as "22-Sep-2026" (sync-formatted) or, for ETD/ETA/ATD/ATA, as the
+  // sheet's text "22-09-2026" / "22/09/2026" (day-month-year)
   const MON = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-  const day = (sv) => {
-    const m = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/.exec(String(sv || "").trim());
-    const mo = m ? MON.indexOf(m[2].toLowerCase()) : -1;
-    return mo < 0 ? null : Date.UTC(+m[3], mo, +m[1]) / 86400000;
+  const ymd = (sv) => {
+    const t = String(sv || "").trim();
+    let m = /^(\d{1,2})[-\/ ]([A-Za-z]{3})[-\/ ](\d{4})$/.exec(t);
+    if (m) { const mo = MON.indexOf(m[2].toLowerCase()); return mo < 0 ? null : [+m[3], mo, +m[1]]; }
+    m = /^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/.exec(t);
+    if (m && +m[2] >= 1 && +m[2] <= 12 && +m[1] >= 1 && +m[1] <= 31) return [+m[3], +m[2] - 1, +m[1]];
+    m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+    return m ? [+m[1], +m[2] - 1, +m[3]] : null;
   };
+  const day = (sv) => { const d = ymd(sv); return d ? Date.UTC(d[0], d[1], d[2]) / 86400000 : null; };
+  // → "22-Sep-2026", the format the page reads
+  const fmt = (sv) => { const d = ymd(sv); if (!d) return ""; const M = MON[d[1]]; return ("0" + d[2]).slice(-2) + "-" + M[0].toUpperCase() + M.slice(1) + "-" + d[0]; };
   const asOnDay = day(meta && meta.asOn);
 
   // [customer, salesPerson(display), zone, lob, branch, location, type,
@@ -155,8 +164,11 @@ function buildArPayload(rows, repLookup, meta) {
     let baseDate = "";
     if (gl.toLowerCase() === "ovr receivable") {
       const ata = String(r.ATA || "").trim(), eta = String(r.eta || "").trim();
-      baseDate = day(ata) !== null ? ata : day(eta) !== null ? eta : "";
-      if (baseDate && asOnDay !== null) od = asOnDay - day(baseDate) - num(r.creditDays);
+      baseDate = day(ata) !== null ? fmt(ata) : day(eta) !== null ? fmt(eta) : "";
+      // Overdue days = Receipt Date (the "as on" date while nothing is received) − (ATA/ETA + Credit Days)
+      const rcpt = day(r["Receipt Date"]);
+      const endDay = rcpt !== null ? rcpt : asOnDay;
+      if (baseDate && endDay !== null) od = endDay - day(baseDate) - num(r.creditDays);
     }
     out.push([
       code("customer", r.customer),
@@ -199,7 +211,7 @@ async function arGet(db, force, deployTs) {
   const key = meta.currentBatch + "|" + deployTs;
   if (!force && arCache && arCache.key === key) return arCache.data;
   const [rows, repLookup] = await Promise.all([
-    db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch }, { projection: { _id: 0, customer: 1, salesPerson: 1, lob: 1, location: 1, branch: 1, type: 1, txnNo: 1, transDate: 1, billAmt: 1, outstanding: 1, overdueDays: 1, ageingDays: 1, creditDays: 1, houseNo: 1, jobOwner: 1, _dso: 1, dsoBill: 1, dsoBillDays: 1, glGroup: 1, "GL Group Name": 1, ATA: 1, eta: 1 } }).toArray(),
+    db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch }, { projection: { _id: 0, customer: 1, salesPerson: 1, lob: 1, location: 1, branch: 1, type: 1, txnNo: 1, transDate: 1, billAmt: 1, outstanding: 1, overdueDays: 1, ageingDays: 1, creditDays: 1, houseNo: 1, jobOwner: 1, _dso: 1, dsoBill: 1, dsoBillDays: 1, glGroup: 1, "GL Group Name": 1, ATA: 1, eta: 1, "Receipt Date": 1 } }).toArray(),
     loadRepLookup(db),
   ]);
   const data = buildArPayload(rows, repLookup, meta);

@@ -3116,7 +3116,7 @@ function topbar(){
       // data — no filter selection could ever change what they see.
       +(['admin','usage','org','teams'].indexOf(state.page) >= 0 || (currentUser && (currentUser.role||'').toLowerCase().trim()==='sales rep') ? '' : (function(){
         var _isInsightPg = ['customers','agents','tradelane'].indexOf(state.page) >= 0;
-        var activeCount = (_isInsightPg ? 0 : state.filterLobs.length) + state.filterReps.length + (state.filterZones||[]).length + (state.filterRegions||[]).length + (state.page === 'ar' ? (state.filterGl||[]).length : 0);
+        var activeCount = (_isInsightPg ? 0 : state.filterLobs.length) + state.filterReps.length + (state.filterZones||[]).length + (state.filterRegions||[]).length;
         var isFOpen = state.filtersOpen;
         var btnHtml = '<button data-act="toggleFiltersDrop" style="display:flex;align-items:center;gap:6px;background:'+(activeCount>0?'#EEF3FC':'#FFFFFF')+';border:1.5px solid '+(isFOpen?BRAND_A1:(activeCount>0?'#B7C8EA':'#D8E1F0'))+';border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:'+(activeCount>0?'#1E3A66':'#3C5275')+';cursor:pointer;transition:box-shadow 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';">'
           +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>'
@@ -3199,15 +3199,6 @@ function topbar(){
                 + '</div>'
               + '</div>' : '');
 
-          // Accounts Receivable only: GL Group Name
-          var glSection = state.page !== 'ar' ? '' : sectionHeader('GL Group', (state.filterGl||[]).length, state.filterGlDropOpen, 'toggleFilterGlDrop')
-            + (state.filterGlDropOpen ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'
-                + '<div id="gl-checklist" style="max-height:180px;overflow-y:auto;">'
-                  + checkRow('All GL Groups', !(state.filterGl||[]).length, 'filterGlAll', '')
-                  + _arGlGroups().map(function(g){ return checkRow(g || '(blank)', (state.filterGl||[]).indexOf(g) > -1, 'toggleFilterGl', g); }).join('')
-                + '</div>'
-              + '</div>' : '');
-
           var repSection = sectionHeader('Reps', state.filterReps.length, repOpen, 'toggleFilterRepDrop')
             + (repOpen ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'
                 + searchBox('rep-search-input', 'Search reps…')
@@ -3272,7 +3263,7 @@ var regionSection = sectionHeader('Regions', _frPanel.length, regionOpen, 'toggl
 var zoneSection = sectionHeader('Zones', (state.filterZones||[]).length, zoneOpen, 'toggleFilterZoneDrop')
             + (zoneOpen ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'                + '<div id="zone-checklist" style="max-height:180px;overflow-y:auto;">'                  + checkRow('All Zones', (state.filterZones||[]).length===0, 'filterZoneAll', '')                  + allZoneNames.map(function(z){ return checkRow(z, (state.filterZones||[]).indexOf(z)>-1, 'toggleFilterZone', z); }).join('')                + '</div>'              + '</div>' : '');
 
-          _dropdownPanels += '<div id="filters-drop" data-stop="1" style="position:fixed;background:#FFFFFF;border-radius:14px;box-shadow:0 12px 36px rgba(13,43,94,0.2),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;width:280px;padding:16px;pointer-events:auto;">'            +'<div style="font-size:10px;font-weight:800;letter-spacing:0.08em;color:#97A1B2;text-transform:uppercase;margin-bottom:12px;">Filters</div>'            +'<div style="display:flex;flex-direction:column;gap:8px;">'+lobSection+(_isZonalMgr?'':regionSection)+(_isZonalMgr?'':zoneSection)+repSection+glSection+'</div>'            +'<div style="height:1px;background:#EEF2F8;margin:14px 0 12px;"></div>'            +'<div style="display:flex;align-items:center;justify-content:space-between;">'              +'<button data-act="filterResetAll" style="background:none;border:none;color:#94A3B8;font-size:12px;font-weight:600;cursor:pointer;padding:6px 4px;">Reset all</button>'              +'<button data-act="toggleFiltersDrop" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;color:#fff;font-size:12px;font-weight:700;padding:8px 20px;cursor:pointer;">Done</button>'            +'</div>'          +'</div>';
+          _dropdownPanels += '<div id="filters-drop" data-stop="1" style="position:fixed;background:#FFFFFF;border-radius:14px;box-shadow:0 12px 36px rgba(13,43,94,0.2),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;width:280px;padding:16px;pointer-events:auto;">'            +'<div style="font-size:10px;font-weight:800;letter-spacing:0.08em;color:#97A1B2;text-transform:uppercase;margin-bottom:12px;">Filters</div>'            +'<div style="display:flex;flex-direction:column;gap:8px;">'+lobSection+(_isZonalMgr?'':regionSection)+(_isZonalMgr?'':zoneSection)+repSection+'</div>'            +'<div style="height:1px;background:#EEF2F8;margin:14px 0 12px;"></div>'            +'<div style="display:flex;align-items:center;justify-content:space-between;">'              +'<button data-act="filterResetAll" style="background:none;border:none;color:#94A3B8;font-size:12px;font-weight:600;cursor:pointer;padding:6px 4px;">Reset all</button>'              +'<button data-act="toggleFiltersDrop" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;color:#fff;font-size:12px;font-weight:700;padding:8px 20px;cursor:pointer;">Done</button>'            +'</div>'          +'</div>';
           return btnHtml;
         }
         return btnHtml;
@@ -6417,6 +6408,7 @@ function arPage(){
     +'</div>'
     +(_arCanEditBuckets() ? '<button data-act="arPgBucketOpen" class="btnq" title="Set the overdue slabs for everyone" style="display:flex;align-items:center;gap:6px;border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
       +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Ageing slabs</button>' : '')
+    + _arGlDropdown()
     +'<button data-act="arPgExpandAll" data-val="'+(allOpen ? '0' : '1')+'" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'+(allOpen ? 'Collapse all' : 'Expand all')+'</button>'
     +'</div>';
 
@@ -6486,6 +6478,31 @@ function arPage(){
     : '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#8A9AB5;font-size:12.5px;font-weight:600;background:#fff;border:1px solid #E3EAF4;border-radius:14px;">No outstanding for the current filters'+(state.arSearch ? ' and search' : '')+'.</div>';
 
   return css + '<div style="height:100%;display:flex;flex-direction:column;padding:14px 6px 4px;box-sizing:border-box;">' + header + kpis + table + '</div>' + _arBucketModal();
+}
+
+// GL Group Name filter on the page header (state.filterGl; empty = all)
+function _arGlDropdown(){
+  var sel = state.filterGl || [], open = !!state.arGlOpen;
+  var label = sel.length === 0 ? 'All' : sel.length === 1 ? (sel[0] || '(blank)') : sel.length + ' selected';
+  var html = '<div style="position:relative;">'
+    + '<button data-act="arPgGlToggle" class="btnq" title="Filter by GL Group Name" style="display:flex;align-items:center;gap:6px;border:1.5px solid '+(open ? BRAND_A1 : (sel.length ? '#B7C8EA' : '#D8E1F0'))+';background:'+(sel.length ? '#EEF3FC' : '#fff')+';border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;white-space:nowrap;">'
+    +   'GL Group: <span style="color:#173E76;">'+esc(label)+'</span>'
+    +   '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="transform:rotate('+(open ? 180 : 0)+'deg);transition:transform .15s;"><path d="M6 9l6 6 6-6"/></svg>'
+    + '</button>';
+  if (open) {
+    var row = function(text, on, act, val){
+      return '<div data-act="'+act+'" data-val="'+esc(val)+'" style="display:flex;align-items:center;gap:9px;padding:7px 10px;cursor:pointer;border-radius:7px;" onmouseenter="this.style.background=\'#F4F7FC\'" onmouseleave="this.style.background=\'transparent\'">'
+        + '<span style="width:16px;height:16px;border-radius:4px;border:1.5px solid '+(on ? BRAND_A1 : '#C5D0E0')+';background:'+(on ? BRAND_A1 : '#fff')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+        +   (on ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '')
+        + '</span><span style="font-size:12.5px;color:#374151;font-weight:'+(on ? 600 : 500)+';white-space:nowrap;">'+esc(text)+'</span></div>';
+    };
+    html += '<div data-act="arPgGlClose" style="position:fixed;inset:0;z-index:940;"></div>'
+      + '<div style="position:absolute;top:calc(100% + 6px);right:0;min-width:220px;max-height:320px;overflow:auto;background:#fff;border-radius:12px;box-shadow:0 12px 36px rgba(13,43,94,0.2),0 0 0 1px rgba(13,43,94,0.07);z-index:941;padding:6px;">'
+      +   row('All GL Groups', sel.length === 0, 'arPgGlAll', '')
+      +   _arGlGroups().map(function(g){ return row(g || '(blank)', sel.indexOf(g) > -1, 'arPgGlPick', g); }).join('')
+      + '</div>';
+  }
+  return html + '</div>';
 }
 
 // Admin: set the overdue slabs (applies to everyone)
@@ -6668,13 +6685,14 @@ function _arLoadDetail(customers){
 function _arDet(r){ return arDetailMap[_arDetKey(r.c, r.txn, r.h, r.o)] || null; }
 // Panel columns after Invoice No / Date / Due Date (k = detail field, or a fn of the row)
 var AR_DETAIL_COLS = [
+  ['Receipt Date', 'receiptDate'],
   ['Reference No.', 'ref'], ['House No.', function(r){ return r.h; }], ['Master No.', 'master'],
   ['Shipper Name', 'shipper', 1], ['Consignee Name', 'consignee', 1], ['Customer Name', 'custName', 1],
   ['Branch', function(r){ return r.br || r.loc; }], ['Consol No', 'consol'], ['Collection Executive', 'collExec'],
   ['Sales Person', function(r){ return _arRepName(r.sp); }], ['Load Port', 'loadPort'], ['Place Of Receipt', 'por'],
   ['Discharge Port', 'dischargePort'], ['Place Of Delivery', 'pod'], ['ETD', 'etd'], ['ETA', 'eta'],
   ['ATD', 'atd'], ['ATA', 'ata'], ['Ref No.', 'refNo2'],
-  ['GL Group Name', function(r){ return r.gl; }], ['Receipt Date', 'receiptDate']
+  ['GL Group Name', function(r){ return r.gl; }]
 ];
 function _arDetVal(r, col){
   if (typeof col[1] === 'function') return col[1](r) || '';
@@ -6923,6 +6941,16 @@ function arHandleAct(act, el){
     arExportDrill();
   } else if (act === 'arPgExport') {
     arExportExcel();
+  } else if (act === 'arPgGlToggle') {
+    state.arGlOpen = !state.arGlOpen; _arRerenderMain(false);
+  } else if (act === 'arPgGlClose') {
+    state.arGlOpen = false; _arRerenderMain(false);
+  } else if (act === 'arPgGlAll') {
+    state.filterGl = []; _arRerenderMain(false);
+  } else if (act === 'arPgGlPick') {
+    var gv = v || '', curGl = state.filterGl || [];
+    state.filterGl = curGl.indexOf(gv) > -1 ? curGl.filter(function(x){ return x !== gv; }) : curGl.concat([gv]);
+    _arRerenderMain(false);
   } else if (act === 'arPgBucketOpen') {
     var saved = arMeta && arMeta.buckets && arMeta.buckets.slabs;
     var base = Array.isArray(saved) && saved.length === AR_SLAB_COUNT && _arSlabEdges(saved).join() === AR_EDGES.join() ? saved : _arSlabsFromEdges(AR_EDGES);
@@ -10452,7 +10480,7 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation(); ev.preventDefault();
     var _prevPage = state.page;
     state.page=el.getAttribute('data-val');
-    state.arDrill = null; state.arBucketEdit = null;
+    state.arDrill = null; state.arBucketEdit = null; state.arGlOpen = false;
     // Accounts Receivable opens in INR; the previous currency comes back on leaving
     if (state.page === 'ar' && _prevPage !== 'ar') { state._curBeforeAr = state.currency; state.currency = 'INR'; }
     else if (state.page !== 'ar' && _prevPage === 'ar' && state._curBeforeAr) { state.currency = state._curBeforeAr; state._curBeforeAr = null; }
@@ -11094,15 +11122,6 @@ document.addEventListener('click', function(ev){
     // Clear rep filter when zone changes so rep list resets to zone's reps
     state.filterReps = [];
     _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops);
-  }
-  else if(act==='toggleFilterGlDrop'){ ev.stopPropagation(); state.filterGlDropOpen=!state.filterGlDropOpen; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='filterGlAll'){ ev.stopPropagation(); state.filterGl=[]; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='toggleFilterGl'){
-    ev.stopPropagation();
-    var gv = el.getAttribute('data-val') || '';
-    var cur = state.filterGl || [];
-    state.filterGl = cur.indexOf(gv) > -1 ? cur.filter(function(x){ return x !== gv; }) : cur.concat([gv]);
-    render(); requestAnimationFrame(positionAllDrops);
   }
   else if(act==='toggleFilterRegionDrop'){ state.filterRegionDropOpen=!state.filterRegionDropOpen; state.filterZoneDropOpen=false; state.filterLobDropOpen=false; state.filterRepDropOpen=false; render(); }
         else if(act==='toggleFilterRegion'){ var rv=el.getAttribute('data-val'); var ri2=state.filterRegions||[]; var ix=ri2.indexOf(rv); if(ix>-1)ri2.splice(ix,1); else ri2.push(rv); state.filterRegions=ri2;
