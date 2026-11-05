@@ -5917,9 +5917,12 @@ function incentivePage(){
 /* ====================== ACCOUNTS RECEIVABLE ====================== */
 // Customer outstanding from the AR sheet (pushed by apps-script/arSync.gs).
 // One row per sheet line with a non-zero Outstanding:
-//   o > 0 → unpaid invoice, bucketed by Overdue Days (≤0 = Not Due)
-//   o < 0 → On Account: the customer paid extra; held against their next bill
-// Total Outstanding = unpaid invoices · Net = Total − On Account.
+//   has a Transaction No. → invoice, bucketed by Overdue Days (≤0 = Not Due)
+//   no Transaction No.    → On Account (receipts / payments / JVs / previous-year
+//                           balances not matched to an invoice). Same rule as the
+//                           sheet's "On Account Total" lines, so either sign counts.
+// Total Outstanding = invoices · Net = Total − On Account.
+function _arIsOa(r){ return !String(r.txn || '').trim(); }
 var arRows = null, arMeta = null, arDataReady = false, arDataLoading = false, arDataError = '';
 var AR_BUCKETS = [
   { key:'b1', label:'0-30',   max:30 },
@@ -6012,8 +6015,9 @@ function _arVisibleRows(){
 
 function _arEmptyAgg(){ return { total:0, nd:0, b1:0, b2:0, b3:0, b4:0, b5:0, oa:0, inv:0 }; }
 function _arAdd(agg, r){
-  if (r.o > 0) { agg.total += r.o; agg[_arBucket(r.od)] += r.o; agg.inv++; }
-  else agg.oa += -r.o;
+  if (_arIsOa(r)) { agg.oa += -r.o; return; }
+  agg.total += r.o; agg[_arBucket(r.od)] += r.o;
+  if (r.o > 0) agg.inv++;
 }
 
 // Zone → customers, honouring the customer search box
@@ -6030,7 +6034,7 @@ function _arModel(){
     var C = Z.cust[r.c] || (Z.cust[r.c] = { name:r.c, agg:_arEmptyAgg(), reps:{}, cd:{} });
     _arAdd(C.agg, r);
     if (r.sp) C.reps[r.sp] = 1;
-    if (r.o > 0 && r.cd !== null && r.cd !== undefined) C.cd[r.cd] = (C.cd[r.cd] || 0) + 1;
+    if (!_arIsOa(r) && r.o > 0 && r.cd !== null && r.cd !== undefined) C.cd[r.cd] = (C.cd[r.cd] || 0) + 1;
   });
   var sortKey = (state.arSort && state.arSort.key) || 'total', dir = (state.arSort && state.arSort.dir) || -1;
   function val(x){ return sortKey === 'name' ? x.name.toLowerCase() : sortKey === 'net' ? x.agg.total - x.agg.oa : x.agg[sortKey]; }
@@ -6257,7 +6261,7 @@ function arDrillDrawer(){
   var agg = _arEmptyAgg(), bill = 0, reps = {}, cds = {};
   rows.forEach(function(r){
     _arAdd(agg, r);
-    if (r.o > 0) {
+    if (!_arIsOa(r) && r.o > 0) {
       bill += r.bill || 0;
       if (r.cd !== null && r.cd !== undefined) cds[r.cd] = (cds[r.cd] || 0) + 1;
     }
@@ -6269,7 +6273,7 @@ function arDrillDrawer(){
 
   function chip(r){
     var s = 'display:inline-block;border-radius:999px;padding:3px 9px;font-weight:700;font-size:10.5px;white-space:nowrap;';
-    if (r.o < 0) return '<span style="'+s+'color:'+C.oa.fg+';background:'+C.oa.bg+';">On Account</span>';
+    if (_arIsOa(r)) return '<span style="'+s+'color:'+C.oa.fg+';background:'+C.oa.bg+';">On Account</span>';
     var b = _arBucket(r.od);
     if (b === 'nd') {
       var left = -(r.od || 0);
@@ -6296,7 +6300,7 @@ function arDrillDrawer(){
     + '</tr></thead><tbody>'
     + rows.map(function(r, i){
         var bg = i % 2 ? '#FBFCFE' : '#FFFFFF';
-        var isOa = r.o < 0;
+        var isOa = _arIsOa(r);
         return '<tr style="background:'+bg+';">'
           + '<td style="'+td+'font-weight:700;color:#15233B;">'+esc(r.txn || (isOa ? (r.ty || 'On Account').replace(/\n/g, ' · ') : '–'))+'</td>'
           + '<td style="'+td+'color:#3C5275;">'+esc(r.d || '–')+'</td>'
@@ -6353,13 +6357,14 @@ function arExportDrill(){
   var dr = state.arDrill;
   if (!dr) return;
   var data = _arDrillRows().map(function(r){
-    var b = r.o < 0 ? 'On Account' : (_arBucket(r.od) === 'nd' ? 'Not Due' : 'Overdue');
+    var isOa = _arIsOa(r);
+    var b = isOa ? 'On Account' : (_arBucket(r.od) === 'nd' ? 'Not Due' : 'Overdue');
     return {
-      'Invoice No': r.txn || (r.o < 0 ? String(r.ty || 'On Account').replace(/\n/g, ' ') : ''),
-      'Invoice Date': r.d || '', 'Due Date': r.o < 0 ? '' : _arDueDate(r.d, r.cd),
+      'Invoice No': r.txn || (isOa ? String(r.ty || 'On Account').replace(/\n/g, ' ') : ''),
+      'Invoice Date': r.d || '', 'Due Date': isOa ? '' : _arDueDate(r.d, r.cd),
       'House No': r.h || '', 'Sales Person': _arRepName(r.sp), 'LOB': r.lob, 'Branch': r.br || r.loc || '',
       'Bill Amount (INR)': Math.round(r.bill || 0), 'Outstanding (INR)': Math.round(r.o),
-      'Credit Days': r.cd !== null && r.cd !== undefined ? r.cd : '', 'Overdue Days': r.o > 0 ? r.od : '', 'Status': b
+      'Credit Days': r.cd !== null && r.cd !== undefined ? r.cd : '', 'Overdue Days': isOa ? '' : r.od, 'Status': b
     };
   });
   var wb = XLSX.utils.book_new();
