@@ -2902,7 +2902,7 @@ function topbar(){
     // ── SINGLE ROW: View / Dates / Currency / Rate / Filters / Refresh → Feedback / Sign Out ──
     +'<div style="display:flex;align-items:center;gap:10px;padding:7px 16px 7px;overflow:visible;background:linear-gradient(180deg,#F9FBFE,#F2F6FB);">'
       // Report View dropdown — hidden on non-data pages
-      +(['usage','teams','admin','org','ar','incentive'].indexOf(state.page) >= 0 ? '' : '<div style="position:relative;display:inline-block;flex-shrink:0;">'
+      +(['usage','teams','admin','org','ar'].indexOf(state.page) >= 0 ? '' : '<div style="position:relative;display:inline-block;flex-shrink:0;">'
         +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;transition:box-shadow 0.15s;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';'+(state.viewDropOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+pillShadow+';':'')+'">'
           +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="'+(state.viewDropOpen?'#1D5FCC':'#7C93B8')+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>'
           +state.reportView+' View'
@@ -2910,7 +2910,7 @@ function topbar(){
         +'</div>'
         +(state.viewDropOpen
           ? '<div id="view-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;overflow:hidden;padding:4px;">'
-            +((state.page==='customers'||state.page==='agents'||state.page==='tradelane') ? ['Monthly','Yearly'] : ['Monthly','Weekly','Quarterly','Yearly']).map(function(v){
+            +((state.page==='customers'||state.page==='agents'||state.page==='tradelane') ? ['Monthly','Yearly'] : state.page==='incentive' ? ['Monthly','Quarterly','Yearly'] : ['Monthly','Weekly','Quarterly','Yearly']).map(function(v){
               var active = state.reportView===v;
               var desc = v==='Monthly'?'Month by month':v==='Weekly'?'Week by week':v==='Quarterly'?'Quarter view':v==='Yearly'?'Full year':'Custom range';
               return '<div data-act="setView" data-val="'+v+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;transition:background 0.1s;">'
@@ -2923,7 +2923,7 @@ function topbar(){
       +'</div>')
       // ── View-specific date selector ──────────────────────────────────────
       +(['usage','teams','admin','org','ar'].indexOf(state.page) >= 0 ? '' : (function(){
-        var v = state.page === 'incentive' ? 'Monthly' : state.reportView; // Incentive has its own Quarterly/Monthly toggle
+        var v = state.reportView;
         var ps = pillShadow;
 
         // Shared dropdown pill builder
@@ -5818,7 +5818,6 @@ function incToggleAllZones(open){
   if (open) (window._incZoneNames || []).forEach(function(z){ state.incZoneOpen[z] = true; });
   render();
 }
-function incSetView(v){ state.incView = v; render(); }
 function incToggleGp(k){ state.incGpOpen = state.incGpOpen || {}; state.incGpOpen[k] = !state.incGpOpen[k]; render(); }
 // Click on a GP / Outstanding GP number: the same shipment drill-through as Sales Performance.
 // Outstanding GP shows only the shipments whose Shipment No is an outstanding Ref No.
@@ -5836,14 +5835,7 @@ function incDrill(el){
 }
 function _incShipKey(v){ return String(v == null ? '' : v).trim().toUpperCase(); }
 
-// The shared View dropdown is hidden on this page: numbers are always built month by month
-// (Sales Performance's monthly grid), then added up into FY quarters when the Quarterly toggle is on.
 function incentivePage(){
-  var saved = state.reportView;
-  state.reportView = 'Monthly';
-  try { return _incentivePageInner(); } finally { state.reportView = saved; }
-}
-function _incentivePageInner(){
   var idxs = filteredMonthIndices();
   function spinner(msg){
     return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div><div style="font-size:13px;color:#9AAFC8;font-weight:500;">'+msg+'</div></div>';
@@ -5876,34 +5868,13 @@ function _incentivePageInner(){
   if (tr.length === 1 && tr[0].noData) return emptyBox('No data for this quarter', esc(tr[0].msg));
   var gpRows = tr.filter(function(r){ return r.toggleType === 'gp'; });
   if (gpRows.length === cap.length) cap.forEach(function(c, i){ c.drillCells = gpRows[i].cells; });
-  var incQ = (state.incView || 'Quarterly') === 'Quarterly';
-  var monthsI = filteredMonths();
-  var qCols = null;
-  if (incQ) {
-    var qByKey = {}; qCols = [];
-    monthsI.forEach(function(m, i){
-      var b = m.split('-'), mi = MONTH_NAME_TO_IDX[b[0]], yy = parseInt(b[1], 10);
-      var fy = mi >= 3 ? yy + 1 : yy, q = mi >= 3 ? Math.floor((mi - 3) / 3) + 1 : 4, k = q + '-' + fy;
-      if (!qByKey[k]) { qByKey[k] = { label:'Q' + q + ' FY' + fy, idxs:[], months:[] }; qCols.push(qByKey[k]); }
-      qByKey[k].idxs.push(i); qByKey[k].months.push(m);
-    });
-    var fold = function(arr){ return qCols.map(function(g){ return sum(g.idxs.map(function(i){ return arr[i] || 0; })); }); };
-    cap.forEach(function(c){
-      c.gp = fold(c.gp); c.tgt = fold(c.tgt);
-      if (c.drillCells) c.drillCells = [c.drillCells[0]].concat(qCols.map(function(g){
-        var a = g.months[0], z = g.months[g.months.length - 1];
-        return { entity:c.drillCells[0].entity, col: a === z ? a : 'RANGE:' + a + ':' + z };
-      }));
-    });
-  }
   var reps = cap.filter(function(c){ return c.isRep && !c.isBranch; });
   if (!reps.length) return emptyBox('No sales reps', 'No sales reps match the current filters.');
 
   // Column headers — same as Sales Performance
   var isY = state.reportView === 'Yearly', isQ = state.reportView === 'Quarterly';
   var groups = isY ? yearGroups() : isQ ? quarterGroups() : null;
-  var heads = qCols ? qCols.map(function(g){ var a = g.months[0], z = g.months[g.months.length - 1]; return { top:g.label, sub: a === z ? a : a + ' – ' + z }; })
-    : groups ? groups.map(function(g){ return { top:g.label, sub:g.range || '' }; })
+  var heads = groups ? groups.map(function(g){ return { top:g.label, sub:g.range || '' }; })
     : filteredMonths().map(colDisplayLabel).map(function(l){ var p = String(l).split('||'); return { top:p[0], sub:p[1] || '' }; });
   var nCols = reps[0].gp.length;
 
@@ -5911,7 +5882,6 @@ function _incentivePageInner(){
   var colOf = {};
   if (state.reportView === 'Weekly') filteredMonths().forEach(function(k, i){ colOf[k] = i; });
   else if (groups) groups.forEach(function(g, i){ g.idxs.forEach(function(mi){ colOf[months26[mi]] = i; }); });
-  else if (qCols) qCols.forEach(function(g, i){ g.months.forEach(function(m){ colOf[m] = i; }); });
   else filteredMonths().forEach(function(m, i){ colOf[m] = i; });
   var lobF = state.filterLobs && state.filterLobs.length ? state.filterLobs : null;
   var exclByRep = {}, exclShipByRep = {};
@@ -6091,14 +6061,7 @@ function _incentivePageInner(){
     +'<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);">'
       +'<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid '+BORDER+';flex-wrap:wrap;border-radius:12px 12px 0 0;">'
         +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Incentive</span>'
-        +'<div style="display:inline-flex;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:2px;">'
-          +['Quarterly','Monthly'].map(function(v){
-            var on = (state.incView || 'Quarterly') === v;
-            return '<button onclick="incSetView(\''+v+'\')" style="border:none;border-radius:999px;padding:4px 12px;font-size:11px;font-weight:700;cursor:pointer;'
-              +(on ? 'background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');color:#fff;' : 'background:transparent;color:#5B7298;')+'">'+v+'</button>';
-          }).join('')
-        +'</div>'
-        +'<span style="font-size:11px;color:#9AAFC8;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+state.currency+'</span>'
+        +'<span style="font-size:11px;color:#9AAFC8;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+state.reportView+' · '+state.currency+'</span>'
         +(zones.length ? '<button onclick="incToggleAllZones('+(allOpen ? 'false' : 'true')+')" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+(allOpen ? 'Collapse All' : 'Expand All')+'</button>' : '')
         +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+zones.length+' zones · '+reps.length+' sales reps</span>'
         +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">· Outstanding from ar_outstanding'+(incOutMeta && incOutMeta.asOn ? ' as on <span style="color:#2C4E82;font-weight:700;">'+esc(incOutMeta.asOn)+'</span>' : '')+'</span>'
