@@ -18,6 +18,7 @@
 
 const AR_COLLECTION = "ar_outstanding";
 const AR_META_ID = "ar_meta";
+const AR_BUCKETS_ID = "ar_buckets"; // _meta doc: overdue bucket limits set by an admin
 
 function normalizeName(name) {
   return String(name || "").split("|")[0].toLowerCase().replace(/\s+/g, " ").trim();
@@ -165,7 +166,7 @@ async function arGet(db, force, deployTs) {
   const key = meta.currentBatch + "|" + deployTs;
   if (!force && arCache && arCache.key === key) return arCache.data;
   const [rows, repLookup] = await Promise.all([
-    db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch }, { projection: { _id: 0, _batch: 0, _insertedAt: 0 } }).toArray(),
+    db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch }, { projection: { _id: 0, customer: 1, salesPerson: 1, lob: 1, location: 1, branch: 1, type: 1, txnNo: 1, transDate: 1, billAmt: 1, outstanding: 1, overdueDays: 1, ageingDays: 1, creditDays: 1, houseNo: 1, jobOwner: 1 } }).toArray(),
     loadRepLookup(db),
   ]);
   const data = buildArPayload(rows, repLookup, meta);
@@ -173,4 +174,55 @@ async function arGet(db, force, deployTs) {
   return data;
 }
 
-module.exports = { arPush, arGet, buildArPayload, arLobKey, normalizeName };
+// Overdue slabs for everyone: edges = the ticked slabs' days ([15, 30] → 0-15, 15-30, 30+),
+// slabs = all 9 rows as the admin left them ({ on, d }). null = page default.
+async function arBucketsGet(db) {
+  const doc = await db.collection("_meta").findOne({ _id: AR_BUCKETS_ID });
+  return doc && Array.isArray(doc.edges)
+    ? { edges: doc.edges, slabs: doc.slabs || null, updatedBy: doc.updatedBy || null, updatedAt: doc.updatedAt || null }
+    : null;
+}
+
+function validEdges(e) {
+  if (!Array.isArray(e) || e.length < 1 || e.length > 9) return false;
+  for (let i = 0; i < e.length; i++) {
+    if (!Number.isInteger(e[i]) || e[i] < 1 || e[i] > 3650) return false;
+    if (i && e[i] <= e[i - 1]) return false;
+  }
+  return true;
+}
+
+// POST action=arBuckets { edges:[15, 30], slabs:[{ on, d } ×9], by }
+async function arBucketsSave(db, body) {
+  const edges = body && body.edges;
+  if (!validEdges(edges)) return { status: 400, json: { success: false, error: "1 to 9 increasing whole numbers of days (1-3650) required" } };
+  let slabs = body && body.slabs;
+  const okSlabs = Array.isArray(slabs) && slabs.length === 9 &&
+    slabs.every((x) => x && typeof x.on === "boolean" && Number.isInteger(x.d) && x.d >= 0 && x.d <= 3650) &&
+    slabs.filter((x) => x.on).map((x) => x.d).join() === edges.join();
+  if (!okSlabs) slabs = null;
+  const doc = { edges, slabs, updatedBy: String((body && body.by) || "").slice(0, 120) || null, updatedAt: new Date().toISOString() };
+  await db.collection("_meta").updateOne({ _id: AR_BUCKETS_ID }, { $set: doc }, { upsert: true });
+  return { status: 200, json: { success: true, buckets: doc } };
+}
+
+// GET action=arDetail&customer=… → shipment details for one customer's lines:
+// [txnNo, houseNo, outstanding, shipmentNo (Reference No.), shipper, POL, POD, ETD, ETA]
+async function arDetail(db, customer) {
+  const name = String(customer || "").trim();
+  if (!name) return { status: 400, json: { success: false, error: "customer required" } };
+  const meta = await db.collection("_meta").findOne({ _id: AR_META_ID });
+  if (!meta || !meta.currentBatch) return { status: 200, json: { success: true, rows: [] } };
+  const docs = await db.collection(AR_COLLECTION).find(
+    { _batch: meta.currentBatch, customer: name },
+    { projection: { _id: 0, txnNo: 1, houseNo: 1, outstanding: 1, refNo: 1, shipper: 1, loadPort: 1, originPort: 1, dischargePort: 1, destPort: 1, etd: 1, eta: 1 } }
+  ).toArray();
+  const s = (v) => String(v == null ? "" : v).trim();
+  const rows = docs.map((d) => [
+    s(d.txnNo), s(d.houseNo), Number(d.outstanding) || 0,
+    s(d.refNo), s(d.shipper), s(d.loadPort) || s(d.originPort), s(d.dischargePort) || s(d.destPort), s(d.etd), s(d.eta),
+  ]);
+  return { status: 200, json: { success: true, rows } };
+}
+
+module.exports = { arPush, arGet, arBucketsGet, arBucketsSave, arDetail, buildArPayload, arLobKey, normalizeName };

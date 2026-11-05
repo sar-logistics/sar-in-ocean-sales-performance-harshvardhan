@@ -5994,24 +5994,54 @@ function incentivePage(){
 // Total Outstanding = invoices · Net = Total − On Account.
 function _arIsOa(r){ return !String(r.txn || '').trim(); }
 var arRows = null, arMeta = null, arDataReady = false, arDataLoading = false, arDataError = '';
-var AR_BUCKETS = [
-  { key:'b1', label:'0-30',   max:30 },
-  { key:'b2', label:'30-60',  max:60 },
-  { key:'b3', label:'60-90',  max:90 },
-  { key:'b4', label:'90-120', max:120 },
-  { key:'b5', label:'120+',   max:Infinity }
-];
-// fg = text / bar colour, bg = header tint; overdue buckets go amber → dark red
+// fg = text / bar colour, bg = header tint
 var AR_COLORS = {
   nd: { fg:'#0F7048', bg:'#E6F5EC' },
-  b1: { fg:'#9A5A00', bg:'#FFF4DE' },
-  b2: { fg:'#A8470F', bg:'#FDEBDD' },
-  b3: { fg:'#A3331C', bg:'#FCE3DC' },
-  b4: { fg:'#93231F', bg:'#FADBD7' },
-  b5: { fg:'#741515', bg:'#F4CFCD' },
   oa: { fg:'#7A510E', bg:'#FBF1DA' },
   net:{ fg:'#0D2B5E', bg:'#E4ECF8' }
 };
+// Overdue buckets, set as "slabs" like the Logisys report: up to 9 slabs, each
+// ticked on/off with a day limit. Every ticked slab closes a bucket:
+// 15, 30 → 0-15, 15-30, 30+. An admin saves them for everyone (_meta "ar_buckets").
+var AR_SLAB_COUNT = 9;
+var AR_DEFAULT_SLABS = [15, 30, 45, 60, 90, 120, 180, 0, 0].map(function(d){ return { on: d > 0, d: d }; });
+function _arSlabEdges(slabs){ return slabs.filter(function(x){ return x.on; }).map(function(x){ return Number(x.d); }); }
+function _arSlabsFromEdges(e){
+  var out = [];
+  for (var i = 0; i < AR_SLAB_COUNT; i++) out.push(i < e.length ? { on:true, d:e[i] } : { on:false, d:0 });
+  return out;
+}
+var AR_DEFAULT_EDGES = _arSlabEdges(AR_DEFAULT_SLABS);
+var AR_EDGES = AR_DEFAULT_EDGES.slice();
+var AR_BUCKETS = [];
+// amber → dark red; buckets pick evenly spread steps
+var AR_RAMP = [['#9A5A00','#FFF4DE'],['#A3500A','#FEEFDD'],['#A8470F','#FDEBDD'],['#A63D16','#FCE7DC'],['#A3331C','#FCE3DC'],['#9B2B1E','#FBDFD9'],['#93231F','#FADBD7'],['#841C1A','#F7D5D2'],['#741515','#F4CFCD']];
+function _arValidEdges(e){
+  if (!Array.isArray(e) || e.length < 1 || e.length > AR_SLAB_COUNT) return false;
+  for (var i = 0; i < e.length; i++) {
+    if (typeof e[i] !== 'number' || !isFinite(e[i]) || e[i] !== Math.floor(e[i]) || e[i] < 1 || e[i] > 3650) return false;
+    if (i && e[i] <= e[i - 1]) return false;
+  }
+  return true;
+}
+function _arBucketList(edges){
+  var n = edges.length + 1, out = [];
+  for (var i = 0; i < n; i++) {
+    var lo = i ? edges[i - 1] : 0, hi = i < edges.length ? edges[i] : Infinity;
+    out.push({ key:'b' + (i + 1), label: hi === Infinity ? lo + '+' : lo + '-' + hi, max:hi,
+               color: AR_RAMP[n === 1 ? 0 : Math.round(i * (AR_RAMP.length - 1) / (n - 1))] });
+  }
+  return out;
+}
+function _arSetBuckets(edges){
+  AR_EDGES = _arValidEdges(edges) ? edges.slice() : AR_DEFAULT_EDGES.slice();
+  Object.keys(AR_COLORS).forEach(function(k){ if (/^b\d+$/.test(k)) delete AR_COLORS[k]; });
+  AR_BUCKETS = _arBucketList(AR_EDGES);
+  AR_BUCKETS.forEach(function(b){ AR_COLORS[b.key] = { fg:b.color[0], bg:b.color[1] }; });
+}
+_arSetBuckets(AR_DEFAULT_EDGES);
+function _arOverdue(a){ return AR_BUCKETS.reduce(function(s, b){ return s + (a[b.key] || 0); }, 0); }
+function _arCanEditBuckets(){ return !!currentUser && (currentUser.role || '').toLowerCase().trim() === 'admin'; }
 
 function fetchArData(callback, force){
   arDataLoading = true;
@@ -6025,7 +6055,8 @@ function fetchArData(callback, force){
                  loc:D.location[r[5]], ty:D.type[r[6]], txn:r[7], d:r[8], bill:r[9], o:r[10],
                  od:r[11], cd:r[12], h:r[13], jo:r[14] };
       });
-      arMeta = { asOn:d.asOn, pushedAt:d.pushedAt };
+      arMeta = { asOn:d.asOn, pushedAt:d.pushedAt, buckets:d.buckets || null };
+      _arSetBuckets(d.buckets && d.buckets.edges);
       arDataReady = true; arDataError = '';
     })
     .catch(function(e){ arDataError = e.message || String(e); arDataReady = false; })
@@ -6035,7 +6066,7 @@ function fetchArData(callback, force){
 function _arBucket(od){
   if (!(od > 0)) return 'nd';
   for (var i = 0; i < AR_BUCKETS.length; i++) if (od <= AR_BUCKETS[i].max) return AR_BUCKETS[i].key;
-  return 'b5';
+  return AR_BUCKETS[AR_BUCKETS.length - 1].key;
 }
 
 // Same access as the rest of the dashboard (_getRLSReps): a Sales Rep sees
@@ -6083,7 +6114,11 @@ function _arVisibleRows(){
   });
 }
 
-function _arEmptyAgg(){ return { total:0, nd:0, b1:0, b2:0, b3:0, b4:0, b5:0, oa:0, inv:0 }; }
+function _arEmptyAgg(){
+  var a = { total:0, nd:0, oa:0, inv:0 };
+  AR_BUCKETS.forEach(function(b){ a[b.key] = 0; });
+  return a;
+}
 function _arAdd(agg, r){
   if (_arIsOa(r)) { agg.oa += -r.o; return; }
   agg.total += r.o; agg[_arBucket(r.od)] += r.o;
@@ -6107,7 +6142,7 @@ function _arModel(){
     if (!_arIsOa(r) && r.o > 0 && r.cd !== null && r.cd !== undefined) C.cd[r.cd] = (C.cd[r.cd] || 0) + 1;
   });
   var sortKey = (state.arSort && state.arSort.key) || 'total', dir = (state.arSort && state.arSort.dir) || -1;
-  function val(x){ return sortKey === 'name' ? x.name.toLowerCase() : sortKey === 'net' ? x.agg.total - x.agg.oa : x.agg[sortKey]; }
+  function val(x){ return sortKey === 'name' ? x.name.toLowerCase() : sortKey === 'net' ? x.agg.total - x.agg.oa : (x.agg[sortKey] || 0); }
   var zoneList = sortZones(Object.keys(zones)).map(function(zn){
     var Z = zones[zn];
     Z.custList = Object.keys(Z.cust).map(function(k){
@@ -6131,8 +6166,10 @@ function _arFull(v){
   var val = state.currency === 'USD' ? v / state.rate : v;
   var sym = state.currency === 'USD' ? '$' : '₹';
   var s = Math.abs(val).toLocaleString(state.currency === 'USD' ? 'en-US' : 'en-IN', { maximumFractionDigits:0 });
-  return (val < 0 ? '-' : '') + sym + s;
+  return val < 0 ? '(' + sym + s + ')' : sym + s;
 }
+// AR page: negatives in brackets, e.g. On Account (₹23.89 Cr.)
+function _arCur(v){ return v < 0 ? '(' + fmtCur(-v) + ')' : fmtCur(v); }
 
 function arPage(){
   if (!arDataReady) {
@@ -6153,14 +6190,16 @@ function arPage(){
   var M = _arModel();
   window._arLastModel = M;
   var G = M.grand;
-  var overdue = G.b1 + G.b2 + G.b3 + G.b4 + G.b5;
+  var overdue = _arOverdue(G);
   var C = AR_COLORS;
 
   var css = '<style>'
     + '.arpg-row td{transition:background .12s;background:#FFFFFF;}'
     // Customer column stays put when the table scrolls sideways on smaller screens
-    + '#ar-table-scroll tbody td:first-child{position:sticky;left:0;z-index:1;}'
-    + '#ar-table-scroll thead tr:nth-child(n+2) th:first-child{left:0;z-index:4;}'
+    // (!important: the header cells carry an inline z-index:3, which would let the
+    // cells scrolling past paint over the corner and squash "Customer" / "Grand Total")
+    + '#ar-table-scroll tbody td:first-child{position:sticky;left:0;z-index:1;box-shadow:inset -1px 0 0 #C9D6E8,4px 0 6px -4px rgba(13,43,94,0.22);}'
+    + '#ar-table-scroll thead th.ar-corner{position:sticky;left:0;z-index:5 !important;box-shadow:inset -1px 0 0 #C9D6E8,4px 0 6px -4px rgba(13,43,94,0.22);}'
     + '.arpg-row:nth-child(even) td{background:#FBFCFE;}'
     + '.arpg-row:hover td{background:#EEF4FF !important;}'
     + '.arpg-zone td{background:#F3F7FD;}'
@@ -6185,8 +6224,8 @@ function arPage(){
     + card('Total Outstanding', fmtCur(G.total), '#2C4E82', G.inv.toLocaleString('en-IN')+' invoices')
     + card('Overdue', fmtCur(overdue), '#D9534F', G.total ? Math.round(overdue / G.total * 100)+'% of outstanding' : '')
     + card('Not Due', fmtCur(G.nd), '#15875A', 'within credit days')
-    + card('On Account', fmtCur(G.oa), '#946312', 'paid extra, not yet adjusted')
-    + card('Net Outstanding', fmtCur(G.total - G.oa), '#0D7C6B', 'total − on account')
+    + card('On Account', _arCur(-G.oa), '#946312', 'paid extra, not yet adjusted')
+    + card('Net Outstanding', _arCur(G.total - G.oa), '#0D7C6B', 'total − on account')
     + card('Customers', M.customers.toLocaleString('en-IN'), '#6488D6', M.zones.length+' zones')
     + '</div>';
 
@@ -6199,6 +6238,8 @@ function arPage(){
       +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A9AB5" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>'
       +'<input type="text" id="ar-search" placeholder="Search customer…" value="'+esc(state.arSearch || '')+'" style="border:none;background:transparent;outline:none;font-size:12.5px;color:#15233B;width:100%;"/>'
     +'</div>'
+    +(_arCanEditBuckets() ? '<button data-act="arPgBucketOpen" class="btnq" title="Set the overdue slabs for everyone" style="display:flex;align-items:center;gap:6px;border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
+      +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Ageing slabs</button>' : '')
     +'<button data-act="arPgExpandAll" data-val="'+(allOpen ? '0' : '1')+'" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'+(allOpen ? 'Collapse all' : 'Expand all')+'</button>'
     +'<button data-act="arPgExport" class="btnq" style="display:flex;align-items:center;gap:6px;border:none;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:#fff;cursor:pointer;">'
       +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download Excel</button>'
@@ -6207,30 +6248,30 @@ function arPage(){
   var cols = [
     { key:'name',  label:'Customer', left:true },
     { key:'total', label:'Total Outstanding' },
-    { key:'b1', label:'0-30' }, { key:'b2', label:'30-60' }, { key:'b3', label:'60-90' },
-    { key:'b4', label:'90-120' }, { key:'b5', label:'120+' },
+  ].concat(AR_BUCKETS.map(function(b){ return { key:b.key, label:b.label }; }), [
     { key:'nd',  label:'Not Due' },
     { key:'oa',  label:'On Account' },
     { key:'net', label:'Net Outstanding' },
     { key:'cd',  label:'Credit Days', noSort:true }
-  ];
+  ]);
   // Three sticky header rows with fixed heights: band (26px), column names (36px), Grand Total
   var thBase = 'position:sticky;z-index:3;font-size:10.5px;font-weight:800;letter-spacing:0.02em;padding:0 9px;white-space:nowrap;box-sizing:border-box;';
   var sk = (state.arSort && state.arSort.key) || 'total', sd = (state.arSort && state.arSort.dir) || -1;
   var head = '<thead><tr>'
-    + '<th colspan="2" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
-    + '<th colspan="5" style="'+thBase+'top:0;height:26px;text-align:center;background:linear-gradient(90deg,'+C.b1.bg+','+C.b5.bg+');color:'+C.b5.fg+';border-bottom:1px solid #F0C9C3;letter-spacing:0.08em;text-transform:uppercase;font-size:9.5px;">Overdue · days past due date</th>'
+    + '<th class="ar-corner" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
+    + '<th style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
+    + '<th colspan="'+AR_BUCKETS.length+'" style="'+thBase+'top:0;height:26px;text-align:center;background:linear-gradient(90deg,'+C[AR_BUCKETS[0].key].bg+','+C[AR_BUCKETS[AR_BUCKETS.length - 1].key].bg+');color:'+C[AR_BUCKETS[AR_BUCKETS.length - 1].key].fg+';border-bottom:1px solid #F0C9C3;letter-spacing:0.08em;text-transform:uppercase;font-size:9.5px;">Overdue · days past due date</th>'
     + '<th colspan="4" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th></tr><tr>'
     + cols.map(function(c){
         var arrow = (!c.noSort && sk === c.key) ? (sd < 0 ? ' ▾' : ' ▴') : '';
         var tint = C[c.key];
-        return '<th '+(c.noSort ? '' : 'data-act="arPgSort" data-val="'+c.key+'" class="arpg-th-sort" ')
+        return '<th '+(c.noSort ? '' : 'data-act="arPgSort" data-val="'+c.key+'" class="arpg-th-sort'+(c.key === 'name' ? ' ar-corner' : '')+'" ')
           +'style="'+thBase+'top:26px;height:36px;white-space:normal;line-height:1.15;text-align:'+(c.left ? 'left' : 'right')+';'+(c.noSort ? '' : 'cursor:pointer;')
           +'background:'+(tint ? tint.bg : '#F1F5FB')+';color:'+(tint ? tint.fg : '#3C5275')+';border-bottom:2px solid '+(tint ? tint.fg : '#C9D6E8')+';">'+c.label+arrow+'</th>';
       }).join('')
     + '</tr>'
     // Grand Total stays visible while scrolling
-    + '<tr>' + '<th style="'+thBase+'top:62px;height:38px;text-align:left;background:#E4ECF8;color:#0D2B5E;font-size:12.5px;border-bottom:1px solid #C9D6E8;">Grand Total <span style="font-weight:600;color:#6B82A0;font-size:11px;">· '+M.customers.toLocaleString('en-IN')+' customers</span></th>'
+    + '<tr>' + '<th class="ar-corner" style="'+thBase+'top:62px;height:38px;text-align:left;background:#E4ECF8;color:#0D2B5E;font-size:12.5px;border-bottom:1px solid #C9D6E8;">Grand Total <span style="font-weight:600;color:#6B82A0;font-size:11px;">· '+M.customers.toLocaleString('en-IN')+' customers</span></th>'
     + _arCells(G, 'th', 'position:sticky;z-index:3;top:62px;height:38px;padding:0 9px;box-sizing:border-box;white-space:nowrap;font-family:\'DM Mono\',monospace;font-size:12px;background:#E4ECF8;border-bottom:1px solid #C9D6E8;font-weight:700;')
     + '<th style="'+thBase+'top:62px;height:38px;background:#E4ECF8;border-bottom:1px solid #C9D6E8;"></th></tr>'
     + '</thead>';
@@ -6265,8 +6306,101 @@ function arPage(){
       + '<table style="width:100%;border-collapse:separate;border-spacing:0;">'+head+body+'</table></div>'
     : '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#8A9AB5;font-size:12.5px;font-weight:600;background:#fff;border:1px solid #E3EAF4;border-radius:14px;">No outstanding for the current filters'+(state.arSearch ? ' and search' : '')+'.</div>';
 
-  return css + '<div style="height:100%;display:flex;flex-direction:column;padding:14px 6px 4px;box-sizing:border-box;">' + header + kpis + table + '</div>';
+  return css + '<div style="height:100%;display:flex;flex-direction:column;padding:14px 6px 4px;box-sizing:border-box;">' + header + kpis + table + '</div>' + _arBucketModal();
 }
+
+// Admin: set the overdue slabs (applies to everyone)
+var AR_SLAB_NAMES = ['First','Second','Third','Fourth','Fifth','Sixth','Seventh','Eighth','Ninth'];
+// '' when the ticked slabs make valid buckets, else what to fix
+function _arSlabProblem(slabs){
+  var on = slabs.filter(function(x){ return x.on; });
+  if (!on.length) return 'Tick at least one slab';
+  for (var i = 0; i < slabs.length; i++) {
+    if (!slabs[i].on) continue;
+    var d = Number(slabs[i].d);
+    if (!(d >= 1 && d <= 3650 && d === Math.floor(d))) return AR_SLAB_NAMES[i] + ' slab needs whole days between 1 and 3650';
+  }
+  var e = _arSlabEdges(slabs);
+  for (var j = 1; j < e.length; j++) if (e[j] <= e[j - 1]) return 'Each ticked slab must have more days than the one above it';
+  return '';
+}
+function _arBucketPreview(slabs){
+  var bad = _arSlabProblem(slabs);
+  if (bad) return '<span style="color:#B83A2B;font-weight:700;">'+esc(bad)+'</span>';
+  return _arBucketList(_arSlabEdges(slabs)).map(function(b){
+    return '<span style="display:inline-block;margin:0 4px 4px 0;border-radius:999px;padding:3px 10px;font-weight:700;color:'+b.color[0]+';background:'+b.color[1]+';">'+b.label+'</span>';
+  }).join('');
+}
+function _arBucketModal(){
+  var m = state.arBucketEdit;
+  if (!m) return '';
+  var by = arMeta && arMeta.buckets && arMeta.buckets.updatedBy;
+  var btn = 'border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;cursor:pointer;';
+  var rows = m.slabs.map(function(x, i){
+    return '<label style="display:flex;align-items:center;gap:10px;padding:5px 0;cursor:pointer;">'
+      + '<input type="checkbox" data-slab-on="'+i+'"'+(x.on ? ' checked' : '')+' style="width:16px;height:16px;accent-color:#2C6BD6;cursor:pointer;"/>'
+      + '<span style="flex:1;font-size:12.5px;font-weight:600;color:#15233B;">'+AR_SLAB_NAMES[i]+' Slab</span>'
+      + '<input type="number" min="1" max="3650" step="1" data-slab-days="'+i+'" value="'+(x.d || 0)+'"'+(x.on ? '' : ' disabled')
+      +   ' style="width:84px;box-sizing:border-box;text-align:right;border:1.5px solid #D8E1F0;border-radius:8px;padding:5px 8px;font-size:12.5px;font-family:\'DM Mono\',monospace;color:#15233B;outline:none;background:'+(x.on ? '#fff' : '#F1F4F8')+';"/>'
+      + '<span style="width:30px;font-size:12px;color:#6B82A0;font-weight:600;">days</span>'
+      + '</label>';
+  }).join('');
+  return '<div data-act="arPgBucketClose" style="position:fixed;inset:0;background:rgba(13,43,94,0.28);z-index:950;"></div>'
+    + '<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(420px,92vw);max-height:92vh;overflow:auto;box-sizing:border-box;background:#fff;border-radius:16px;box-shadow:0 18px 50px rgba(13,43,94,0.25);z-index:951;padding:18px 22px;">'
+    +   '<div style="font-size:15px;font-weight:800;color:#15233B;">Ageing slabs</div>'
+    +   '<div style="font-size:11.5px;color:#6B82A0;font-weight:600;margin-top:3px;line-height:1.45;">Tick the slabs to use and set where each ends, in overdue days. 15 and 30 give 0-15 and 15-30. Applies to everyone.</div>'
+    +   '<div style="margin-top:10px;border-top:1px solid #EEF2F8;border-bottom:1px solid #EEF2F8;padding:4px 0;">'+rows+'</div>'
+    +   '<div style="margin-top:10px;font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:#8A9AB5;">Dashboard buckets</div>'
+    +   '<div id="ar-bucket-preview" style="margin-top:6px;font-size:11px;min-height:24px;">'+_arBucketPreview(m.slabs)+'</div>'
+    +   (m.error ? '<div style="margin-top:6px;font-size:11.5px;color:#B83A2B;font-weight:700;">'+esc(m.error)+'</div>' : '')
+    +   (by ? '<div style="margin-top:6px;font-size:10.5px;color:#8A9AB5;font-weight:600;">Last set by '+esc(by)+'</div>' : '')
+    +   '<div style="display:flex;gap:8px;margin-top:14px;align-items:center;">'
+    +     '<button data-act="arPgBucketReset" class="btnq" style="'+btn+'border:1.5px solid #D8E1F0;background:#fff;color:#6B82A0;"'+(m.saving ? ' disabled' : '')+'>Reset to default</button>'
+    +     '<div style="flex:1;"></div>'
+    +     '<button data-act="arPgBucketClose" class="btnq" style="'+btn+'border:1.5px solid #D8E1F0;background:#fff;color:#2C4E82;">Cancel</button>'
+    +     '<button data-act="arPgBucketSave" class="btnq" style="'+btn+'border:none;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');color:#fff;"'+(m.saving ? ' disabled' : '')+'>'+(m.saving ? 'Saving…' : 'Save for everyone')+'</button>'
+    +   '</div>'
+    + '</div>';
+}
+function _arSaveBuckets(slabs){
+  var m = state.arBucketEdit;
+  if (!m) return;
+  var edges = _arSlabEdges(slabs);
+  m.saving = true; m.error = ''; _arRerenderMain(false);
+  fetch('/api/mongo-batch?action=arBuckets', { method:'POST', headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ action:'arBuckets', edges:edges, slabs:slabs, by:(currentUser && (currentUser.name || currentUser.email)) || '' }) })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d || !d.success) throw new Error((d && d.error) || 'Could not save');
+      _arSetBuckets(d.buckets.edges);
+      if (arMeta) arMeta.buckets = d.buckets;
+      if (state.arSort && /^b\d+$/.test(state.arSort.key)) state.arSort = null;
+      state.arBucketEdit = null;
+    })
+    .catch(function(e){ if (state.arBucketEdit) { state.arBucketEdit.saving = false; state.arBucketEdit.error = e.message || String(e); } })
+    .finally(function(){ _arRerenderMain(false); });
+}
+// Slab edits update state + preview in place (no re-render, so typing keeps focus)
+function _arSlabInput(ev){
+  var t = ev.target, m = state.arBucketEdit;
+  if (!t || !m || !t.hasAttribute) return;
+  if (t.hasAttribute('data-slab-on')) {
+    var i = +t.getAttribute('data-slab-on');
+    m.slabs[i].on = t.checked;
+    var box = document.querySelector('[data-slab-days="'+i+'"]');
+    if (box) {
+      box.disabled = !t.checked; box.style.background = t.checked ? '#fff' : '#F1F4F8';
+      if (t.checked && !(Number(box.value) > 0)) { box.value = ''; box.focus(); }
+    }
+  } else if (t.hasAttribute('data-slab-days')) {
+    m.slabs[+t.getAttribute('data-slab-days')].d = t.value === '' ? 0 : Number(t.value);
+  } else return;
+  m.error = '';
+  var pv = document.getElementById('ar-bucket-preview');
+  if (pv) pv.innerHTML = _arBucketPreview(m.slabs);
+}
+document.addEventListener('input', _arSlabInput, true);
+document.addEventListener('change', _arSlabInput, true);
 
 // Amount cells shared by the Grand Total, zone and customer rows
 // Table amount in one consistent format; under 1,000 shows whole units (no paise / cents)
@@ -6283,7 +6417,8 @@ function _arAmt(v){
     else if (a >= 1e3) { n = (a / 1e3).toFixed(1); u = 'k'; }
     else n = Math.round(a).toLocaleString('en-IN');
   }
-  return (val < 0 ? '-' : '') + (usd ? '$' : '\u20B9') + n + (u ? (u === 'k' ? '' : ' ') + u : '');
+  var out = (usd ? '$' : '\u20B9') + n + (u ? (u === 'k' ? '' : ' ') + u : '');
+  return val < 0 ? '(' + out + ')' : out;
 }
 function _arCells(a, tag, style){
   var C = AR_COLORS;
@@ -6292,7 +6427,7 @@ function _arCells(a, tag, style){
   return '<'+tag+' style="'+style+'text-align:right;">'+amt(a.total)+'</'+tag+'>'
     + AR_BUCKETS.map(function(b){ return '<'+tag+' style="'+style+'text-align:right;">'+amt(a[b.key], C[b.key].fg)+'</'+tag+'>'; }).join('')
     + '<'+tag+' style="'+style+'text-align:right;">'+amt(a.nd, C.nd.fg)+'</'+tag+'>'
-    + '<'+tag+' style="'+style+'text-align:right;">'+amt(a.oa, C.oa.fg)+'</'+tag+'>'
+    + '<'+tag+' style="'+style+'text-align:right;">'+amt(-a.oa, C.oa.fg)+'</'+tag+'>'
     + '<'+tag+' style="'+style+'text-align:right;font-weight:700;">'+amt(net, net < 0 ? C.oa.fg : '#0D2B5E')+'</'+tag+'>';
 }
 
@@ -6323,9 +6458,36 @@ function _arDueDate(d, cd){
 }
 function _arRepName(sp){ return String(sp || '').split('|')[0].trim(); }
 
+// Shipment details for the customer panel, fetched per customer on open
+// (kept out of the main payload to keep it small). Keyed by invoice line.
+var arDetailCache = {};
+function _arDetKey(txn, h, o){ return String(txn || '') + '|' + String(h || '') + '|' + Math.round((Number(o) || 0) * 100); }
+function _arLoadDetail(customer){
+  if (arDetailCache[customer]) return;
+  arDetailCache[customer] = { loading:true, map:{} };
+  fetch('/api/mongo-batch?action=arDetail&customer=' + encodeURIComponent(customer))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d || !d.success) throw new Error((d && d.error) || 'failed');
+      var map = {};
+      (d.rows || []).forEach(function(x){
+        map[_arDetKey(x[0], x[1], x[2])] = { ref:x[3], shipper:x[4], pol:x[5], pod:x[6], etd:x[7], eta:x[8] };
+      });
+      arDetailCache[customer] = { map:map };
+    })
+    .catch(function(){ arDetailCache[customer] = { error:true, map:{} }; })
+    .finally(function(){ if (state.arDrill && state.arDrill.customer === customer) render(); });
+}
+function _arDet(r){
+  var c = arDetailCache[r.c];
+  return (c && c.map[_arDetKey(r.txn, r.h, r.o)]) || null;
+}
+
 function arDrillDrawer(){
   var dr = state.arDrill;
   if (!dr) return '';
+  _arLoadDetail(dr.customer);
+  var detState = arDetailCache[dr.customer] || {};
   var C = AR_COLORS;
   var rows = _arDrillRows();
   var agg = _arEmptyAgg(), bill = 0, reps = {}, cds = {};
@@ -6337,7 +6499,7 @@ function arDrillDrawer(){
     }
     if (r.sp) reps[_arRepName(r.sp)] = 1;
   });
-  var overdue = agg.b1 + agg.b2 + agg.b3 + agg.b4 + agg.b5;
+  var overdue = _arOverdue(agg);
   var creditDays = Object.keys(cds).sort(function(a, b){ return cds[b] - cds[a]; })[0];
   var lobLbl = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import','ISOTANK EXPORT':'ISO Export','ISOTANK IMPORT':'ISO Import','GENERAL':'General'};
 
@@ -6364,7 +6526,9 @@ function arDrillDrawer(){
   var th = 'position:sticky;top:0;z-index:2;background:#F1F5FB;color:#3C5275;font-size:10.5px;font-weight:800;padding:9px 10px;border-bottom:2px solid #C9D6E8;white-space:nowrap;';
   var td = 'padding:8px 10px;border-bottom:1px solid #EEF2F8;font-size:12px;white-space:nowrap;';
   var num = 'text-align:right;font-family:\'DM Mono\',monospace;';
-  var heads = [['Invoice No'],['Invoice Date'],['Due Date'],['House No'],['Sales Person'],['LOB'],['Branch'],['Bill Amount',1],['Outstanding',1],['Status']];
+  var heads = [['Invoice No'],['Invoice Date'],['Due Date'],['Shipment No'],['House No'],['Shipper Name'],['POL'],['POD'],['ETD'],['ETA'],['Sales Person'],['LOB'],['Branch'],['Bill Amount',1],['Outstanding',1],['Status']];
+  var dash = detState.loading ? '<span style="color:#B8C4D6;">…</span>' : '–';
+  function det(r, k){ var x = _arDet(r); return x && x[k] ? esc(x[k]) : dash; }
   var table = '<table style="width:100%;border-collapse:separate;border-spacing:0;"><thead><tr>'
     + heads.map(function(h){ return '<th style="'+th+'text-align:'+(h[1] ? 'right' : 'left')+';">'+h[0]+'</th>'; }).join('')
     + '</tr></thead><tbody>'
@@ -6375,7 +6539,13 @@ function arDrillDrawer(){
           + '<td style="'+td+'font-weight:700;color:#15233B;">'+esc(r.txn || (isOa ? (r.ty || 'On Account').replace(/\n/g, ' · ') : '–'))+'</td>'
           + '<td style="'+td+'color:#3C5275;">'+esc(r.d || '–')+'</td>'
           + '<td style="'+td+'color:#3C5275;">'+(isOa ? '–' : esc(_arDueDate(r.d, r.cd) || '–'))+'</td>'
+          + '<td style="'+td+'color:#15233B;font-weight:600;">'+det(r, 'ref')+'</td>'
           + '<td style="'+td+'color:#3C5275;">'+esc(r.h || '–')+'</td>'
+          + '<td style="'+td+'color:#3C5275;white-space:normal;min-width:160px;max-width:240px;">'+det(r, 'shipper')+'</td>'
+          + '<td style="'+td+'color:#3C5275;">'+det(r, 'pol')+'</td>'
+          + '<td style="'+td+'color:#3C5275;">'+det(r, 'pod')+'</td>'
+          + '<td style="'+td+'color:#3C5275;">'+det(r, 'etd')+'</td>'
+          + '<td style="'+td+'color:#3C5275;">'+det(r, 'eta')+'</td>'
           + '<td style="'+td+'color:#3C5275;">'+esc(_arRepName(r.sp) || '–')+'</td>'
           + '<td style="'+td+'color:#3C5275;">'+esc(lobLbl[r.lob] || r.lob)+'</td>'
           + '<td style="'+td+'color:#3C5275;">'+esc(r.br || r.loc || '–')+'</td>'
@@ -6384,7 +6554,7 @@ function arDrillDrawer(){
           + '<td style="'+td+'">'+chip(r)+'</td></tr>';
       }).join('')
     + '</tbody><tfoot><tr>'
-    + '<td colspan="7" style="position:sticky;bottom:0;background:#E4ECF8;padding:9px 10px;font-size:12px;font-weight:800;color:#0D2B5E;border-top:2px solid #C9D6E8;">Total · '+rows.length+' line'+(rows.length === 1 ? '' : 's')+'</td>'
+    + '<td colspan="13" style="position:sticky;bottom:0;background:#E4ECF8;padding:9px 10px;font-size:12px;font-weight:800;color:#0D2B5E;border-top:2px solid #C9D6E8;">Total · '+rows.length+' line'+(rows.length === 1 ? '' : 's')+'</td>'
     + '<td style="position:sticky;bottom:0;background:#E4ECF8;padding:9px 10px;'+num+'font-size:12px;font-weight:800;color:#0D2B5E;border-top:2px solid #C9D6E8;">'+_arFull(bill)+'</td>'
     + '<td style="position:sticky;bottom:0;background:#E4ECF8;padding:9px 10px;'+num+'font-size:12px;font-weight:800;color:#0D2B5E;border-top:2px solid #C9D6E8;">'+_arFull(agg.total - agg.oa)+'</td>'
     + '<td style="position:sticky;bottom:0;background:#E4ECF8;border-top:2px solid #C9D6E8;"></td>'
@@ -6397,7 +6567,7 @@ function arDrillDrawer(){
   if (arMeta && arMeta.asOn) sub.push('as on ' + esc(arMeta.asOn));
 
   return '<div data-act="arPgDrillClose" style="position:fixed;inset:0;background:rgba(13,43,94,0.28);z-index:900;"></div>'
-    + '<div data-stop="1" style="position:fixed;top:0;right:0;bottom:0;width:min(1120px,94vw);background:#F7F9FC;z-index:901;box-shadow:-12px 0 40px rgba(13,43,94,0.18);display:flex;flex-direction:column;">'
+    + '<div data-stop="1" style="position:fixed;top:0;right:0;bottom:0;width:min(1440px,96vw);background:#F7F9FC;z-index:901;box-shadow:-12px 0 40px rgba(13,43,94,0.18);display:flex;flex-direction:column;">'
     +   '<div style="padding:18px 22px 14px;background:#FFFFFF;border-bottom:1px solid #E3EAF4;">'
     +     '<div style="display:flex;align-items:flex-start;gap:10px;">'
     +       '<div style="flex:1;min-width:0;">'
@@ -6413,7 +6583,7 @@ function arDrillDrawer(){
     +       card('Total Outstanding', _arFull(agg.total), '#2C4E82', agg.inv + ' open invoice' + (agg.inv === 1 ? '' : 's'))
     +       card('Overdue', _arFull(overdue), '#D9534F', agg.total ? Math.round(overdue / agg.total * 100) + '% of outstanding' : '')
     +       card('Not Due', _arFull(agg.nd), '#15875A', 'within credit days')
-    +       card('On Account', _arFull(agg.oa), '#946312', agg.oa ? 'paid extra, to adjust' : 'nothing extra paid')
+    +       card('On Account', _arFull(-agg.oa), '#946312', agg.oa ? 'paid extra, to adjust' : 'nothing extra paid')
     +       card('Net Outstanding', _arFull(agg.total - agg.oa), '#0D7C6B', 'total − on account')
     +     '</div>'
     +   '</div>'
@@ -6432,7 +6602,9 @@ function arExportDrill(){
     return {
       'Invoice No': r.txn || (isOa ? String(r.ty || 'On Account').replace(/\n/g, ' ') : ''),
       'Invoice Date': r.d || '', 'Due Date': isOa ? '' : _arDueDate(r.d, r.cd),
-      'House No': r.h || '', 'Sales Person': _arRepName(r.sp), 'LOB': r.lob, 'Branch': r.br || r.loc || '',
+      'Shipment No': (_arDet(r) || {}).ref || '', 'House No': r.h || '', 'Shipper Name': (_arDet(r) || {}).shipper || '',
+      'POL': (_arDet(r) || {}).pol || '', 'POD': (_arDet(r) || {}).pod || '', 'ETD': (_arDet(r) || {}).etd || '', 'ETA': (_arDet(r) || {}).eta || '',
+      'Sales Person': _arRepName(r.sp), 'LOB': r.lob, 'Branch': r.br || r.loc || '',
       'Bill Amount (INR)': Math.round(r.bill || 0), 'Outstanding (INR)': Math.round(r.o),
       'Credit Days': r.cd !== null && r.cd !== undefined ? r.cd : '', 'Overdue Days': isOa ? '' : r.od, 'Status': b
     };
@@ -6451,10 +6623,11 @@ function arExportExcel(){
       data.push({
         'Zone': Z.name, 'Customer': C.name, 'Sales Person': C.repList.join(', '),
         'Total Outstanding (INR)': Math.round(a.total),
-        '0-30': Math.round(a.b1), '30-60': Math.round(a.b2), '60-90': Math.round(a.b3), '90-120': Math.round(a.b4), '120+': Math.round(a.b5),
-        'Not Due': Math.round(a.nd), 'On Account': Math.round(a.oa), 'Net Outstanding': Math.round(a.total - a.oa),
-        'Credit Days': C.creditDays !== null ? Number(C.creditDays) : ''
       });
+      var row = data[data.length - 1];
+      AR_BUCKETS.forEach(function(b){ row[b.label] = Math.round(a[b.key]); });
+      row['Not Due'] = Math.round(a.nd); row['On Account'] = -Math.round(a.oa); row['Net Outstanding'] = Math.round(a.total - a.oa);
+      row['Credit Days'] = C.creditDays !== null ? Number(C.creditDays) : '';
     });
   });
   var ws = XLSX.utils.json_to_sheet(data);
@@ -6509,6 +6682,22 @@ function arHandleAct(act, el){
     arExportDrill();
   } else if (act === 'arPgExport') {
     arExportExcel();
+  } else if (act === 'arPgBucketOpen') {
+    var saved = arMeta && arMeta.buckets && arMeta.buckets.slabs;
+    var base = Array.isArray(saved) && saved.length === AR_SLAB_COUNT && _arSlabEdges(saved).join() === AR_EDGES.join() ? saved : _arSlabsFromEdges(AR_EDGES);
+    state.arBucketEdit = { slabs: base.map(function(x){ return { on: !!x.on, d: Number(x.d) || 0 }; }), error:'', saving:false };
+    _arRerenderMain(false);
+  } else if (act === 'arPgBucketClose') {
+    if (!(state.arBucketEdit && state.arBucketEdit.saving)) { state.arBucketEdit = null; _arRerenderMain(false); }
+  } else if (act === 'arPgBucketSave') {
+    var me = state.arBucketEdit, bad = me ? _arSlabProblem(me.slabs) : 'nothing to save';
+    if (bad) { if (me) { me.error = bad; _arRerenderMain(false); } }
+    else _arSaveBuckets(me.slabs.map(function(x){ return { on: !!x.on, d: x.on ? Number(x.d) : (Number(x.d) || 0) }; }));
+  } else if (act === 'arPgBucketReset') {
+    if (state.arBucketEdit) {
+      state.arBucketEdit.slabs = AR_DEFAULT_SLABS.map(function(x){ return { on:x.on, d:x.d }; });
+      _arSaveBuckets(state.arBucketEdit.slabs);
+    }
   } else if (act === 'arPgRetry') {
     arDataError = ''; render();
   } else {
@@ -10020,8 +10209,12 @@ document.addEventListener('click', function(ev){
   if(act && act.indexOf('arPg')===0 && arHandleAct(act, el)){ ev.stopPropagation(); ev.preventDefault(); return; }
   if(act==='page'){
     ev.stopPropagation(); ev.preventDefault();
+    var _prevPage = state.page;
     state.page=el.getAttribute('data-val');
-    state.arDrill = null;
+    state.arDrill = null; state.arBucketEdit = null;
+    // Accounts Receivable opens in INR; the previous currency comes back on leaving
+    if (state.page === 'ar' && _prevPage !== 'ar') { state._curBeforeAr = state.currency; state.currency = 'INR'; }
+    else if (state.page !== 'ar' && _prevPage === 'ar' && state._curBeforeAr) { state.currency = state._curBeforeAr; state._curBeforeAr = null; }
     // Clear admin search when navigating away
     if(state.adminSearch) { state.adminSearch = ''; }
     render();
