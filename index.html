@@ -5792,6 +5792,7 @@ function financePage(){
 // Sales incentive page. Layout matches Accounts Receivable (title row, KPI cards, table card).
 // No incentive data source yet, so the cards show dashes and the table shows an empty state.
 var INC_MGMT_FEE_PCT = 0.15; // Management fees: 15% of GP
+var INC_MIN_ACHV = 75;        // Management fees and everything after it only apply from this ACHV %
 
 // Shipments with a positive outstanding in ar_outstanding (matched on "Ref No")
 var incOutRefs = null, incOutMeta = null, incOutLoading = false, incOutError = '';
@@ -5918,13 +5919,37 @@ function incentivePage(){
   function colSum(key){ var out = []; for (var i = 0; i < nCols; i++) out.push(sum(reps.map(function(r){ return r[key][i] || 0; }))); return out; }
   var spGrand = cap.filter(function(c){ return c.isGrand; })[0]; // Sales Performance Grand Total (zone targets)
   var grand = spGrand
-    ? { name:'Grand Total', initials:'GT', isGrand:true, gp:spGrand.gp.slice(), tgt:spGrand.tgt.slice(), outGp:gOut, outShip:gOutShip, drillCells:spGrand.drillCells }
-    : { name:'Grand Total', initials:'GT', isGrand:true, gp:colSum('gp'), tgt:colSum('tgt'), outGp:colSum('outGp'), outShip:sum(reps.map(function(r){ return r.outShip; })) };
+    ? { name:'Grand Total', initials:'GT', isGrand:true, gp:spGrand.gp.slice(), tgt:spGrand.tgt.slice(), outGp:gOut, outShip:gOutShip, drillCells:spGrand.drillCells, members:reps }
+    : { name:'Grand Total', initials:'GT', isGrand:true, gp:colSum('gp'), tgt:colSum('tgt'), outGp:colSum('outGp'), outShip:sum(reps.map(function(r){ return r.outShip; })), members:reps };
 
   function pct(gp, tgt){ return tgt > 0 ? Math.round(gp / tgt * 100) : null; }
   function fee(gp){ return Math.max(0, gp) * INC_MGMT_FEE_PCT; }
+  // A rep's fees / amount apply only where their ACHV % (as displayed) is at least INC_MIN_ACHV.
+  // The Grand Total column uses the rep's ACHV % over the whole period.
+  function repCalc(r){
+    if (r._calc) return r._calc;
+    var net = r.gp.map(function(v, i){ return v - (r.outGp[i] || 0); });
+    function ok(g, t){ var a = pct(g, t); return !r.noTarget && a !== null && a >= INC_MIN_ACHV; }
+    var feeV = net.map(function(g, i){ return ok(g, r.tgt[i]) ? fee(g) : null; });
+    var G = sum(net), T = sum(r.tgt), okT = ok(G, T);
+    return (r._calc = {
+      fee: feeV, amt: net.map(function(g, i){ return feeV[i] === null ? null : g - feeV[i]; }),
+      feeT: okT ? fee(G) : null, amtT: okT ? G - fee(G) : null
+    });
+  }
+  function sumOrNull(list){ var any = false, t = 0; list.forEach(function(v){ if (v !== null) { any = true; t += v; } }); return any ? t : null; }
+  function stepVals(ent){
+    if (!ent.isGrand && !ent.isZone) return repCalc(ent);
+    var cs = (ent.members || []).map(repCalc);
+    function col(key, i){ return sumOrNull(cs.map(function(c){ return c[key][i]; })); }
+    return {
+      fee: ent.gp.map(function(_, i){ return col('fee', i); }), amt: ent.gp.map(function(_, i){ return col('amt', i); }),
+      feeT: sumOrNull(cs.map(function(c){ return c.feeT; })), amtT: sumOrNull(cs.map(function(c){ return c.amtT; }))
+    };
+  }
   function particulars(ent){
     var out = ent.outGp, gp = ent.gp.map(function(v, i){ return v - (out[i] || 0); }), tgt = ent.tgt, G = sum(gp), T = sum(tgt);
+    var sv = stepVals(ent);
     var gk = (ent.isGrand ? 'G:' : ent.isZone ? 'Z:' : 'R:') + ent.name;
     var gOpen = !!(state.incGpOpen && state.incGpOpen[gk]);
     var rows = [{ label:'GP (Achieved - Outstanding)', type:'cur', color:'#059669', bold:true, vals:gp, total:G, toggle:gk, open:gOpen }];
@@ -5935,9 +5960,10 @@ function incentivePage(){
     return rows.concat([
       { label:'GP Target', type:ent.noTarget ? 'na' : 'cur', color:'#0D2B5E', vals:tgt, total:T },
       { label:'ACHV %', type:ent.noTarget ? 'na' : 'pct', vals:gp.map(function(v, i){ return pct(v, tgt[i]); }), total:pct(G, T) },
-      { label:'Management Fees (15%)', type:'cur', color:'#946312', vals:gp.map(fee), total:sum(gp.map(fee)) },
-      { label:'Amount on which Incentive will be given', type:'cur', color:'#1D5FCC', bold:true, vals:gp.map(function(v){ return v - fee(v); }), total:sum(gp.map(function(v){ return v - fee(v); })) },
-      { label:'Incentive %', type:'na', vals:gp.map(function(){ return null; }), total:null }
+      { label:'Management Fees (15%)', type:'cur', color:'#946312', vals:sv.fee, total:sv.feeT },
+      { label:'Amount on which Incentive will be given', type:'cur', color:'#1D5FCC', bold:true, vals:sv.amt, total:sv.amtT },
+      { label:'Incentive %', type:'na', vals:gp.map(function(){ return null; }), total:null },
+      { label:'Incentive Payable', type:'na', bold:true, vals:gp.map(function(){ return null; }), total:null }
     ]);
   }
   function fmtVal(v, p){
@@ -6031,7 +6057,7 @@ function incentivePage(){
     zones.forEach(function(z){
       var zReps = reps.filter(function(r){ return (r.zone || 'Cross Sales') === z.name; });
       body += block({ name:z.name, initials:z.initials, avatarBg:z.avatarBg, isZone:true, gp:z.gp, tgt:z.tgt, drillCells:z.drillCells,
-                      outGp:zOut[z.name] || new Array(nCols).fill(0), outShip:zOutShip[z.name] || 0, repCount:zReps.length });
+                      outGp:zOut[z.name] || new Array(nCols).fill(0), outShip:zOutShip[z.name] || 0, repCount:zReps.length, members:zReps });
       if (state.incZoneOpen && state.incZoneOpen[z.name]) body += zReps.map(block).join('');
     });
   } else {
