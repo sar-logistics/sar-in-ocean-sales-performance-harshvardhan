@@ -139,6 +139,54 @@ function pushArToDashboard() {
   Logger.log('Read ' + (values.length - 1) + ' rows, ' + rows.length + ' with outstanding; net total ' + total.toFixed(2));
 
   const asOn = arAsOnDate_(src);
+
+  // Weighted DSO, paid invoices included. Per invoice: days =
+  //   (Receipt Date, or the "as on" date while anything is still outstanding)
+  //   − (Invoice Date + Credit Days)
+  // Paid invoices have no outstanding so they aren't pushed as rows; instead one
+  // small row per customer / sales person / LOB / location carries the totals
+  // (_dso: true, outstanding 0 — pages that read outstanding rows skip it):
+  //   dsoBill = Σ Bill Amount, dsoBillDays = Σ (Bill Amount × days)
+  const asOnDate = arParseDate_(asOn) || new Date();
+  const rdCol = headers.indexOf('Receipt Date');
+  const inv = {};
+  for (let r = 1; r < values.length; r++) {
+    const row = values[r];
+    const org = String(row[col.customer] || '').trim();
+    const txn = String(row[col.txnNo] || '').trim();
+    if (!org || !txn || org.toLowerCase() === 'total') continue;
+    const bill = col.billAmt > -1 ? arNum_(row[col.billAmt]) : 0;
+    const td = col.transDate > -1 ? row[col.transDate] : null;
+    if (!(bill > 0) || !(td instanceof Date) || isNaN(td.getTime())) continue;
+    const key = org + '\u0001' + txn;
+    let x = inv[key];
+    if (!x) {
+      const u = usual[org] || { sp: {}, lob: {} };
+      x = inv[key] = {
+        org: org, bill: bill, td: td, rd: null, open: false,
+        cd: col.creditDays > -1 ? arNum_(row[col.creditDays]) : 0,
+        sp: (col.salesPerson > -1 ? String(row[col.salesPerson] || '').trim() : '') || top(u.sp),
+        lob: (col.lob > -1 ? String(row[col.lob] || '').replace(/\s*\n\s*/g, '\n').trim() : '') || top(u.lob),
+        loc: col.location > -1 ? String(row[col.location] || '').trim() : '',
+      };
+    }
+    const rd = rdCol > -1 ? row[rdCol] : null;
+    if (rd instanceof Date && !isNaN(rd.getTime()) && (!x.rd || rd > x.rd)) x.rd = rd;
+    if (arNum_(row[col.outstanding]) > 0) x.open = true;
+  }
+  const dsoGroups = {};
+  Object.keys(inv).forEach(function (k) {
+    const x = inv[k];
+    const end = x.open || !x.rd ? asOnDate : x.rd;
+    const days = Math.round((end.getTime() - x.td.getTime()) / 86400000) - (x.cd || 0);
+    const gk = [x.org, x.sp, x.lob, x.loc].join('\u0001');
+    const g = dsoGroups[gk] || (dsoGroups[gk] = { customer: x.org, salesPerson: x.sp, lob: x.lob, location: x.loc,
+      outstanding: 0, _dso: true, dsoBill: 0, dsoBillDays: 0, dsoCount: 0 });
+    g.dsoBill += x.bill; g.dsoBillDays += x.bill * days; g.dsoCount++;
+  });
+  const dsoRows = Object.keys(dsoGroups).map(function (k) { return dsoGroups[k]; });
+  Logger.log('DSO: ' + Object.keys(inv).length + ' invoices in ' + dsoRows.length + ' customer/sales person/LOB groups');
+  dsoRows.forEach(function (g) { rows.push(g); });
   const batchId = Utilities.getUuid();
   const chunks = Math.max(1, Math.ceil(rows.length / AR_CHUNK));
   for (let i = 0; i < chunks; i++) {
@@ -154,6 +202,14 @@ function pushArToDashboard() {
     Logger.log('Chunk ' + (i + 1) + '/' + chunks + ': ' + JSON.stringify(res));
   }
   Logger.log('Done in ' + Math.round((Date.now() - t0) / 1000) + 's (as on ' + asOn + ')');
+}
+
+// "02-Nov-2026" → Date (null when it can't be read)
+function arParseDate_(s) {
+  const m = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/.exec(String(s || '').trim());
+  if (!m) return null;
+  const mon = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(m[2].toLowerCase());
+  return mon < 0 ? null : new Date(+m[3], mon, +m[1]);
 }
 
 // "1,234.00", "(456.00)", " ", -456, "(1)" → number

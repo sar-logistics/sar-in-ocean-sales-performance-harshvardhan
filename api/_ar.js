@@ -119,7 +119,20 @@ function buildArPayload(rows, repLookup, meta) {
   //  txnNo, transDate, billAmt, outstanding, overdueDays, creditDays, houseNo, jobOwner]
   // A sales person missing from the mapping keeps their report name, minus the "| INZ05" tag
   const out = [];
+  // Weighted DSO totals (rows the sync marks _dso): [customer, sp, zone, lob, Σ bill, Σ bill × days]
+  const dso = [];
   for (const r of rows) {
+    if (r._dso) {
+      const rp = repLookup(r.salesPerson);
+      dso.push([
+        code("customer", r.customer),
+        code("sp", rp ? rp.display : String(r.salesPerson || "").split("|")[0].replace(/\.+\s*$/, "").trim()),
+        code("zone", rp ? rp.zone : "Cross Sales"),
+        code("lob", arLobKey(r.lob, r.location)),
+        num(r.dsoBill), num(r.dsoBillDays),
+      ]);
+      continue;
+    }
     const o = num(r.outstanding);
     if (!o) continue;
     const rep = repLookup(r.salesPerson);
@@ -152,6 +165,7 @@ function buildArPayload(rows, repLookup, meta) {
     pushedAt: meta ? meta.pushedAt || null : null,
     dicts,
     rows: out,
+    dso,
   };
 }
 
@@ -166,7 +180,7 @@ async function arGet(db, force, deployTs) {
   const key = meta.currentBatch + "|" + deployTs;
   if (!force && arCache && arCache.key === key) return arCache.data;
   const [rows, repLookup] = await Promise.all([
-    db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch }, { projection: { _id: 0, customer: 1, salesPerson: 1, lob: 1, location: 1, branch: 1, type: 1, txnNo: 1, transDate: 1, billAmt: 1, outstanding: 1, overdueDays: 1, ageingDays: 1, creditDays: 1, houseNo: 1, jobOwner: 1 } }).toArray(),
+    db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch }, { projection: { _id: 0, customer: 1, salesPerson: 1, lob: 1, location: 1, branch: 1, type: 1, txnNo: 1, transDate: 1, billAmt: 1, outstanding: 1, overdueDays: 1, ageingDays: 1, creditDays: 1, houseNo: 1, jobOwner: 1, _dso: 1, dsoBill: 1, dsoBillDays: 1 } }).toArray(),
     loadRepLookup(db),
   ]);
   const data = buildArPayload(rows, repLookup, meta);

@@ -6067,7 +6067,7 @@ function incentivePage(){
 //                           sheet's "On Account Total" lines, so either sign counts.
 // Total Outstanding = invoices · Net = Total − On Account.
 function _arIsOa(r){ return !String(r.txn || '').trim(); }
-var arRows = null, arMeta = null, arDataReady = false, arDataLoading = false, arDataError = '';
+var arRows = null, arDso = [], arMeta = null, arDataReady = false, arDataLoading = false, arDataError = '';
 // fg = text / bar colour, bg = header tint
 var AR_COLORS = {
   nd: { fg:'#0F7048', bg:'#E6F5EC' },
@@ -6130,6 +6130,10 @@ function fetchArData(callback, force){
                  loc:D.location[r[5]], ty:D.type[r[6]], txn:r[7], d:r[8], bill:r[9], o:r[10],
                  od:r[11], cd:r[12], h:r[13], jo:r[14] };
       });
+      // Weighted DSO totals per customer / rep / LOB (paid invoices included)
+      arDso = (d.dso || []).map(function(x){
+        return { c:D.customer[x[0]], sp:D.sp[x[1]], z:D.zone[x[2]], lob:D.lob[x[3]], bill:x[4], bd:x[5] };
+      });
       arMeta = { asOn:d.asOn, pushedAt:d.pushedAt, buckets:d.buckets || null };
       _arSetBuckets(d.buckets && d.buckets.edges);
       arDataReady = true; arDataError = '';
@@ -6169,14 +6173,15 @@ function _arScope(){
 }
 
 // Rows the user may see, after the Filters panel (zone / region / rep / LOB)
-function _arVisibleRows(){
-  if (!arRows) return [];
+function _arVisibleRows(list){
+  list = list || arRows;
+  if (!list) return [];
   var scope = _arScope();
   var fz = state.filterZones || [], fr = state.filterRegions || [];
   var frep = (state.filterReps || []).map(normalizeName);
   var flob = state.filterLobs || [];
   var regionMap = window._zoneRegionMap || {};
-  return arRows.filter(function(r){
+  return list.filter(function(r){
     if (scope) {
       if (scope.reps && scope.reps.indexOf(normalizeName(r.sp)) === -1) return false;
       if (scope.zones && scope.zones.indexOf(r.z) === -1) return false;
@@ -6190,7 +6195,7 @@ function _arVisibleRows(){
 }
 
 function _arEmptyAgg(){
-  var a = { total:0, nd:0, oa:0, inv:0 };
+  var a = { total:0, nd:0, oa:0, inv:0, dsoB:0, dsoBD:0 };
   AR_BUCKETS.forEach(function(b){ a[b.key] = 0; });
   return a;
 }
@@ -6216,10 +6221,23 @@ function _arModel(){
     if (r.sp) C.reps[r.sp] = 1;
     if (!_arIsOa(r) && r.o > 0 && r.cd !== null && r.cd !== undefined) C.cd[r.cd] = (C.cd[r.cd] || 0) + 1;
   });
+  // Weighted DSO: zone / Grand Total cover every customer with invoices (paid ones too);
+  // a customer row shows its own when it's listed
+  var dsoRows = _arVisibleRows(arDso || []);
+  if (q) dsoRows = dsoRows.filter(function(r){ return (r.c || '').toLowerCase().indexOf(q) > -1; });
+  dsoRows.forEach(function(r){
+    grand.dsoB += r.bill; grand.dsoBD += r.bd;
+    var Z = zones[r.z];
+    if (!Z) return;
+    Z.agg.dsoB += r.bill; Z.agg.dsoBD += r.bd;
+    var Cu = Z.cust[r.c];
+    if (Cu) { Cu.agg.dsoB += r.bill; Cu.agg.dsoBD += r.bd; }
+  });
   var sortKey = (state.arSort && state.arSort.key) || 'net', dir = (state.arSort && state.arSort.dir) || -1;
   function val(x){
     return sortKey === 'name' ? x.name.toLowerCase() : sortKey === 'net' ? x.agg.total - x.agg.oa
-      : sortKey === 'due' ? _arOverdue(x.agg) : (x.agg[sortKey] || 0);
+      : sortKey === 'due' ? _arOverdue(x.agg)
+      : sortKey === 'dso' ? (x.agg.dsoB ? x.agg.dsoBD / x.agg.dsoB : -1e9) : (x.agg[sortKey] || 0);
   }
   var zoneList = sortZones(Object.keys(zones)).map(function(zn){
     var Z = zones[zn];
@@ -6245,6 +6263,12 @@ function _arFull(v){
   var sym = state.currency === 'USD' ? '$' : '₹';
   var s = Math.abs(val).toLocaleString(state.currency === 'USD' ? 'en-US' : 'en-IN', { maximumFractionDigits:0 });
   return val < 0 ? '(' + sym + s + ')' : sym + s;
+}
+// Weighted DSO = Σ(Bill Amount × days) ÷ Σ(Bill Amount); days = receipt (or as-on) − (invoice date + credit days)
+function _arDsoTxt(a){
+  if (!a.dsoB) return '<span style="color:#D5DCE6;">–</span>';
+  var v = a.dsoBD / a.dsoB;
+  return '<span title="Weighted DSO: '+v.toFixed(2)+' days" style="color:'+(v > 0 ? '#A3331C' : '#0F7048')+';">'+v.toFixed(1)+'</span>';
 }
 // AR page: negatives in brackets, e.g. On Account (₹23.89 Cr.)
 function _arCur(v){ return v < 0 ? '(' + fmtCur(-v) + ')' : fmtCur(v); }
@@ -6329,7 +6353,8 @@ function arPage(){
     { key:'due', label:'Outstanding Due' },
     { key:'nd',  label:'Not Due' },
     { key:'oa',  label:'On Account' },
-    { key:'cd',  label:'Credit Days', noSort:true }
+    { key:'cd',  label:'Credit Days', noSort:true },
+    { key:'dso', label:'Weighted DSO (days)' }
   ]);
   // Three sticky header rows with fixed heights: band (26px), column names (36px), Grand Total
   var thBase = 'position:sticky;z-index:3;font-size:10.5px;font-weight:800;letter-spacing:0.02em;padding:0 9px;white-space:nowrap;box-sizing:border-box;';
@@ -6338,7 +6363,7 @@ function arPage(){
     + '<th class="ar-corner" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
     + '<th style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
     + '<th colspan="'+AR_BUCKETS.length+'" style="'+thBase+'top:0;height:26px;text-align:center;background:linear-gradient(90deg,'+C[AR_BUCKETS[0].key].bg+','+C[AR_BUCKETS[AR_BUCKETS.length - 1].key].bg+');color:'+C[AR_BUCKETS[AR_BUCKETS.length - 1].key].fg+';border-bottom:1px solid #F0C9C3;letter-spacing:0.08em;text-transform:uppercase;font-size:9.5px;">Overdue · days past due date</th>'
-    + '<th colspan="4" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th></tr><tr>'
+    + '<th colspan="5" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th></tr><tr>'
     + cols.map(function(c){
         var arrow = (!c.noSort && sk === c.key) ? (sd < 0 ? ' ▾' : ' ▴') : '';
         var tint = C[c.key];
@@ -6350,7 +6375,8 @@ function arPage(){
     // Grand Total stays visible while scrolling
     + '<tr>' + '<th class="ar-corner" style="'+thBase+'top:62px;height:38px;text-align:left;background:#E4ECF8;color:#0D2B5E;font-size:12.5px;border-bottom:1px solid #C9D6E8;">Grand Total <span style="font-weight:600;color:#6B82A0;font-size:11px;">· '+M.customers.toLocaleString('en-IN')+' customers</span></th>'
     + _arCells(G, 'th', 'position:sticky;z-index:3;top:62px;height:38px;padding:0 9px;box-sizing:border-box;white-space:nowrap;font-family:\'DM Mono\',monospace;font-size:12px;background:#E4ECF8;border-bottom:1px solid #C9D6E8;font-weight:700;')
-    + '<th style="'+thBase+'top:62px;height:38px;background:#E4ECF8;border-bottom:1px solid #C9D6E8;"></th></tr>'
+    + '<th style="'+thBase+'top:62px;height:38px;background:#E4ECF8;border-bottom:1px solid #C9D6E8;"></th>'
+    + '<th style="'+thBase+'top:62px;height:38px;background:#E4ECF8;border-bottom:1px solid #C9D6E8;text-align:right;font-family:\'DM Mono\',monospace;font-size:12px;color:#0D2B5E;">'+_arDsoTxt(G)+'</th></tr>'
     + '</thead>';
 
   var td = 'padding:7px 9px;border-bottom:1px solid #EEF2F8;text-align:right;font-family:\'DM Mono\',monospace;font-size:12px;white-space:nowrap;';
@@ -6362,7 +6388,8 @@ function arPage(){
       + '<td style="'+td+'text-align:left;font-family:Inter,sans-serif;font-weight:700;color:#173E76;font-size:13px;border-left:3px solid #2C4E82;padding-left:10px;">'
       + '<span style="display:inline-block;width:14px;color:#6488D6;">'+(open ? '▾' : '▸')+'</span>'+esc(Z.name)
       + ' <span title="'+Z.custList.length+' customer'+(Z.custList.length === 1 ? '' : 's')+'" style="font-weight:600;color:#8A9AB5;font-size:11px;margin-left:4px;">'+Z.custList.length+'</span></td>'
-      + _arCells(Z.agg, 'td', td + 'font-weight:700;', ' data-act="arPgZoneDrill" data-val="'+esc(Z.name)+'" class="ar-zdrill" title="See all invoices in '+esc(Z.name)+'"') + '<td style="'+td+'"></td></tr>';
+      + _arCells(Z.agg, 'td', td + 'font-weight:700;', ' data-act="arPgZoneDrill" data-val="'+esc(Z.name)+'" class="ar-zdrill" title="See all invoices in '+esc(Z.name)+'"') + '<td style="'+td+'"></td>'
+      + '<td style="'+td+'font-weight:700;color:#173E76;">'+_arDsoTxt(Z.agg)+'</td></tr>';
     if (!open) return;
     Z.custList.forEach(function(Cu){
       var i = custIndex.length; custIndex.push({ zone:Z.name, customer:Cu.name });
@@ -6372,7 +6399,8 @@ function arPage(){
         +   (Cu.repList.length ? '<div title="'+esc(Cu.repList.join(', '))+'" style="font-size:10.5px;color:#8A9AB5;font-weight:600;margin-top:2px;">'+esc(Cu.repList.slice(0, 2).join(', '))+(Cu.repList.length > 2 ? ' +'+(Cu.repList.length - 2)+' more' : '')+'</div>' : '')
         + '</td>'
         + _arCells(Cu.agg, 'td', td)
-        + '<td style="'+td+'color:#3C5275;">'+(Cu.creditDays !== null ? esc(Cu.creditDays) : '–')+'</td></tr>';
+        + '<td style="'+td+'color:#3C5275;">'+(Cu.creditDays !== null ? esc(Cu.creditDays) : '–')+'</td>'
+        + '<td style="'+td+'color:#15233B;">'+_arDsoTxt(Cu.agg)+'</td></tr>';
     });
   });
   body += '</tbody>';
