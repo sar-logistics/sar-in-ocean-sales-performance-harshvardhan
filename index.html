@@ -2794,7 +2794,7 @@ function entities(){
   var list = _showGrand ? [grandEntity()] : [];
   getZones().forEach(function(z){
     if (_role !== 'sales rep') list.push(zoneEntity(z));
-    var isCollapsed = (currentUser&&(currentUser.role||'').toLowerCase().trim()==='sales rep') ? false : state.zoneOpen[z] === false; // default open unless explicitly collapsed
+    var isCollapsed = window._incForceOpen ? false : (currentUser&&(currentUser.role||'').toLowerCase().trim()==='sales rep') ? false : state.zoneOpen[z] === false; // default open unless explicitly collapsed
     if (!isCollapsed) {
       repsRaw.filter(function(r){ return r.zone === z; }).forEach(function(r){
         list.push(repEntity(r));
@@ -2902,7 +2902,7 @@ function topbar(){
     // ── SINGLE ROW: View / Dates / Currency / Rate / Filters / Refresh → Feedback / Sign Out ──
     +'<div style="display:flex;align-items:center;gap:10px;padding:7px 16px 7px;overflow:visible;background:linear-gradient(180deg,#F9FBFE,#F2F6FB);">'
       // Report View dropdown — hidden on non-data pages
-      +(['usage','teams','admin','org','ar','incentive'].indexOf(state.page) >= 0 ? '' : '<div style="position:relative;display:inline-block;flex-shrink:0;">'
+      +(['usage','teams','admin','org','ar'].indexOf(state.page) >= 0 ? '' : '<div style="position:relative;display:inline-block;flex-shrink:0;">'
         +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;transition:box-shadow 0.15s;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';'+(state.viewDropOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+pillShadow+';':'')+'">'
           +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="'+(state.viewDropOpen?'#1D5FCC':'#7C93B8')+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>'
           +state.reportView+' View'
@@ -2922,7 +2922,7 @@ function topbar(){
           : '')
       +'</div>')
       // ── View-specific date selector ──────────────────────────────────────
-      +(['usage','teams','admin','org','ar','incentive'].indexOf(state.page) >= 0 ? '' : (function(){
+      +(['usage','teams','admin','org','ar'].indexOf(state.page) >= 0 ? '' : (function(){
         var v = state.reportView;
         var ps = pillShadow;
 
@@ -3074,7 +3074,7 @@ function topbar(){
         }
 
         // Sales Performance + Customer/Agent/Tradelane Insights: Monthly → pill FROM/TO dropdowns
-        if ((state.page==='sales' || state.page==='customers' || state.page==='agents' || state.page==='tradelane' || state.page==='op' || state.page==='finance') && v === 'Monthly') {
+        if ((state.page==='sales' || state.page==='customers' || state.page==='agents' || state.page==='tradelane' || state.page==='op' || state.page==='finance' || state.page==='incentive') && v === 'Monthly') {
           var fOpen = state.fromDropOpen, tOpen = state.toDropOpen;
           function custMonthPill(act, toggleAct, val, dropId, isOpen){
             var opts = months26.map(function(m){
@@ -5791,34 +5791,127 @@ function financePage(){
 /* ====================== INCENTIVE ====================== */
 // Sales incentive page. Layout matches Accounts Receivable (title row, KPI cards, table card).
 // No incentive data source yet, so the cards show dashes and the table shows an empty state.
+var INC_MGMT_FEE_PCT = 0.15; // Management fees: 15% of GP
+
 function incentivePage(){
-  function card(label, value, tint, sub){
-    return '<div class="kpi-card" style="position:relative;overflow:hidden;background:rgba(255,255,255,0.66);border:1px solid #E3EAF4;border-radius:16px;padding:12px 14px 11px;">'
-      +'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+tint+';"></div>'
-      +'<div style="font-size:8px;font-weight:800;letter-spacing:0.09em;text-transform:uppercase;color:#5B7298;margin-bottom:6px;">'+label+'</div>'
-      +'<div style="font-family:\'DM Mono\',monospace;font-size:18px;font-weight:600;color:#15233B;">'+value+'</div>'
-      +(sub ? '<div style="font-size:10px;color:#8A9AB5;margin-top:3px;font-weight:600;">'+sub+'</div>' : '')
-      +'</div>';
+  var idxs = filteredMonthIndices();
+  function spinner(msg){
+    return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div><div style="font-size:13px;color:#9AAFC8;font-weight:500;">'+msg+'</div></div>';
   }
-  var header = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">'
-    +'<div><div style="font-size:16px;font-weight:800;color:#15233B;letter-spacing:-0.01em;">Incentive</div>'
-    +'<div style="font-size:11px;font-weight:600;color:#6B82A0;margin-top:2px;">Sales incentive by salesperson</div></div>'
-    +'</div>';
-  var kpis = '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-bottom:12px;">'
-    + card('Total Incentive', '–', '#2C4E82', '')
-    + card('Eligible Salespeople', '–', '#15875A', '')
-    + card('Target Achieved', '–', '#6488D6', '')
-    + card('Pending Payout', '–', '#946312', '')
-    + '</div>';
-  var cols = ['Salesperson','Zone','Target','Achieved','Achievement %','Incentive'];
-  var table = '<div style="background:#FFFFFF;border:1px solid #E3EAF4;border-radius:14px;overflow:hidden;">'
-    +'<table style="width:100%;border-collapse:collapse;">'
-    +'<thead><tr>'+cols.map(function(c, i){
-        return '<th style="height:36px;padding:0 9px;font-size:10.5px;font-weight:800;letter-spacing:0.02em;white-space:nowrap;text-align:'+(i < 2 ? 'left' : 'right')+';background:#F1F5FB;color:#3C5275;border-bottom:2px solid #C9D6E8;">'+c+'</th>';
-      }).join('')+'</tr></thead>'
-    +'<tbody><tr><td colspan="'+cols.length+'" style="padding:60px 24px;text-align:center;color:#6B82A0;font-size:12.5px;font-weight:600;">No incentive data yet.</td></tr></tbody>'
-    +'</table></div>';
-  return '<div style="padding:4px 0 24px;">'+header+kpis+table+'</div>';
+  function emptyBox(title, msg){
+    return '<div style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:14px;padding:64px 32px;text-align:center;">'
+      +'<div style="font-size:14px;font-weight:700;color:#3C5275;">'+title+'</div>'
+      +'<div style="font-size:12px;color:#9AAFC8;margin-top:8px;">'+msg+'</div></div>';
+  }
+  if (state.reportView === 'Weekly' && !weekDataLoaded()) {
+    if (!_weekDataLoading && !_weekDataFetched) fetchWeekDataIfNeeded(function(){ if(state.reportView==='Weekly') render(); });
+    else if (_weekDataFetched && !_weekDataLoading) { _weekDataFetched = false; fetchWeekDataIfNeeded(function(){ if(state.reportView==='Weekly') render(); }); }
+    return spinner('Loading weekly data…');
+  }
+  if (!dataReady || repsRawOriginal.length === 0) return spinner('Loading your data…');
+  if (!hasDataForIndices(idxs)) return emptyBox('No data for this period', 'Try selecting a different period.');
+
+  // Same per-column GP and Target as the Sales Performance grid, for every rep
+  window._incCapture = []; window._incForceOpen = true;
+  var tr, cap;
+  try { tr = tableRows(); } finally { cap = window._incCapture; window._incCapture = null; window._incForceOpen = false; }
+  if (tr.length === 1 && tr[0].noData) return emptyBox('No data for this quarter', esc(tr[0].msg));
+  var reps = cap.filter(function(c){ return c.isRep && !c.isBranch; });
+  if (!reps.length) return emptyBox('No sales reps', 'No sales reps match the current filters.');
+
+  // Column headers — same as Sales Performance
+  var isY = state.reportView === 'Yearly', isQ = state.reportView === 'Quarterly';
+  var groups = isY ? yearGroups() : isQ ? quarterGroups() : null;
+  var heads = groups ? groups.map(function(g){ return { top:g.label, sub:g.range || '' }; })
+    : filteredMonths().map(colDisplayLabel).map(function(l){ var p = String(l).split('||'); return { top:p[0], sub:p[1] || '' }; });
+  var nCols = reps[0].gp.length;
+
+  function colSum(key){ var out = []; for (var i = 0; i < nCols; i++) out.push(sum(reps.map(function(r){ return r[key][i] || 0; }))); return out; }
+  var grand = { name:'Grand Total', initials:'GT', isGrand:true, gp:colSum('gp'), tgt:colSum('tgt') };
+
+  function pct(gp, tgt){ return tgt > 0 ? Math.round(gp / tgt * 100) : null; }
+  function fee(gp){ return Math.max(0, gp) * INC_MGMT_FEE_PCT; }
+  function particulars(ent){
+    var gp = ent.gp, tgt = ent.tgt, G = sum(gp), T = sum(tgt);
+    return [
+      { label:'GP (Achieved - Outstanding)', type:'cur', color:'#059669', bold:true, vals:gp, total:G },
+      { label:'GP Target', type:'cur', color:'#0D2B5E', vals:tgt, total:T },
+      { label:'ACHV %', type:'pct', vals:gp.map(function(v, i){ return pct(v, tgt[i]); }), total:pct(G, T) },
+      { label:'Management Fees (15%)', type:'cur', color:'#946312', vals:gp.map(fee), total:sum(gp.map(fee)) },
+      { label:'Amount on which Incentive will be given', type:'cur', color:'#1D5FCC', bold:true, vals:gp.map(function(v){ return v - fee(v); }), total:sum(gp.map(function(v){ return v - fee(v); })) },
+      { label:'Incentive %', type:'na', vals:gp.map(function(){ return null; }), total:null }
+    ];
+  }
+  function fmtVal(v, p){
+    if (p.type === 'na' || v === null || v === undefined) return { t:'–', c:'#B4BFCE' };
+    if (p.type === 'pct') return { t:v+'%', c: v >= 100 ? '#15875A' : v >= 75 ? '#A8720E' : '#DC2626' };
+    return { t:fmtCur(v), c: v < 0 ? '#DC2626' : (p.color || '#15233B') };
+  }
+
+  var BORDER = '#D5DCE6', BORDER_STRONG = '#B0BAC8';
+  var NAME_W = 210, PART_W = 230, FY_LEFT = NAME_W + PART_W;
+  var thBase = 'padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';white-space:nowrap;';
+  var head = '<tr>'
+    + '<th style="position:sticky;left:0;z-index:3;background:#F0F4FA;text-align:left;color:#475569;'+thBase+'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';width:'+NAME_W+'px;min-width:'+NAME_W+'px;">Sales Rep</th>'
+    + '<th style="position:sticky;left:'+NAME_W+'px;z-index:3;background:#F0F4FA;text-align:left;color:#475569;'+thBase+'width:'+PART_W+'px;min-width:'+PART_W+'px;">Particulars</th>'
+    + '<th style="position:sticky;left:'+FY_LEFT+'px;z-index:3;background:#FCF3DA;text-align:right;color:#A8720E;'+thBase+'box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">Grand Total</th>'
+    + heads.map(function(h){
+        return '<th style="text-align:right;background:'+(groups ? '#FCF3DA' : '#F0F4FA')+';color:#475569;'+thBase+'border-right:1px solid '+BORDER+';">'
+          +'<div style="font-size:11px;font-weight:800;color:'+(groups ? '#A8720E' : '#0D2B5E')+';">'+esc(h.top)+'</div>'
+          +(h.sub ? '<div style="font-size:9px;font-weight:500;color:#8B97A8;margin-top:1px;text-transform:none;letter-spacing:0;">'+esc(h.sub)+'</div>' : '')
+        +'</th>';
+      }).join('')
+    + '</tr>';
+
+  function fmtMonthYear(d){ var dt = new Date(d); return isNaN(dt) ? null : dt.toLocaleDateString('en-GB', { month:'short', year:'numeric' }); }
+  function block(ent){
+    var rowBg = ent.isGrand ? '#EEF3FC' : '#FFFFFF';
+    var parts = particulars(ent);
+    var mid = Math.floor((parts.length - 1) / 2);
+    var avatar = ent.isGrand
+      ? '<div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#3B5BA5,#0D2B5E);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 6px rgba(13,43,94,0.25);">GT</div>'
+      : '<div style="width:24px;height:24px;border-radius:50%;background:'+(ent.avatarBg || BRAND_A1)+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.1);">'+esc(ent.initials || initials(ent.name))+'</div>';
+    var doj = ent.joinDate ? fmtMonthYear(ent.joinDate) : null, doe = ent.exitDate ? fmtMonthYear(ent.exitDate) : null;
+    var label = ent.isGrand
+      ? '<div style="font-size:12px;font-weight:800;color:#0D2B5E;">Grand Total <span style="font-weight:600;color:#6B82A0;font-size:10px;">· '+reps.length+' reps</span></div>'
+      : '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:1px;">'
+          +'<div style="font-size:11px;font-weight:600;color:#1E3A66;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(ent.name)+'">'+esc(ent.name)+'</div>'
+          +(ent.zone ? '<div style="font-size:9px;color:#94A3B8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(ent.zone)+'">'+esc(ent.zone)+'</div>' : '')
+          +(doj || doe ? '<div style="font-size:9px;font-weight:500;white-space:nowrap;">'+(doj ? '<span style="color:#10875A;">DOJ: '+esc(doj)+'</span>' : '')+(doj && doe ? ' <span style="color:#CBD5E1;">·</span> ' : '')+(doe ? '<span style="color:#DC2626;">DOE: '+esc(doe)+'</span>' : '')+'</div>' : '')
+        +'</div>';
+    var accent = ent.isGrand ? 'box-shadow:inset 3px 0 0 '+BRAND_A2+', inset -1.5px 0 0 '+BORDER_STRONG+';' : 'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';';
+    return parts.map(function(p, pi){
+      var topBorder = pi === 0 ? (ent.isGrand ? 'border-top:2px solid '+BORDER_STRONG+';' : 'border-top:1.5px dashed #9AA6B8;') : 'border-top:1px solid #EEF1F6;';
+      var nameCell = '<td style="position:sticky;left:0;z-index:2;background:'+rowBg+';padding:6px 8px 6px 10px;width:'+NAME_W+'px;min-width:'+NAME_W+'px;max-width:'+NAME_W+'px;'+accent+'">'
+        + (pi === mid ? '<div style="display:flex;align-items:center;gap:6px;min-width:0;">'+avatar+label+'</div>' : '') + '</td>';
+      var partCell = '<td style="position:sticky;left:'+NAME_W+'px;z-index:2;background:'+rowBg+';padding:6px 10px;width:'+PART_W+'px;min-width:'+PART_W+'px;white-space:nowrap;font-size:11.5px;font-weight:'+(p.bold ? 600 : 500)+';color:'+(p.bold ? (p.color || '#374151') : '#374151')+';">'+esc(p.label)+'</td>';
+      var cell = 'text-align:right;padding:6px 10px;font-family:\'DM Mono\',monospace;font-size:11px;white-space:nowrap;';
+      var tot = fmtVal(p.total, p);
+      var fyCell = '<td style="position:sticky;left:'+FY_LEFT+'px;z-index:2;'+cell+'background:'+(ent.isGrand ? rowBg : '#FCF9EE')+';font-weight:700;color:'+tot.c+';box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">'+tot.t+'</td>';
+      var mCells = p.vals.map(function(v){
+        var f = fmtVal(v, p);
+        return '<td style="'+cell+'background:'+rowBg+';border-right:1px solid '+BORDER+';font-weight:'+(p.bold || ent.isGrand ? 600 : 500)+';color:'+f.c+';">'+f.t+'</td>';
+      }).join('');
+      return '<tr style="background:'+rowBg+';'+topBorder+'">'+nameCell+partCell+fyCell+mCells+'</tr>';
+    }).join('');
+  }
+
+  var body = block(grand) + reps.map(block).join('');
+  return '<div style="padding:20px 24px 32px;">'
+    +'<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);">'
+      +'<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid '+BORDER+';flex-wrap:wrap;border-radius:12px 12px 0 0;">'
+        +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Incentive</span>'
+        +'<span style="font-size:11px;color:#9AAFC8;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+state.reportView+' · '+state.currency+'</span>'
+        +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+reps.length+' sales reps</span>'
+      +'</div>'
+      +'<div style="position:relative;overflow:auto;max-height:calc(100vh - 190px);">'
+        +'<table style="width:100%;border-collapse:collapse;min-width:850px;font-variant-numeric:tabular-nums;">'
+          +'<thead style="position:sticky;top:0;z-index:4;">'+head+'</thead>'
+          +'<tbody>'+body+'</tbody>'
+        +'</table>'
+      +'</div>'
+    +'</div>'
+  +'</div>';
 }
 
 /* ====================== ACCOUNTS RECEIVABLE ====================== */
@@ -7267,6 +7360,7 @@ function tableRows(){
     // computed further up from a FLAT monthly target x number of columns, so for a rep who joined (or left) inside the range
     // the row said e.g. "Target 300" while its Achievement % was measured against 700. The monthly cells already used dispTgt.
     achFy = sum(tgtArr) > 0 ? Math.round(sum(dispGp) / sum(tgtArr) * 100) : 0;
+    if (window._incCapture) window._incCapture.push({ name:e.name, initials:e.initials, avatarBg:e.avatarBg, isRep:isRep, isBranch:!!e.isBranch, zone:e.zone, joinDate:e.joinDate, exitDate:e.exitDate, gp:dispGp.slice(), tgt:tgtArr.slice() });
 
     function metric(label, indent, type, color, vals, fy, toggleType, repInfo, drillName){
       // drillName (optional): full metric name sent to the drill-down / used as its title when the row's
