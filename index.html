@@ -6638,13 +6638,14 @@ function _arLoadDetail(customers){
 function _arDet(r){ return arDetailMap[_arDetKey(r.c, r.txn, r.h, r.o)] || null; }
 // Panel columns after Invoice No / Date / Due Date (k = detail field, or a fn of the row)
 var AR_DETAIL_COLS = [
+  ['Receipt Date', 'receiptDate'],
   ['Reference No.', 'ref'], ['House No.', function(r){ return r.h; }], ['Master No.', 'master'],
   ['Shipper Name', 'shipper', 1], ['Consignee Name', 'consignee', 1], ['Customer Name', 'custName', 1],
   ['Branch', function(r){ return r.br || r.loc; }], ['Consol No', 'consol'], ['Collection Executive', 'collExec'],
   ['Sales Person', function(r){ return _arRepName(r.sp); }], ['Load Port', 'loadPort'], ['Place Of Receipt', 'por'],
   ['Discharge Port', 'dischargePort'], ['Place Of Delivery', 'pod'], ['ETD', 'etd'], ['ETA', 'eta'],
   ['ATD', 'atd'], ['ATA', 'ata'], ['Ref No.', 'refNo2'],
-  ['GL Group Name', function(r){ return r.gl; }], ['Receipt Date', 'receiptDate']
+  ['GL Group Name', function(r){ return r.gl; }]
 ];
 function _arDetVal(r, col){
   if (typeof col[1] === 'function') return col[1](r) || '';

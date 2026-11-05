@@ -156,7 +156,10 @@ function buildArPayload(rows, repLookup, meta) {
     if (gl.toLowerCase() === "ovr receivable") {
       const ata = String(r.ATA || "").trim(), eta = String(r.eta || "").trim();
       baseDate = day(ata) !== null ? ata : day(eta) !== null ? eta : "";
-      if (baseDate && asOnDay !== null) od = asOnDay - day(baseDate) - num(r.creditDays);
+      // Overdue days = Receipt Date (the "as on" date while nothing is received) − (ATA/ETA + Credit Days)
+      const rcpt = day(r["Receipt Date"]);
+      const endDay = rcpt !== null ? rcpt : asOnDay;
+      if (baseDate && endDay !== null) od = endDay - day(baseDate) - num(r.creditDays);
     }
     out.push([
       code("customer", r.customer),
@@ -199,7 +202,7 @@ async function arGet(db, force, deployTs) {
   const key = meta.currentBatch + "|" + deployTs;
   if (!force && arCache && arCache.key === key) return arCache.data;
   const [rows, repLookup] = await Promise.all([
-    db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch }, { projection: { _id: 0, customer: 1, salesPerson: 1, lob: 1, location: 1, branch: 1, type: 1, txnNo: 1, transDate: 1, billAmt: 1, outstanding: 1, overdueDays: 1, ageingDays: 1, creditDays: 1, houseNo: 1, jobOwner: 1, _dso: 1, dsoBill: 1, dsoBillDays: 1, glGroup: 1, "GL Group Name": 1, ATA: 1, eta: 1 } }).toArray(),
+    db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch }, { projection: { _id: 0, customer: 1, salesPerson: 1, lob: 1, location: 1, branch: 1, type: 1, txnNo: 1, transDate: 1, billAmt: 1, outstanding: 1, overdueDays: 1, ageingDays: 1, creditDays: 1, houseNo: 1, jobOwner: 1, _dso: 1, dsoBill: 1, dsoBillDays: 1, glGroup: 1, "GL Group Name": 1, ATA: 1, eta: 1, "Receipt Date": 1 } }).toArray(),
     loadRepLookup(db),
   ]);
   const data = buildArPayload(rows, repLookup, meta);
