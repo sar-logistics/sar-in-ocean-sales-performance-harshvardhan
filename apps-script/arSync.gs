@@ -140,14 +140,15 @@ function pushArToDashboard() {
 
   const asOn = arAsOnDate_(src);
 
-  // Weighted DSO, paid invoices included (per customer / rep / LOB / location / GL group). Per invoice: days =
+  // DSO (simple average), paid invoices included (per customer / rep / LOB / location / GL group). Per invoice: days =
   //   (the LAST Receipt Date — incl. the no-Organization receipt lines under the invoice —
   //    or the "as on" date while anything is still outstanding)
   //   − (Invoice Date + Credit Days), and 0 when that comes out negative
   // Paid invoices have no outstanding so they aren't pushed as rows; instead one
   // small row per customer / sales person / LOB / location carries the totals
   // (_dso: true, outstanding 0 — pages that read outstanding rows skip it):
-  //   dsoBill = Σ Bill Amount, dsoBillDays = Σ (Bill Amount × days)
+  //   dsoDays = Σ days, dsoCount = invoices → Average DSO = dsoDays ÷ dsoCount
+  //   (dsoBill = Σ Bill Amount, dsoBillDays = Σ (Bill Amount × days) are still sent, not shown)
   const asOnDate = arParseDate_(asOn) || new Date();
   const rdCol = headers.indexOf('Receipt Date');
   // "OVR Receivable" (GL Group Name) counts from arrival: ATA, else ETA, else Trans. Date
@@ -199,8 +200,8 @@ function pushArToDashboard() {
     const days = Math.max(0, Math.round((end.getTime() - x.td.getTime()) / 86400000) - (x.cd || 0));
     const gk = [x.org, x.sp, x.lob, x.loc, x.gl].join('\u0001');
     const g = dsoGroups[gk] || (dsoGroups[gk] = { customer: x.org, salesPerson: x.sp, lob: x.lob, location: x.loc, glGroup: x.gl,
-      outstanding: 0, _dso: true, dsoBill: 0, dsoBillDays: 0, dsoCount: 0 });
-    g.dsoBill += x.bill; g.dsoBillDays += x.bill * days; g.dsoCount++;
+      outstanding: 0, _dso: true, dsoBill: 0, dsoBillDays: 0, dsoDays: 0, dsoCount: 0 });
+    g.dsoBill += x.bill; g.dsoBillDays += x.bill * days; g.dsoDays += days; g.dsoCount++;
   });
   const dsoRows = Object.keys(dsoGroups).map(function (k) { return dsoGroups[k]; });
   Logger.log('DSO: ' + Object.keys(inv).length + ' invoices in ' + dsoRows.length + ' customer/sales person/LOB groups');

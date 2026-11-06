@@ -137,7 +137,8 @@ function buildArPayload(rows, repLookup, meta) {
   //  glGroup, baseDate (OVR Receivable: the ATA/ETA used instead of Trans. Date, else "")]
   // A sales person missing from the mapping keeps their report name, minus the "| INZ05" tag
   const out = [];
-  // Weighted DSO totals (rows the sync marks _dso): [customer, sp, zone, lob, Σ bill, Σ bill × days]
+  // DSO totals (rows the sync marks _dso): [customer, sp, zone, lob, Σ bill, Σ bill × days, gl, Σ days, invoices]
+  // The page shows the simple average: Σ days ÷ invoices
   const dso = [];
   for (const r of rows) {
     if (r._dso) {
@@ -149,6 +150,7 @@ function buildArPayload(rows, repLookup, meta) {
         code("lob", arLobKey(r.lob, r.location)),
         num(r.dsoBill), num(r.dsoBillDays),
         code("gl", r.glGroup),
+        num(r.dsoDays), num(r.dsoCount),
       ]);
       continue;
     }
@@ -211,7 +213,7 @@ async function arGet(db, force, deployTs) {
   const key = meta.currentBatch + "|" + deployTs;
   if (!force && arCache && arCache.key === key) return arCache.data;
   const [rows, repLookup] = await Promise.all([
-    db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch }, { projection: { _id: 0, customer: 1, salesPerson: 1, lob: 1, location: 1, branch: 1, type: 1, txnNo: 1, transDate: 1, billAmt: 1, outstanding: 1, overdueDays: 1, ageingDays: 1, creditDays: 1, houseNo: 1, jobOwner: 1, _dso: 1, dsoBill: 1, dsoBillDays: 1, glGroup: 1, "GL Group Name": 1, ATA: 1, eta: 1, "Receipt Date": 1 } }).toArray(),
+    db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch }, { projection: { _id: 0, customer: 1, salesPerson: 1, lob: 1, location: 1, branch: 1, type: 1, txnNo: 1, transDate: 1, billAmt: 1, outstanding: 1, overdueDays: 1, ageingDays: 1, creditDays: 1, houseNo: 1, jobOwner: 1, _dso: 1, dsoBill: 1, dsoBillDays: 1, dsoDays: 1, dsoCount: 1, glGroup: 1, "GL Group Name": 1, ATA: 1, eta: 1, "Receipt Date": 1 } }).toArray(),
     loadRepLookup(db),
   ]);
   const data = buildArPayload(rows, repLookup, meta);

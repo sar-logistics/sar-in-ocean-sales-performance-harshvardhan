@@ -6189,9 +6189,9 @@ function fetchArData(callback, force){
                  loc:D.location[r[5]], ty:D.type[r[6]], txn:r[7], d:r[8], bill:r[9], o:r[10],
                  od:r[11], cd:r[12], h:r[13], jo:r[14], gl:(D.gl || [])[r[15]] || '', bd:r[16] || '' };
       });
-      // Weighted DSO totals per customer / rep / LOB (paid invoices included)
+      // DSO totals per customer / rep / LOB (paid invoices included): Σ days and invoice count
       arDso = (d.dso || []).map(function(x){
-        return { c:D.customer[x[0]], sp:D.sp[x[1]], z:D.zone[x[2]], lob:D.lob[x[3]], bill:x[4], bd:x[5], gl:(D.gl || [])[x[6]] || '' };
+        return { c:D.customer[x[0]], sp:D.sp[x[1]], z:D.zone[x[2]], lob:D.lob[x[3]], gl:(D.gl || [])[x[6]] || '', days:x[7] || 0, n:x[8] || 0 };
       });
       arMeta = { asOn:d.asOn, pushedAt:d.pushedAt, buckets:d.buckets || null };
       _arSetBuckets(d.buckets && d.buckets.edges);
@@ -6262,7 +6262,7 @@ function _arGlGroups(){
 }
 
 function _arEmptyAgg(){
-  var a = { total:0, nd:0, oa:0, inv:0, dsoB:0, dsoBD:0 };
+  var a = { total:0, nd:0, oa:0, inv:0, dsoN:0, dsoD:0 };
   AR_BUCKETS.forEach(function(b){ a[b.key] = 0; });
   return a;
 }
@@ -6288,23 +6288,23 @@ function _arModel(){
     if (r.sp) C.reps[r.sp] = 1;
     if (!_arIsOa(r) && r.o > 0 && r.cd !== null && r.cd !== undefined) C.cd[r.cd] = (C.cd[r.cd] || 0) + 1;
   });
-  // Weighted DSO: zone / Grand Total cover every customer with invoices (paid ones too);
+  // Average DSO: zone / Grand Total cover every customer with invoices (paid ones too);
   // a customer row shows its own when it's listed
   var dsoRows = _arVisibleRows(arDso || []);
   if (q) dsoRows = dsoRows.filter(function(r){ return (r.c || '').toLowerCase().indexOf(q) > -1; });
   dsoRows.forEach(function(r){
-    grand.dsoB += r.bill; grand.dsoBD += r.bd;
+    grand.dsoN += r.n; grand.dsoD += r.days;
     var Z = zones[r.z];
     if (!Z) return;
-    Z.agg.dsoB += r.bill; Z.agg.dsoBD += r.bd;
+    Z.agg.dsoN += r.n; Z.agg.dsoD += r.days;
     var Cu = Z.cust[r.c];
-    if (Cu) { Cu.agg.dsoB += r.bill; Cu.agg.dsoBD += r.bd; }
+    if (Cu) { Cu.agg.dsoN += r.n; Cu.agg.dsoD += r.days; }
   });
   var sortKey = (state.arSort && state.arSort.key) || 'net', dir = (state.arSort && state.arSort.dir) || -1;
   function val(x){
     return sortKey === 'name' ? x.name.toLowerCase() : sortKey === 'net' ? x.agg.total - x.agg.oa
       : sortKey === 'due' ? _arOverdue(x.agg)
-      : sortKey === 'dso' ? (x.agg.dsoB ? x.agg.dsoBD / x.agg.dsoB : -1e9) : (x.agg[sortKey] || 0);
+      : sortKey === 'dso' ? (x.agg.dsoN ? x.agg.dsoD / x.agg.dsoN : -1e9) : (x.agg[sortKey] || 0);
   }
   var zoneList = sortZones(Object.keys(zones)).map(function(zn){
     var Z = zones[zn];
@@ -6331,12 +6331,12 @@ function _arFull(v){
   var s = Math.abs(val).toLocaleString(state.currency === 'USD' ? 'en-US' : 'en-IN', { maximumFractionDigits:0 });
   return val < 0 ? '(' + sym + s + ')' : sym + s;
 }
-// Weighted DSO = Σ(Bill Amount × days) ÷ Σ(Bill Amount); days = receipt (or as-on) − (invoice date + credit days)
+// Average DSO = Σ days ÷ number of invoices; days = last receipt (or as-on) − (invoice date + credit days), 0 if negative
 function _arDsoTxt(a){
-  if (!a.dsoB) return '<span style="color:#D5DCE6;">–</span>';
-  var v = a.dsoBD / a.dsoB;
+  if (!a.dsoN) return '<span style="color:#D5DCE6;">–</span>';
+  var v = a.dsoD / a.dsoN;
   var d = Math.round(v);   // whole days; the exact value is in the tooltip
-  return '<span title="Weighted DSO: '+v.toFixed(2)+' days" style="color:'+(d > 0 ? '#A3331C' : '#0F7048')+';">'+d+'</span>';
+  return '<span title="Average DSO: '+v.toFixed(2)+' days over '+a.dsoN.toLocaleString('en-IN')+' invoices" style="color:'+(d > 0 ? '#A3331C' : '#0F7048')+';">'+d+'</span>';
 }
 // AR page: negatives in brackets, e.g. On Account (₹23.89 Cr.)
 function _arCur(v){ return v < 0 ? '(' + fmtCur(-v) + ')' : fmtCur(v); }
@@ -6432,7 +6432,7 @@ function arPage(){
     { key:'nd',  label:'Not Due' },
     { key:'oa',  label:'On Account' },
     { key:'cd',  label:'Credit Days', noSort:true },
-    { key:'dso', label:'Weighted DSO (days)' }
+    { key:'dso', label:'Avg DSO (days)' }
   ]);
   // Three sticky header rows with fixed heights: band (26px), column names (36px), Grand Total
   var thBase = 'position:sticky;z-index:3;font-size:10.5px;font-weight:800;letter-spacing:0.02em;padding:0 9px;white-space:nowrap;box-sizing:border-box;';
