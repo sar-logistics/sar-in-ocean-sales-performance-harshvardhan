@@ -6170,7 +6170,7 @@ function _arSlabsOpen(){
 }
 // Darker solid line from the column-name row down: after Net, after the last slab,
 // and between each of the columns after the slabs (the band row above stays plain)
-var AR_GROUP_SEP = 'border-right:2px solid #A9B8CC;';
+var AR_GROUP_SEP = 'border-right:1px solid #BCC8D9;';   // a shade darker than the normal #DDE5F0 lines
 function _arSepAfter(key){
   return key === 'net' || key === 'due' || key === 'nd' || key === 'oa' || key === 'cd' || (_arSlabsOpen() && AR_BUCKETS.length && key === AR_BUCKETS[AR_BUCKETS.length - 1].key);
 }
