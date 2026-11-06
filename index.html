@@ -6331,7 +6331,8 @@ function _arFull(v){
   var s = Math.abs(val).toLocaleString(state.currency === 'USD' ? 'en-US' : 'en-IN', { maximumFractionDigits:0 });
   return val < 0 ? '(' + sym + s + ')' : sym + s;
 }
-// Average DSO = Σ days ÷ number of invoices; days = last receipt (or as-on) − (invoice date + credit days), 0 if negative
+// Average DSO = Σ days ÷ number of invoices; days = last receipt (as-on while outstanding) − invoice date
+// (OVR Receivable: ATA, else ETA) — no credit days
 function _arDsoTxt(a){
   if (!a.dsoN) return '<span style="color:#D5DCE6;">–</span>';
   var v = a.dsoD / a.dsoN;

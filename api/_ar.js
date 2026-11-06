@@ -167,9 +167,10 @@ function buildArPayload(rows, repLookup, meta) {
     if (gl.toLowerCase() === "ovr receivable") {
       const ata = String(r.ATA || "").trim(), eta = String(r.eta || "").trim();
       baseDate = day(ata) !== null ? fmt(ata) : day(eta) !== null ? fmt(eta) : "";
-      // Overdue days = Receipt Date (the "as on" date while nothing is received) − (ATA/ETA + Credit Days)
+      // Overdue days = end − (ATA/ETA + Credit Days); end = the "as on" date while anything is
+      // still outstanding (part-paid too), else the Receipt Date
       const rcpt = day(r["Receipt Date"]);
-      const endDay = rcpt !== null ? rcpt : asOnDay;
+      const endDay = o > 0 || rcpt === null ? asOnDay : rcpt;
       if (baseDate && endDay !== null) od = endDay - day(baseDate) - num(r.creditDays);
     }
     out.push([
