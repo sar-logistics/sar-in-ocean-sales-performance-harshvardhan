@@ -141,7 +141,8 @@ function pushArToDashboard() {
   const asOn = arAsOnDate_(src);
 
   // Weighted DSO, paid invoices included (per customer / rep / LOB / location / GL group). Per invoice: days =
-  //   (Receipt Date, or the "as on" date while anything is still outstanding)
+  //   (the LAST Receipt Date — incl. the no-Organization receipt lines under the invoice —
+  //    or the "as on" date while anything is still outstanding)
   //   − (Invoice Date + Credit Days), and 0 when that comes out negative
   // Paid invoices have no outstanding so they aren't pushed as rows; instead one
   // small row per customer / sales person / LOB / location carries the totals
@@ -153,10 +154,19 @@ function pushArToDashboard() {
   const glCol = headers.indexOf('GL Group Name'), ataCol = headers.indexOf('ATA'), etaCol = headers.indexOf('ETA');
   const asDate = function (v) { return v instanceof Date && !isNaN(v.getTime()) ? v : arParseDate_(v); };
   const inv = {};
+  let last = null; // the invoice on the line above, for follow-on receipt lines
   for (let r = 1; r < values.length; r++) {
     const row = values[r];
     const org = String(row[col.customer] || '').trim();
     const txn = String(row[col.txnNo] || '').trim();
+    if (!org && !txn) {
+      // A line with no Organization right under an invoice is another receipt for that invoice
+      // (e.g. the final settlement after a credit note). The invoice counts until its LAST receipt.
+      const rd2 = last && rdCol > -1 ? asDate(row[rdCol]) : null;
+      if (rd2 && (!last.rd || rd2 > last.rd)) last.rd = rd2;
+      continue;
+    }
+    last = null;
     if (!org || !txn || org.toLowerCase() === 'total') continue;
     const bill = col.billAmt > -1 ? arNum_(row[col.billAmt]) : 0;
     const td = col.transDate > -1 ? row[col.transDate] : null;
@@ -176,9 +186,10 @@ function pushArToDashboard() {
         loc: col.location > -1 ? String(row[col.location] || '').trim() : '',
       };
     }
-    const rd = rdCol > -1 ? row[rdCol] : null;
-    if (rd instanceof Date && !isNaN(rd.getTime()) && (!x.rd || rd > x.rd)) x.rd = rd;
+    const rd = rdCol > -1 ? asDate(row[rdCol]) : null;
+    if (rd && (!x.rd || rd > x.rd)) x.rd = rd;
     if (arNum_(row[col.outstanding]) > 0) x.open = true;
+    last = x;
   }
   const dsoGroups = {};
   Object.keys(inv).forEach(function (k) {
