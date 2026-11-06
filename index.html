@@ -6378,13 +6378,12 @@ function arPage(){
       +(sub ? '<div style="font-size:10px;color:#8A9AB5;margin-top:3px;font-weight:600;">'+sub+'</div>' : '')
       +'</div>';
   }
-  var kpis = '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:12px;">'
-    + card('Total Outstanding', fmtCur(G.total), '#2C4E82', G.inv.toLocaleString('en-IN')+' invoices')
+  // Net Outstanding takes Total Outstanding's place (same as the table's first number column)
+  var kpis = '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-bottom:12px;">'
+    + card('Net Outstanding', _arCur(G.total - G.oa), '#0D7C6B', G.inv.toLocaleString('en-IN')+' invoices · due + not due − on account')
     + card('Overdue', fmtCur(overdue), '#D9534F', G.total ? Math.round(overdue / G.total * 100)+'% of outstanding' : '')
     + card('Not Due', fmtCur(G.nd), '#15875A', 'within credit days')
     + card('On Account', _arCur(-G.oa), '#946312', 'paid extra, not yet adjusted')
-    + card('Net Outstanding', _arCur(G.total - G.oa), '#0D7C6B', 'total − on account')
-    + card('Customers', M.customers.toLocaleString('en-IN'), '#6488D6', M.zones.length+' zones')
     + '</div>';
 
   var allOpen = M.zones.length > 0 && M.zones.every(function(Z){ return _arZoneIsOpen(Z.name, M); });
