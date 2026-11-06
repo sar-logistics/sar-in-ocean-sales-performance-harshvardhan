@@ -6161,6 +6161,13 @@ function _arSetBuckets(edges){
   AR_BUCKETS.forEach(function(b){ AR_COLORS[b.key] = { fg:b.color[0], bg:b.color[1] }; });
 }
 _arSetBuckets(AR_DEFAULT_EDGES);
+// Ageing slab columns shown or folded (per viewer, remembered in this browser)
+function _arSlabsOpen(){
+  if (state.arSlabsOpen === undefined) {
+    try { state.arSlabsOpen = localStorage.getItem('sar_ar_slabs_open') === '1'; } catch (e) { state.arSlabsOpen = false; }
+  }
+  return !!state.arSlabsOpen;
+}
 function _arOverdue(a){ return AR_BUCKETS.reduce(function(s, b){ return s + (a[b.key] || 0); }, 0); }
 function _arCanEditBuckets(){ return !!currentUser && (currentUser.role || '').toLowerCase().trim() === 'admin'; }
 
@@ -6363,6 +6370,8 @@ function arPage(){
     + '.arpg-zone:hover td{background:#E8EFFB;}'
     + '.arpg-zone td.ar-zdrill:hover{background:#D6E3F8 !important;text-decoration:underline;text-underline-offset:3px;}'
     + '.arpg-th-sort:hover{color:#173E76 !important;}'
+    + '.ar-slab-tg{display:inline-block;cursor:pointer;border-radius:999px;padding:2px 9px;background:#fff;border:1px solid #D8E1F0;color:#2C4E82;font-size:10px;font-weight:800;letter-spacing:0.02em;text-transform:none;}'
+    + '.ar-slab-tg:hover{background:#EEF3FC;border-color:#B7C8EA;}'
     + '#ar-table-scroll th,#ar-table-scroll td{border-right:1px solid #DDE5F0;}'
     + '#ar-table-scroll th:last-child,#ar-table-scroll td:last-child{border-right:none;}'
     + '#ar-table-scroll tbody td{border-bottom:1px solid #DDE5F0 !important;}'
@@ -6370,41 +6379,49 @@ function arPage(){
     + '</style>';
 
   // Same KPI card as the other pages
-  function card(label, value, tint, sub){
-    return '<div class="kpi-card" style="position:relative;overflow:hidden;background:rgba(255,255,255,0.66);border:1px solid #E3EAF4;border-radius:16px;padding:12px 14px 11px;">'
+  // Slim KPI strip: label + one-line number + one-line note (full text on hover)
+  function card(label, value, tint, sub, tip){
+    return '<div class="kpi-card" title="'+esc(tip || '')+'" style="position:relative;overflow:hidden;background:rgba(255,255,255,0.72);border:1px solid #E3EAF4;border-radius:12px;padding:8px 12px 7px;min-width:0;">'
       +'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+tint+';"></div>'
-      +'<div style="font-size:8px;font-weight:800;letter-spacing:0.09em;text-transform:uppercase;color:#5B7298;margin-bottom:6px;">'+label+'</div>'
-      +'<div style="font-family:\'DM Mono\',monospace;font-size:18px;font-weight:600;color:#15233B;">'+value+'</div>'
-      +(sub ? '<div style="font-size:10px;color:#8A9AB5;margin-top:3px;font-weight:600;">'+sub+'</div>' : '')
+      +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;min-width:0;">'
+      +  '<div style="font-size:8.5px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#5B7298;white-space:nowrap;">'+label+'</div>'
+      +  (sub ? '<div style="font-size:10px;color:#8A9AB5;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+sub+'</div>' : '')
+      +'</div>'
+      +'<div style="font-family:\'DM Mono\',monospace;font-size:17px;font-weight:600;color:#15233B;white-space:nowrap;margin-top:3px;">'+value+'</div>'
       +'</div>';
   }
   // Net Outstanding takes Total Outstanding's place (same as the table's first number column)
-  var kpis = '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-bottom:12px;">'
-    + card('Net Outstanding', _arCur(G.total - G.oa), '#0D7C6B', G.inv.toLocaleString('en-IN')+' invoices · due + not due − on account')
-    + card('Overdue', fmtCur(overdue), '#D9534F', G.total ? Math.round(overdue / G.total * 100)+'% of outstanding' : '')
-    + card('Not Due', fmtCur(G.nd), '#15875A', 'within credit days')
-    + card('On Account', _arCur(-G.oa), '#946312', 'paid extra, not yet adjusted')
+  // 4 across on a normal screen; 2 × 2 when narrow so numbers never get cut off
+  var kpis = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:6px;margin-bottom:10px;">'
+    + card('Net Outstanding', _arCur(G.total - G.oa), '#0D7C6B', G.inv.toLocaleString('en-IN')+' invoices', 'Outstanding due + not due − on account')
+    + card('Overdue', fmtCur(overdue), '#D9534F', G.total ? Math.round(overdue / G.total * 100)+'% of outstanding' : '', 'Sum of all ageing slabs')
+    + card('Not Due', fmtCur(G.nd), '#15875A', 'within credit days', 'Invoices still within their credit days')
+    + card('On Account', _arCur(-G.oa), '#946312', 'not yet adjusted', 'Received but not matched to an invoice (lines with no Transaction No.)')
     + '</div>';
 
   var allOpen = M.zones.length > 0 && M.zones.every(function(Z){ return _arZoneIsOpen(Z.name, M); });
-  var header = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">'
-    +'<div><div style="font-size:16px;font-weight:800;color:#15233B;letter-spacing:-0.01em;">Accounts Receivable</div>'
-    +'<div style="font-size:11px;font-weight:600;color:#6B82A0;margin-top:2px;">Customer outstanding by zone'+(arMeta && arMeta.asOn ? ' · <span style="color:#2C4E82;font-weight:700;">as on '+esc(arMeta.asOn)+'</span>' : '')+'</div></div>'
+  // One toolbar row: title + as-on date | search · GL Group · Expand all · slabs (admin, icon)
+  var pill = 'border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;white-space:nowrap;';
+  var header = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">'
+    +'<div style="display:flex;align-items:baseline;gap:8px;white-space:nowrap;">'
+    +  '<div style="font-size:15px;font-weight:800;color:#15233B;letter-spacing:-0.01em;">Accounts Receivable</div>'
+    +  (arMeta && arMeta.asOn ? '<div style="font-size:11px;font-weight:700;color:#2C4E82;">as on '+esc(arMeta.asOn)+'</div>' : '')
+    +'</div>'
     +'<div style="flex:1;"></div>'
-    +'<div style="display:flex;align-items:center;gap:6px;background:#fff;border:1.5px solid #D8E1F0;border-radius:999px;padding:7px 13px;width:260px;">'
+    +'<div style="display:flex;align-items:center;gap:6px;background:#fff;border:1.5px solid #D8E1F0;border-radius:999px;padding:6px 12px;width:210px;min-width:130px;flex-shrink:1;">'
       +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A9AB5" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>'
       +'<input type="text" id="ar-search" placeholder="Search customer…" value="'+esc(state.arSearch || '')+'" style="border:none;background:transparent;outline:none;font-size:12.5px;color:#15233B;width:100%;"/>'
     +'</div>'
-    +(_arCanEditBuckets() ? '<button data-act="arPgBucketOpen" class="btnq" title="Set the overdue slabs for everyone" style="display:flex;align-items:center;gap:6px;border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
-      +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Ageing slabs</button>' : '')
     + _arGlDropdown()
-    +'<button data-act="arPgExpandAll" data-val="'+(allOpen ? '0' : '1')+'" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'+(allOpen ? 'Collapse all' : 'Expand all')+'</button>'
+    +'<button data-act="arPgExpandAll" data-val="'+(allOpen ? '0' : '1')+'" class="btnq" style="'+pill+'padding:7px 13px;">'+(allOpen ? 'Collapse all' : 'Expand all')+'</button>'
+    +(_arCanEditBuckets() ? '<button data-act="arPgBucketOpen" class="btnq" title="Ageing slabs — set the overdue day buckets for everyone" style="'+pill+'width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;">'
+      +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>' : '')
     +'</div>';
 
   var cols = [
     { key:'name',  label:'Customer', left:true },
     { key:'net', label:'Net Outstanding' },
-  ].concat(AR_BUCKETS.map(function(b){ return { key:b.key, label:b.label }; }), [
+  ].concat(_arSlabsOpen() ? AR_BUCKETS.map(function(b){ return { key:b.key, label:b.label }; }) : [], [
     { key:'due', label:'Outstanding Due' },
     { key:'nd',  label:'Not Due' },
     { key:'oa',  label:'On Account' },
@@ -6417,8 +6434,14 @@ function arPage(){
   var head = '<thead><tr>'
     + '<th class="ar-corner" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
     + '<th style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
-    + '<th colspan="'+AR_BUCKETS.length+'" style="'+thBase+'top:0;height:26px;text-align:center;background:linear-gradient(90deg,'+C[AR_BUCKETS[0].key].bg+','+C[AR_BUCKETS[AR_BUCKETS.length - 1].key].bg+');color:'+C[AR_BUCKETS[AR_BUCKETS.length - 1].key].fg+';border-bottom:1px solid #F0C9C3;letter-spacing:0.08em;text-transform:uppercase;font-size:9.5px;">Overdue · days past due date</th>'
-    + '<th colspan="5" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th></tr><tr>'
+    // Ageing slabs fold away behind a toggle; Outstanding Due always shows their sum
+    + (_arSlabsOpen()
+        ? '<th colspan="'+AR_BUCKETS.length+'" style="'+thBase+'top:0;height:26px;text-align:center;background:linear-gradient(90deg,'+C[AR_BUCKETS[0].key].bg+','+C[AR_BUCKETS[AR_BUCKETS.length - 1].key].bg+');color:'+C[AR_BUCKETS[AR_BUCKETS.length - 1].key].fg+';border-bottom:1px solid #F0C9C3;letter-spacing:0.08em;text-transform:uppercase;font-size:9.5px;">'
+          + 'Overdue · days past due date <span data-act="arPgSlabsToggle" class="ar-slab-tg" style="margin-left:8px;">◂ Hide</span></th>'
+          + '<th style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
+        : '<th style="'+thBase+'top:0;height:26px;text-align:right;background:#F1F5FB;border-bottom:1px solid #E3EAF4;">'
+          + '<span data-act="arPgSlabsToggle" class="ar-slab-tg" title="Show the '+AR_BUCKETS.length+' ageing slab columns">Ageing ▸</span></th>')
+    + '<th colspan="4" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th></tr><tr>'
     + cols.map(function(c){
         var arrow = (!c.noSort && sk === c.key) ? (sd < 0 ? ' ▾' : ' ▴') : '';
         var tint = C[c.key];
@@ -6474,7 +6497,7 @@ function _arGlDropdown(){
   var sel = state.filterGl || [], open = !!state.arGlOpen;
   var label = sel.length === 0 ? 'All' : sel.length === 1 ? (sel[0] || '(blank)') : sel.length + ' selected';
   var html = '<div style="position:relative;">'
-    + '<button data-act="arPgGlToggle" class="btnq" title="Filter by GL Group Name" style="display:flex;align-items:center;gap:6px;border:1.5px solid '+(open ? BRAND_A1 : (sel.length ? '#B7C8EA' : '#D8E1F0'))+';background:'+(sel.length ? '#EEF3FC' : '#fff')+';border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;white-space:nowrap;">'
+    + '<button data-act="arPgGlToggle" class="btnq" title="Filter by GL Group Name" style="display:flex;align-items:center;gap:6px;border:1.5px solid '+(open ? BRAND_A1 : (sel.length ? '#B7C8EA' : '#D8E1F0'))+';background:'+(sel.length ? '#EEF3FC' : '#fff')+';border-radius:999px;padding:7px 13px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;white-space:nowrap;">'
     +   'GL Group: <span style="color:#173E76;">'+esc(label)+'</span>'
     +   '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="transform:rotate('+(open ? 180 : 0)+'deg);transition:transform .15s;"><path d="M6 9l6 6 6-6"/></svg>'
     + '</button>';
@@ -6611,7 +6634,7 @@ function _arCells(a, tag, style, attr){
   function amt(v, color){ return v ? '<span style="color:'+(color || '#15233B')+';">'+_arAmt(v)+'</span>' : '<span style="color:#D5DCE6;">–</span>'; }
   var net = a.total - a.oa;
   return '<'+tag+attr+' style="'+style+'text-align:right;font-weight:700;">'+amt(net, net < 0 ? C.oa.fg : '#0D2B5E')+'</'+tag+'>'
-    + AR_BUCKETS.map(function(b){ return '<'+tag+attr+' style="'+style+'text-align:right;">'+amt(a[b.key], C[b.key].fg)+'</'+tag+'>'; }).join('')
+    + (_arSlabsOpen() ? AR_BUCKETS : []).map(function(b){ return '<'+tag+attr+' style="'+style+'text-align:right;">'+amt(a[b.key], C[b.key].fg)+'</'+tag+'>'; }).join('')
     + '<'+tag+attr+' style="'+style+'text-align:right;font-weight:700;background:'+C.due.bg+';">'+amt(_arOverdue(a), C.due.fg)+'</'+tag+'>'
     + '<'+tag+attr+' style="'+style+'text-align:right;">'+amt(a.nd, C.nd.fg)+'</'+tag+'>'
     + '<'+tag+attr+' style="'+style+'text-align:right;">'+amt(-a.oa, C.oa.fg)+'</'+tag+'>';
@@ -6930,6 +6953,11 @@ function arHandleAct(act, el){
     arExportDrill();
   } else if (act === 'arPgExport') {
     arExportExcel();
+  } else if (act === 'arPgSlabsToggle') {
+    state.arSlabsOpen = !_arSlabsOpen();
+    try { localStorage.setItem('sar_ar_slabs_open', state.arSlabsOpen ? '1' : '0'); } catch (e) {}
+    if (!state.arSlabsOpen && state.arSort && /^b\d+$/.test(state.arSort.key)) state.arSort = null;
+    _arRerenderMain(false);
   } else if (act === 'arPgGlToggle') {
     state.arGlOpen = !state.arGlOpen; _arRerenderMain(false);
   } else if (act === 'arPgGlClose') {
