@@ -6168,8 +6168,9 @@ function _arSlabsOpen(){
   }
   return !!state.arSlabsOpen;
 }
-// Darker dotted line closing each column group: Net ┊ slabs ┊ Outstanding Due ┊ the rest
-var AR_GROUP_SEP = 'border-right:2px dotted #8EA2BE;';
+// Darker solid line closing each column group (Net | slabs | Outstanding Due | the rest),
+// from the column-name row down — the band row above stays plain
+var AR_GROUP_SEP = 'border-right:2px solid #A9B8CC;';
 function _arSepAfter(key){
   return key === 'net' || key === 'due' || (_arSlabsOpen() && AR_BUCKETS.length && key === AR_BUCKETS[AR_BUCKETS.length - 1].key);
 }
@@ -6438,13 +6439,13 @@ function arPage(){
   var sk = (state.arSort && state.arSort.key) || 'net', sd = (state.arSort && state.arSort.dir) || -1;
   var head = '<thead><tr>'
     + '<th class="ar-corner" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
-    + '<th style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;'+AR_GROUP_SEP+'"></th>'
+    + '<th style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
     // Ageing slabs fold away behind a toggle; Outstanding Due always shows their sum
     + (_arSlabsOpen()
-        ? '<th colspan="'+AR_BUCKETS.length+'" style="'+thBase+'top:0;height:26px;text-align:center;background:linear-gradient(90deg,'+C[AR_BUCKETS[0].key].bg+','+C[AR_BUCKETS[AR_BUCKETS.length - 1].key].bg+');color:'+C[AR_BUCKETS[AR_BUCKETS.length - 1].key].fg+';border-bottom:1px solid #F0C9C3;letter-spacing:0.08em;text-transform:uppercase;font-size:9.5px;'+AR_GROUP_SEP+'">'
+        ? '<th colspan="'+AR_BUCKETS.length+'" style="'+thBase+'top:0;height:26px;text-align:center;background:linear-gradient(90deg,'+C[AR_BUCKETS[0].key].bg+','+C[AR_BUCKETS[AR_BUCKETS.length - 1].key].bg+');color:'+C[AR_BUCKETS[AR_BUCKETS.length - 1].key].fg+';border-bottom:1px solid #F0C9C3;letter-spacing:0.08em;text-transform:uppercase;font-size:9.5px;">'
           + 'Overdue · days past due date <span data-act="arPgSlabsToggle" class="ar-slab-tg" style="margin-left:8px;">◂ Hide</span></th>'
-          + '<th style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;'+AR_GROUP_SEP+'"></th>'
-        : '<th style="'+thBase+'top:0;height:26px;text-align:right;background:#F1F5FB;border-bottom:1px solid #E3EAF4;'+AR_GROUP_SEP+'">'
+          + '<th style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th>'
+        : '<th style="'+thBase+'top:0;height:26px;text-align:right;background:#F1F5FB;border-bottom:1px solid #E3EAF4;">'
           + '<span data-act="arPgSlabsToggle" class="ar-slab-tg" title="Show the '+AR_BUCKETS.length+' ageing slab columns">Ageing ▸</span></th>')
     + '<th colspan="4" style="'+thBase+'top:0;height:26px;background:#F1F5FB;border-bottom:1px solid #E3EAF4;"></th></tr><tr>'
     + cols.map(function(c){
