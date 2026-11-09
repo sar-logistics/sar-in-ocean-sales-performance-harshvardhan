@@ -6384,6 +6384,7 @@ function arPage(){
     + '.arpg-zone:hover td{background:#E8EFFB;}'
     + '.arpg-zone td.ar-zdrill:hover{background:#D6E3F8 !important;text-decoration:underline;text-underline-offset:3px;}'
     + '.arpg-th-sort:hover{color:#173E76 !important;}'
+    + '.arpg-row td.ar-oadrill:hover{background:#FBF1DC !important;text-decoration:underline;text-underline-offset:3px;}'
     + '.ar-slab-tg{display:inline-block;cursor:pointer;border-radius:999px;padding:2px 9px;background:#fff;border:1px solid #D8E1F0;color:#2C4E82;font-size:10px;font-weight:800;letter-spacing:0.02em;text-transform:none;}'
     + '.ar-slab-tg:hover{background:#EEF3FC;border-color:#B7C8EA;}'
     + '#ar-table-scroll th,#ar-table-scroll td{border-right:1px solid #DDE5F0;}'
@@ -6480,7 +6481,8 @@ function arPage(){
       + '<td style="'+td+'text-align:left;font-family:Inter,sans-serif;font-weight:700;color:#173E76;font-size:13px;border-left:3px solid #2C4E82;padding-left:10px;">'
       + '<span style="display:inline-block;width:14px;color:#6488D6;">'+(open ? '▾' : '▸')+'</span>'+esc(Z.name)
       + ' <span title="'+Z.custList.length+' customer'+(Z.custList.length === 1 ? '' : 's')+'" style="font-weight:600;color:#8A9AB5;font-size:11px;margin-left:4px;">'+Z.custList.length+'</span></td>'
-      + _arCells(Z.agg, 'td', td + 'font-weight:700;', ' data-act="arPgZoneDrill" data-val="'+esc(Z.name)+'" class="ar-zdrill" title="See all invoices in '+esc(Z.name)+'"') + '<td style="'+td+AR_GROUP_SEP+'"></td>'
+      + _arCells(Z.agg, 'td', td + 'font-weight:700;', ' data-act="arPgZoneDrill" data-val="'+esc(Z.name)+'" class="ar-zdrill" title="See all invoices in '+esc(Z.name)+'"',
+          ' data-act="arPgZoneDrill" data-val="'+esc(Z.name)+'" data-oa="1" class="ar-zdrill" title="See on-account lines in '+esc(Z.name)+'"') + '<td style="'+td+AR_GROUP_SEP+'"></td>'
       + '<td style="'+td+'font-weight:700;color:#173E76;">'+_arDsoTxt(Z.agg)+'</td></tr>';
     if (!open) return;
     Z.custList.forEach(function(Cu){
@@ -6490,7 +6492,7 @@ function arPage(){
         +   '<div style="font-size:12.5px;font-weight:600;color:#15233B;">'+esc(Cu.name)+'</div>'
         +   (Cu.repList.length ? '<div title="'+esc(Cu.repList.join(', '))+'" style="font-size:10.5px;color:#8A9AB5;font-weight:600;margin-top:2px;">'+esc(Cu.repList.slice(0, 2).join(', '))+(Cu.repList.length > 2 ? ' +'+(Cu.repList.length - 2)+' more' : '')+'</div>' : '')
         + '</td>'
-        + _arCells(Cu.agg, 'td', td)
+        + _arCells(Cu.agg, 'td', td, '', ' data-act="arPgCust" data-val="'+i+'" data-oa="1" class="ar-oadrill" title="See on-account lines for '+esc(Cu.name)+'"')
         + '<td style="'+td+'color:#3C5275;'+AR_GROUP_SEP+'">'+(Cu.creditDays !== null ? esc(Cu.creditDays) : '–')+'</td>'
         + '<td style="'+td+'color:#15233B;">'+_arDsoTxt(Cu.agg)+'</td></tr>';
     });
@@ -6746,7 +6748,8 @@ function _arAmt(v){
   var out = (usd ? '$' : '\u20B9') + n + (u ? (u === 'k' ? '' : ' ') + u : '');
   return val < 0 ? '(' + out + ')' : out;
 }
-function _arCells(a, tag, style, attr){
+// oaAttr: the On Account cell's own attributes (its drill shows only on-account lines)
+function _arCells(a, tag, style, attr, oaAttr){
   attr = attr || '';
   var C = AR_COLORS;
   function amt(v, color){ return v ? '<span style="color:'+(color || '#15233B')+';">'+_arAmt(v)+'</span>' : '<span style="color:#D5DCE6;">–</span>'; }
@@ -6756,7 +6759,7 @@ function _arCells(a, tag, style, attr){
     + (_arSlabsOpen() ? AR_BUCKETS : []).map(function(b, i, all){ return '<'+tag+attr+' style="'+style+'text-align:right;'+(i === all.length - 1 ? sep : '')+'">'+amt(a[b.key], C[b.key].fg)+'</'+tag+'>'; }).join('')
     + '<'+tag+attr+' style="'+style+'text-align:right;font-weight:700;background:'+C.due.bg+';'+sep+'">'+amt(_arOverdue(a), C.due.fg)+'</'+tag+'>'
     + '<'+tag+attr+' style="'+style+'text-align:right;'+sep+'">'+amt(a.nd, C.nd.fg)+'</'+tag+'>'
-    + '<'+tag+attr+' style="'+style+'text-align:right;'+sep+'">'+amt(-a.oa, C.oa.fg)+'</'+tag+'>';
+    + '<'+tag+(a.oa && oaAttr ? oaAttr : attr)+' style="'+style+'text-align:right;'+sep+'">'+amt(-a.oa, C.oa.fg)+'</'+tag+'>';
 }
 
 // Zones start collapsed; a single visible zone (e.g. a zonal manager) starts open
@@ -6766,11 +6769,12 @@ function _arZoneIsOpen(zone, M){
   return M && M.zones.length === 1;
 }
 
-// Rows behind the open panel: one customer in a zone, or (customer null) the whole zone
+// Rows behind the open panel: one customer in a zone, or (customer null) the whole zone;
+// opened from an On Account cell (oa) → only the on-account lines
 function _arDrillRows(){
   var dr = state.arDrill;
   if (!dr) return [];
-  return _arVisibleRows().filter(function(r){ return r.z === dr.zone && (!dr.customer || r.c === dr.customer); })
+  return _arVisibleRows().filter(function(r){ return r.z === dr.zone && (!dr.customer || r.c === dr.customer) && (!dr.oa || _arIsOa(r)); })
     .sort(function(a, b){
       return (dr.customer ? 0 : String(a.c).localeCompare(String(b.c))) || (b.o > 0) - (a.o > 0) || (b.od || 0) - (a.od || 0);
     });
@@ -6936,7 +6940,7 @@ function arDrillDrawer(){
     +   '<div style="padding:18px 22px 14px;background:#FFFFFF;border-bottom:1px solid #E3EAF4;">'
     +     '<div style="display:flex;align-items:flex-start;gap:10px;">'
     +       '<div style="flex:1;min-width:0;">'
-    +         '<div style="font-size:11px;font-weight:700;color:#6488D6;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:3px;">'+(isZone ? 'Zone invoices' : 'Customer invoices')+'</div>'
+    +         '<div style="font-size:11px;font-weight:700;color:#6488D6;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:3px;">'+(dr.oa ? (isZone ? 'Zone on-account lines' : 'Customer on-account lines') : (isZone ? 'Zone invoices' : 'Customer invoices'))+'</div>'
     +         '<div style="font-size:17px;font-weight:800;color:#15233B;">'+esc(isZone ? dr.zone : dr.customer)+'</div>'
     +         '<div style="font-size:11.5px;color:#6B82A0;font-weight:600;margin-top:3px;">'+sub.join(' · ')+'</div>'
     +       '</div>'
@@ -6944,13 +6948,17 @@ function arDrillDrawer(){
     +         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Excel</button>'
     +       '<button data-act="arPgDrillClose" title="Close" style="border:none;background:#F1F5FB;border-radius:999px;width:32px;height:32px;cursor:pointer;color:#3C5275;font-size:16px;line-height:1;">×</button>'
     +     '</div>'
-    +     '<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:14px;">'
+    +     (dr.oa
+            ? '<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:14px;">'
+              + card('On Account', _arFull(-agg.oa), '#946312', rows.length.toLocaleString('en-IN') + ' line' + (rows.length === 1 ? '' : 's') + ' · received, not yet adjusted')
+              + '</div>'
+            : '<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:14px;">'
     +       card('Total Outstanding', _arFull(agg.total), '#2C4E82', agg.inv.toLocaleString('en-IN') + ' open invoice' + (agg.inv === 1 ? '' : 's'))
     +       card('Overdue', _arFull(overdue), '#D9534F', agg.total ? Math.round(overdue / agg.total * 100) + '% of outstanding' : '')
     +       card('Not Due', _arFull(agg.nd), '#15875A', 'within credit days')
     +       card('On Account', _arFull(-agg.oa), '#946312', agg.oa ? 'paid extra, to adjust' : 'nothing extra paid')
     +       card('Net Outstanding', _arFull(agg.total - agg.oa), '#0D7C6B', 'total − on account')
-    +     '</div>'
+    +     '</div>')
     +   '</div>'
     +   '<div style="flex:1;min-height:0;padding:12px 16px 16px;display:flex;flex-direction:column;">'
     +     '<div style="max-height:100%;overflow:auto;background:#FFFFFF;border:1px solid #E3EAF4;border-radius:12px;">'+table+'</div>'
@@ -6999,7 +7007,7 @@ function arExportDrill(){
   });
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Invoices');
-  XLSX.writeFile(wb, ('AR_' + (dr.customer || dr.zone)).replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '_').slice(0, 60) + (arMeta && arMeta.asOn ? '_' + arMeta.asOn : '') + '.xlsx');
+  XLSX.writeFile(wb, ('AR_' + (dr.oa ? 'OnAccount_' : '') + (dr.customer || dr.zone)).replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '_').slice(0, 60) + (arMeta && arMeta.asOn ? '_' + arMeta.asOn : '') + '.xlsx');
 }
 
 function arExportExcel(){
@@ -7062,10 +7070,10 @@ function arHandleAct(act, el){
     state.arSort = cur.key === v ? { key:v, dir:-cur.dir } : { key:v, dir:(v === 'name' ? 1 : -1) };
     _arRerenderMain(false);
   } else if (act === 'arPgZoneDrill') {
-    state.arDrill = { zone:v, customer:null }; render();
+    state.arDrill = { zone:v, customer:null, oa:el.getAttribute('data-oa') === '1' }; render();
   } else if (act === 'arPgCust') {
     var c = (window._arCustIndex || [])[+v];
-    if (c) { state.arDrill = c; render(); }
+    if (c) { state.arDrill = { zone:c.zone, customer:c.customer, oa:el.getAttribute('data-oa') === '1' }; render(); }
   } else if (act === 'arPgDrillClose') {
     state.arDrill = null; render();
   } else if (act === 'arPgDrillExport') {
