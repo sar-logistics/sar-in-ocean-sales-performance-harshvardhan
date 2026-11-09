@@ -140,7 +140,11 @@ function buildArPayload(rows, repLookup, meta) {
   // DSO totals (rows the sync marks _dso): [customer, sp, zone, lob, Σ bill, Σ bill × days, gl, Σ days, invoices]
   // The page shows the simple average: Σ days ÷ invoices
   const dso = [];
+  // Left out of the AR report entirely: GL Group "AR-PDD" and Type "Bank Payment On Account"
+  const lc = (v) => String(v || "").trim().toLowerCase();
   for (const r of rows) {
+    if (lc(r._dso ? r.glGroup : r["GL Group Name"]) === "ar-pdd") continue;
+    if (!r._dso && lc(r.type) === "bank payment on account") continue;
     if (r._dso) {
       const rp = repLookup(r.salesPerson);
       dso.push([

@@ -175,6 +175,8 @@
 // (Scope: Sales Performance / Customer / Agent Insights only — Tradelane
 // has no concept of General jobs since they have no export/import
 // direction or discharge country, so it's never included there.)
+// AR page: GL Group Names ticked by default
+var AR_DEFAULT_GL = ['TPY Receivable','OVR Receivable','LEG Receivable','STN Receivable','DIP Receivable','CGN Receivable'];
 function _lobPassesFilter(rLob, filterLobsArr) {
   if (rLob === 'GENERAL') {
     return !!(filterLobsArr && filterLobsArr.indexOf('GENERAL') > -1);
@@ -1817,6 +1819,8 @@ var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:f
   filterZoneDropOpen: false,
     filterRegionDropOpen: false,
   filterLobs: ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT','GENERAL'],   // default Ocean LOBs + Air cross-sales + General; empty = All LOBs
+  filterGl: AR_DEFAULT_GL.slice(),   // AR page GL Group Name filter; empty = all
+  arLobs: [],                        // AR page LOB cards (multi-select); empty = all LOBs
   adminSearch: '',        // admin panel user search
   custOpenFilter:  null, // 'name' or 'rep'
   agentOpenFilter:  null, // 'name' or 'rep'
@@ -3116,7 +3120,7 @@ function topbar(){
       // data — no filter selection could ever change what they see.
       +(['admin','usage','org','teams'].indexOf(state.page) >= 0 || (currentUser && (currentUser.role||'').toLowerCase().trim()==='sales rep') ? '' : (function(){
         var _isInsightPg = ['customers','agents','tradelane'].indexOf(state.page) >= 0;
-        var activeCount = (_isInsightPg ? 0 : state.filterLobs.length) + state.filterReps.length + (state.filterZones||[]).length + (state.filterRegions||[]).length;
+        var activeCount = (_isInsightPg || state.page === 'ar' ? 0 : state.filterLobs.length) + state.filterReps.length + (state.filterZones||[]).length + (state.filterRegions||[]).length;
         var isFOpen = state.filtersOpen;
         var btnHtml = '<button data-act="toggleFiltersDrop" style="display:flex;align-items:center;gap:6px;background:'+(activeCount>0?'#EEF3FC':'#FFFFFF')+';border:1.5px solid '+(isFOpen?BRAND_A1:(activeCount>0?'#B7C8EA':'#D8E1F0'))+';border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:'+(activeCount>0?'#1E3A66':'#3C5275')+';cursor:pointer;transition:box-shadow 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';">'
           +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>'
@@ -3189,7 +3193,8 @@ function topbar(){
           // hidden on all three insight pages, same as before.
           var _isInsightPage = ['customers','agents','tradelane'].indexOf(state.page) >= 0;
 
-          var lobSection = _isInsightPage ? '' : sectionHeader('LOBs', state.filterLobs.length, lobOpen, 'toggleFilterLobDrop')
+          // AR has its own LOB cards beside the Filters button
+          var lobSection = _isInsightPage || state.page === 'ar' ? '' : sectionHeader('LOBs', state.filterLobs.length, lobOpen, 'toggleFilterLobDrop')
             + (lobOpen ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'
                 + searchBox('lob-search-input', 'Search LOBs…')
                 + '<div id="lob-checklist" style="max-height:180px;overflow-y:auto;">'
@@ -3268,6 +3273,8 @@ var zoneSection = sectionHeader('Zones', (state.filterZones||[]).length, zoneOpe
         }
         return btnHtml;
       })())
+      // AR: LOB cards beside the Filters button (multi-select)
+      +(state.page === 'ar' ? _arLobCards() : '')
       +'<div style="flex:1;min-width:8px;"></div>'
       // Refresh — pushed to the far right, filled accent style with stronger shadow
       // Spacer pushes Feedback + Refresh to the right
@@ -6231,14 +6238,15 @@ function _arScope(){
   return null;
 }
 
-// Rows the user may see, after the Filters panel (zone / region / rep / LOB)
-function _arVisibleRows(list){
+// Rows the user may see, after the Filters panel (zone / region / rep), GL Group and the LOB cards
+// (skipLob: ignore the LOB cards, so each card can show its own total)
+function _arVisibleRows(list, skipLob){
   list = list || arRows;
   if (!list) return [];
   var scope = _arScope();
   var fz = state.filterZones || [], fr = state.filterRegions || [];
   var frep = (state.filterReps || []).map(normalizeName);
-  var flob = state.filterLobs || [];
+  var flob = state.arLobs || [];
   var fgl = state.filterGl || [];
   var regionMap = window._zoneRegionMap || {};
   return list.filter(function(r){
@@ -6249,7 +6257,7 @@ function _arVisibleRows(list){
     if (fz.length && fz.indexOf(r.z) === -1) return false;
     if (!fz.length && fr.length && fr.indexOf(r.z === 'Cross Sales' ? 'Cross Sales' : (regionMap[r.z] || '')) === -1) return false;
     if (frep.length && frep.indexOf(normalizeName(r.sp)) === -1) return false;
-    if (!_lobPassesFilter(r.lob, flob)) return false;
+    if (!skipLob && flob.length && flob.indexOf(r.lob) === -1) return false;
     if (fgl.length && fgl.indexOf(r.gl || '') === -1) return false;
     return true;
   });
@@ -6522,6 +6530,39 @@ function _arGlDropdown(){
       + '</div>';
   }
   return html + '</div>';
+}
+
+// LOB cards beside the Filters button (state.arLobs; empty = all). Each card shows its
+// net outstanding under the other filters; click to add / remove, "All" clears.
+var AR_LOB_ORDER = ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT','GENERAL'];
+var AR_LOB_LABELS = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','ISOTANK EXPORT':'ISO Tank Export','ISOTANK IMPORT':'ISO Tank Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import','GENERAL':'General'};
+function _arLobCards(){
+  if (!arDataReady || !arRows || !arRows.length) return '';
+  var sel = state.arLobs || [], net = {}, all = 0;
+  _arVisibleRows(arRows, true).forEach(function(r){
+    var v = r.o;   // net = outstanding − on account (on-account lines are already negative)
+    net[r.lob] = (net[r.lob] || 0) + v; all += v;
+  });
+  var lobs = AR_LOB_ORDER.filter(function(k){ return net[k] !== undefined || sel.indexOf(k) > -1; });
+  function card(label, amt, on, act, val){
+    return '<button data-act="'+act+'" data-val="'+esc(val)+'" class="btnq" title="'+esc(label)+': '+esc(_arCur(amt))+'" style="display:flex;flex-direction:column;align-items:flex-start;gap:1px;flex-shrink:0;cursor:pointer;'
+      + 'border:1.5px solid '+(on ? BRAND_A1 : '#D8E1F0')+';background:'+(on ? '#EEF3FC' : '#fff')+';border-radius:9px;padding:3px 8px;line-height:1.15;">'
+      + '<span style="font-size:9px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;color:'+(on ? '#173E76' : '#5B7298')+';white-space:nowrap;">'+esc(label)+'</span>'
+      + '<span style="font-family:\'DM Mono\',monospace;font-size:11.5px;font-weight:600;color:'+(on ? '#15233B' : '#3C5275')+';white-space:nowrap;">'+_arCur(amt)+'</span>'
+      + '</button>';
+  }
+  // Scrolls sideways when the top bar is too narrow; the right edge fades while more cards are hidden
+  return '<div id="ar-lob-cards" onscroll="_arLobFade(this)" style="display:flex;align-items:center;gap:4px;flex-shrink:1;min-width:0;overflow-x:auto;scrollbar-width:none;">'
+    + card('All LOBs', all, sel.length === 0, 'arPgLobAll', '')
+    + lobs.map(function(k){ return card(AR_LOB_LABELS[k] || k, net[k] || 0, sel.indexOf(k) > -1, 'arPgLobPick', k); }).join('')
+    + '</div>';
+}
+
+function _arLobFade(el){
+  el = el || document.getElementById('ar-lob-cards');
+  if (!el) return;
+  var more = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+  el.style.webkitMaskImage = el.style.maskImage = more ? 'linear-gradient(90deg,#000 calc(100% - 36px),transparent)' : '';
 }
 
 // Admin: set the overdue slabs (applies to everyone)
@@ -6970,6 +7011,12 @@ function arHandleAct(act, el){
     state.arGlOpen = !state.arGlOpen; _arRerenderMain(false);
   } else if (act === 'arPgGlClose') {
     state.arGlOpen = false; _arRerenderMain(false);
+  } else if (act === 'arPgLobAll') {
+    state.arLobs = []; render();
+  } else if (act === 'arPgLobPick') {
+    var lv = v || '', curL = state.arLobs || [];
+    state.arLobs = curL.indexOf(lv) > -1 ? curL.filter(function(x){ return x !== lv; }) : curL.concat([lv]);
+    render();
   } else if (act === 'arPgGlAll') {
     state.filterGl = []; _arRerenderMain(false);
   } else if (act === 'arPgGlPick') {
@@ -9114,6 +9161,8 @@ function scheduleRender() {
 }
 
 function render(){
+  // AR LOB cards: fade the right edge while some are scrolled out of view (next frame, once drawn)
+  if(state.page==='ar') requestAnimationFrame(function(){ _arLobFade(); });
   if (currentUser && (currentUser.role||'').toLowerCase().trim()==='sales rep' && currentUser.zone) {
     state.zoneOpen[currentUser.zone] = true;
     state.pendencyZoneOpen[currentUser.zone] = true;
@@ -9236,6 +9285,7 @@ function render(){
   if(_sameView && innerScrollTop && _newInner) _newInner.scrollTop=innerScrollTop;
   requestAnimationFrame(positionAllDrops);
 }
+window.addEventListener('resize', function(){ if(state.page==='ar') _arLobFade(); });
 function renderKeepTopbar(){
   // Re-render everything EXCEPT topbar — used when date inputs change
   // so the native date picker doesn't get destroyed mid-interaction
@@ -11159,7 +11209,7 @@ document.addEventListener('click', function(ev){
         else if(act==='toggleFilterZoneDrop'){ ev.stopPropagation(); state.filterZoneDropOpen=!state.filterZoneDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='filterResetAll'){
     ev.stopPropagation();
-    state.filterLobs=[]; state.filterReps=[]; state.filterZones=[]; state.filterGl=[];
+    state.filterLobs=[]; state.filterReps=[]; state.filterZones=[]; state.filterGl=AR_DEFAULT_GL.slice(); state.arLobs=[];
     // Same reasoning as filterZoneAll above — do not strip a Regional
     // Managers actual RLS scope, only reset manual choices for other roles.
     var _raRole = currentUser ? (currentUser.role||'').toLowerCase().trim() : '';
