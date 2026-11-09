@@ -6761,7 +6761,7 @@ function _arCells(a, tag, style, attr, cellAttr){
     + (_arSlabsOpen() ? AR_BUCKETS : []).map(function(b, i, all){ return '<'+tag+at(b.key, a[b.key], b.label + ' days overdue')+' style="'+style+'text-align:right;'+(i === all.length - 1 ? sep : '')+'">'+amt(a[b.key], C[b.key].fg)+'</'+tag+'>'; }).join('')
     + '<'+tag+at('due', _arOverdue(a), 'overdue invoices')+' style="'+style+'text-align:right;font-weight:700;background:'+C.due.bg+';'+sep+'">'+amt(_arOverdue(a), C.due.fg)+'</'+tag+'>'
     + '<'+tag+at('nd', a.nd, 'not-due invoices')+' style="'+style+'text-align:right;'+sep+'">'+amt(a.nd, C.nd.fg)+'</'+tag+'>'
-    + '<'+tag+at('oa', a.oa, 'on-account lines')+' style=""'+style+'text-align:right;'+sep+'">'+amt(-a.oa, C.oa.fg)+'</'+tag+'>';
+    + '<'+tag+at('oa', a.oa, 'on-account lines')+' style="'+style+'text-align:right;'+sep+'">'+amt(-a.oa, C.oa.fg)+'</'+tag+'>';
 }
 
 // Zones start collapsed; a single visible zone (e.g. a zonal manager) starts open
