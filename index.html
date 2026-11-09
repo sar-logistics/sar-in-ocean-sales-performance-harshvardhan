@@ -3118,9 +3118,9 @@ function topbar(){
       // Filters — only on Sales Performance (sales page). Hidden entirely
       // for Sales Rep, since RLS already locks them to only their own
       // data — no filter selection could ever change what they see.
-      +(['admin','usage','org','teams'].indexOf(state.page) >= 0 || (currentUser && (currentUser.role||'').toLowerCase().trim()==='sales rep') ? '' : (function(){
+      +(['admin','usage','org','teams','ar'].indexOf(state.page) >= 0 || (currentUser && (currentUser.role||'').toLowerCase().trim()==='sales rep') ? '' : (function(){
         var _isInsightPg = ['customers','agents','tradelane'].indexOf(state.page) >= 0;
-        var activeCount = (_isInsightPg || state.page === 'ar' ? 0 : state.filterLobs.length) + state.filterReps.length + (state.filterZones||[]).length + (state.filterRegions||[]).length;
+        var activeCount = (_isInsightPg ? 0 : state.filterLobs.length) + state.filterReps.length + (state.filterZones||[]).length + (state.filterRegions||[]).length;
         var isFOpen = state.filtersOpen;
         var btnHtml = '<button data-act="toggleFiltersDrop" style="display:flex;align-items:center;gap:6px;background:'+(activeCount>0?'#EEF3FC':'#FFFFFF')+';border:1.5px solid '+(isFOpen?BRAND_A1:(activeCount>0?'#B7C8EA':'#D8E1F0'))+';border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:'+(activeCount>0?'#1E3A66':'#3C5275')+';cursor:pointer;transition:box-shadow 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';">'
           +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>'
@@ -3193,8 +3193,7 @@ function topbar(){
           // hidden on all three insight pages, same as before.
           var _isInsightPage = ['customers','agents','tradelane'].indexOf(state.page) >= 0;
 
-          // AR has its own LOB cards beside the Filters button
-          var lobSection = _isInsightPage || state.page === 'ar' ? '' : sectionHeader('LOBs', state.filterLobs.length, lobOpen, 'toggleFilterLobDrop')
+          var lobSection = _isInsightPage ? '' : sectionHeader('LOBs', state.filterLobs.length, lobOpen, 'toggleFilterLobDrop')
             + (lobOpen ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'
                 + searchBox('lob-search-input', 'Search LOBs…')
                 + '<div id="lob-checklist" style="max-height:180px;overflow-y:auto;">'
@@ -3273,8 +3272,8 @@ var zoneSection = sectionHeader('Zones', (state.filterZones||[]).length, zoneOpe
         }
         return btnHtml;
       })())
-      // AR: LOB cards beside the Filters button (multi-select)
-      +(state.page === 'ar' ? _arLobCards() : '')
+      // AR: LOB / Region / Zone / Rep dropdowns instead of the Filters button
+      +(state.page === 'ar' ? _arTopFilters() : '')
       +'<div style="flex:1;min-width:8px;"></div>'
       // Refresh — pushed to the far right, filled accent style with stronger shadow
       // Spacer pushes Feedback + Refresh to the right
@@ -6532,37 +6531,108 @@ function _arGlDropdown(){
   return html + '</div>';
 }
 
-// LOB cards beside the Filters button (state.arLobs; empty = all). Each card shows its
-// net outstanding under the other filters; click to add / remove, "All" clears.
+// AR top-bar filters (in place of the Filters button): LOB · Region · Zone · Rep dropdowns.
+// LOB is the AR page's own (state.arLobs; empty = all, with each LOB's net outstanding);
+// Region / Zone / Rep are the same selections as the rest of the dashboard.
 var AR_LOB_ORDER = ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT','GENERAL'];
 var AR_LOB_LABELS = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','ISOTANK EXPORT':'ISO Tank Export','ISOTANK IMPORT':'ISO Tank Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import','GENERAL':'General'};
-function _arLobCards(){
-  if (!arDataReady || !arRows || !arRows.length) return '';
-  var sel = state.arLobs || [], net = {}, all = 0;
-  _arVisibleRows(arRows, true).forEach(function(r){
-    var v = r.o;   // net = outstanding − on account (on-account lines are already negative)
-    net[r.lob] = (net[r.lob] || 0) + v; all += v;
-  });
-  var lobs = AR_LOB_ORDER.filter(function(k){ return net[k] !== undefined || sel.indexOf(k) > -1; });
-  function card(label, amt, on, act, val){
-    return '<button data-act="'+act+'" data-val="'+esc(val)+'" class="btnq" title="'+esc(label)+': '+esc(_arCur(amt))+'" style="display:flex;flex-direction:column;align-items:flex-start;gap:1px;flex-shrink:0;cursor:pointer;'
-      + 'border:1.5px solid '+(on ? BRAND_A1 : '#D8E1F0')+';background:'+(on ? '#EEF3FC' : '#fff')+';border-radius:9px;padding:3px 8px;line-height:1.15;">'
-      + '<span style="font-size:9px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;color:'+(on ? '#173E76' : '#5B7298')+';white-space:nowrap;">'+esc(label)+'</span>'
-      + '<span style="font-family:\'DM Mono\',monospace;font-size:11.5px;font-weight:600;color:'+(on ? '#15233B' : '#3C5275')+';white-space:nowrap;">'+_arCur(amt)+'</span>'
-      + '</button>';
+function _arRole(){ return currentUser ? (currentUser.role || '').toLowerCase().trim() : ''; }
+// One dropdown pill + its menu; items = [{ label, val, on, amt? }]
+function _arTopDrop(key, title, allLabel, sel, items, opts){
+  opts = opts || {};
+  var open = state.arTopOpen === key;
+  var label = sel.length === 0 ? 'All' : sel.length === 1 ? (opts.short ? opts.short(sel[0]) : sel[0]) : sel.length + ' selected';
+  var html = '<div style="position:relative;flex-shrink:0;">'
+    + '<button data-act="arPgTopToggle" data-val="'+key+'" class="btnq" title="Filter by '+title+'" style="display:flex;align-items:center;gap:6px;border:1.5px solid '+(open ? BRAND_A1 : (sel.length ? '#B7C8EA' : '#D8E1F0'))+';background:'+(sel.length ? '#EEF3FC' : '#fff')+';border-radius:999px;padding:7px 13px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;white-space:nowrap;">'
+    +   title+': <span style="color:#173E76;">'+esc(label)+'</span>'
+    +   '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="transform:rotate('+(open ? 180 : 0)+'deg);transition:transform .15s;"><path d="M6 9l6 6 6-6"/></svg>'
+    + '</button>';
+  if (open) {
+    var row = function(text, on, act, val, amt){
+      return '<div data-act="'+act+'" data-val="'+esc(val)+'" data-search="'+esc(String(text).toLowerCase())+'" class="ar-top-row" style="display:flex;align-items:center;gap:9px;padding:7px 10px;cursor:pointer;border-radius:7px;" onmouseenter="this.style.background=\'#F4F7FC\'" onmouseleave="this.style.background=\'transparent\'">'
+        + '<span style="width:16px;height:16px;border-radius:4px;border:1.5px solid '+(on ? BRAND_A1 : '#C5D0E0')+';background:'+(on ? BRAND_A1 : '#fff')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+        +   (on ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '')
+        + '</span><span style="flex:1;font-size:12.5px;color:#374151;font-weight:'+(on ? 600 : 500)+';white-space:nowrap;">'+esc(text)+'</span>'
+        + (amt !== undefined ? '<span style="font-family:\'DM Mono\',monospace;font-size:11.5px;font-weight:600;color:'+(amt < 0 ? '#0F7048' : '#15233B')+';white-space:nowrap;margin-left:14px;">'+_arCur(amt)+'</span>' : '')
+        + '</div>';
+    };
+    html += '<div data-act="arPgTopClose" style="position:fixed;inset:0;z-index:940;"></div>'
+      + '<div style="position:absolute;top:calc(100% + 6px);left:0;min-width:'+(opts.amt !== undefined ? 250 : 200)+'px;background:#fff;border-radius:12px;box-shadow:0 12px 36px rgba(13,43,94,0.2),0 0 0 1px rgba(13,43,94,0.07);z-index:941;padding:6px;">'
+      +   (opts.search ? '<div style="display:flex;align-items:center;gap:7px;border:1.5px solid #E3E9F2;border-radius:7px;padding:6px 10px;margin-bottom:6px;">'
+            + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>'
+            + '<input type="text" placeholder="Search…" autocomplete="off" oninput="_arTopSearch(this)" style="border:none;outline:none;font-size:12.5px;color:#374151;flex:1;min-width:0;background:transparent;"/></div>' : '')
+      +   '<div style="max-height:320px;overflow:auto;">'
+      +     row(allLabel, sel.length === 0, 'arPgTopAll', key, opts.amt)
+      +     items.map(function(it){ return row(it.label, it.on, 'arPgTopPick', key + '|' + it.val, it.amt); }).join('')
+      +   '</div></div>';
   }
-  // Scrolls sideways when the top bar is too narrow; the right edge fades while more cards are hidden
-  return '<div id="ar-lob-cards" onscroll="_arLobFade(this)" style="display:flex;align-items:center;gap:4px;flex-shrink:1;min-width:0;overflow-x:auto;scrollbar-width:none;">'
-    + card('All LOBs', all, sel.length === 0, 'arPgLobAll', '')
-    + lobs.map(function(k){ return card(AR_LOB_LABELS[k] || k, net[k] || 0, sel.indexOf(k) > -1, 'arPgLobPick', k); }).join('')
-    + '</div>';
+  return html + '</div>';
 }
+function _arTopSearch(inp){
+  var q = inp.value.toLowerCase().trim();
+  var box = inp.parentElement.nextElementSibling;
+  box.querySelectorAll('.ar-top-row').forEach(function(r){
+    var all = r.getAttribute('data-act') === 'arPgTopAll';
+    r.style.display = all ? (q ? 'none' : 'flex') : (!q || (r.getAttribute('data-search') || '').indexOf(q) > -1 ? 'flex' : 'none');
+  });
+}
+function _arTopFilters(){
+  if (!arDataReady || !arRows || !arRows.length) return '';
+  var role = _arRole(), scope = _arScope(), regionMap = window._zoneRegionMap || {};
+  var fr = state.filterRegions || [], fz = state.filterZones || [], frep = state.filterReps || [], flob = state.arLobs || [];
+  var inScope = arRows.filter(function(r){
+    if (!scope) return true;
+    if (scope.reps && scope.reps.indexOf(normalizeName(r.sp)) === -1) return false;
+    if (scope.zones && scope.zones.indexOf(r.z) === -1) return false;
+    return true;
+  });
+  var regionOf = function(z){ return z === 'Cross Sales' ? 'Cross Sales' : (regionMap[z] || ''); };
+  var out = '';
 
-function _arLobFade(el){
-  el = el || document.getElementById('ar-lob-cards');
-  if (!el) return;
-  var more = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
-  el.style.webkitMaskImage = el.style.maskImage = more ? 'linear-gradient(90deg,#000 calc(100% - 36px),transparent)' : '';
+  // LOB, with each LOB's net outstanding under the other filters
+  var net = {}, all = 0;
+  _arVisibleRows(arRows, true).forEach(function(r){ net[r.lob] = (net[r.lob] || 0) + r.o; all += r.o; });
+  var lobs = AR_LOB_ORDER.filter(function(k){ return net[k] !== undefined || flob.indexOf(k) > -1; });
+  out += _arTopDrop('lob', 'LOB', 'All LOBs', flob,
+    lobs.map(function(k){ return { label: AR_LOB_LABELS[k] || k, val: k, on: flob.indexOf(k) > -1, amt: net[k] || 0 }; }),
+    { amt: all, short: function(k){ return AR_LOB_LABELS[k] || k; } });
+
+  if (role !== 'sales rep') {
+    if (role !== 'zonal manager') {
+      // Region: from the zone → region map (+ Cross Sales); a Regional Manager only gets their own
+      var regs = {};
+      Object.keys(regionMap).forEach(function(z){ if (regionMap[z]) regs[regionMap[z]] = 1; });
+      var regList = Object.keys(regs).sort().concat(['Cross Sales']);
+      if (role === 'regional manager') {
+        var mine = (currentUser.region || '').split(',').map(function(x){ return x.trim(); }).filter(Boolean);
+        if (mine.length) regList = regList.filter(function(r){ return mine.indexOf(r) > -1; });
+      }
+      out += _arTopDrop('region', 'Region', 'All Regions', fr,
+        regList.map(function(r){ return { label: r, val: r, on: fr.indexOf(r) > -1 }; }));
+      // Zone: zones with AR rows, narrowed to the ticked regions
+      var zs = {};
+      inScope.forEach(function(r){ if (r.z && (!fr.length || fr.indexOf(regionOf(r.z)) > -1)) zs[r.z] = 1; });
+      fz.forEach(function(z){ zs[z] = 1; });
+      out += _arTopDrop('zone', 'Zone', 'All Zones', fz,
+        sortZones(Object.keys(zs)).map(function(z){ return { label: z, val: z, on: fz.indexOf(z) > -1 }; }));
+    }
+    // Rep: reps with AR rows in the chosen zones / regions
+    var reps = {};
+    inScope.forEach(function(r){
+      if (!r.sp) return;
+      if (fz.length ? fz.indexOf(r.z) === -1 : (fr.length && fr.indexOf(regionOf(r.z)) === -1)) return;
+      reps[r.sp] = 1;
+    });
+    frep.forEach(function(n){ reps[n] = 1; });
+    var frepN = frep.map(normalizeName);
+    out += _arTopDrop('rep', 'Rep', 'All Reps', frep,
+      Object.keys(reps).sort(function(a, b){ return a.localeCompare(b); }).map(function(n){ return { label: n, val: n, on: frepN.indexOf(normalizeName(n)) > -1 }; }),
+      { search: true });
+  }
+  if (flob.length || fr.length || fz.length || frep.length) {
+    out += '<button data-act="arPgTopReset" class="btnq" title="Clear LOB, Region, Zone and Rep" style="flex-shrink:0;background:none;border:none;color:#94A3B8;font-size:11.5px;font-weight:700;cursor:pointer;padding:6px 4px;white-space:nowrap;">Clear</button>';
+  }
+  return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;">' + out + '</div>';
 }
 
 // Admin: set the overdue slabs (applies to everyone)
@@ -7011,12 +7081,31 @@ function arHandleAct(act, el){
     state.arGlOpen = !state.arGlOpen; _arRerenderMain(false);
   } else if (act === 'arPgGlClose') {
     state.arGlOpen = false; _arRerenderMain(false);
-  } else if (act === 'arPgLobAll') {
-    state.arLobs = []; render();
-  } else if (act === 'arPgLobPick') {
-    var lv = v || '', curL = state.arLobs || [];
-    state.arLobs = curL.indexOf(lv) > -1 ? curL.filter(function(x){ return x !== lv; }) : curL.concat([lv]);
+  } else if (act === 'arPgTopToggle') {
+    state.arTopOpen = state.arTopOpen === v ? null : v; render();
+  } else if (act === 'arPgTopClose') {
+    state.arTopOpen = null; render();
+  } else if (act === 'arPgTopAll') {
+    if (v === 'lob') state.arLobs = [];
+    else if (v === 'rep') state.filterReps = [];
+    else {
+      // Same as the Filters panel: a Regional Manager's regions are their access, so they stay
+      if (v === 'region' && _arRole() !== 'regional manager') state.filterRegions = [];
+      state.filterZones = []; state._regionExpandedZones = false;
+    }
     render();
+  } else if (act === 'arPgTopPick') {
+    var cut = (v || '').indexOf('|'), key = v.slice(0, cut), pv = v.slice(cut + 1);
+    var tog = function(list){ list = list || []; return list.indexOf(pv) > -1 ? list.filter(function(x){ return x !== pv; }) : list.concat([pv]); };
+    if (key === 'lob') state.arLobs = tog(state.arLobs);
+    else if (key === 'region') { state.filterRegions = tog(state.filterRegions); state.filterZones = []; state._regionExpandedZones = false; }
+    else if (key === 'zone') { state.filterZones = tog(state.filterZones); state._regionExpandedZones = false; state.filterReps = []; }
+    else if (key === 'rep') state.filterReps = tog(state.filterReps);
+    render();
+  } else if (act === 'arPgTopReset') {
+    state.arLobs = []; state.filterReps = []; state.filterZones = []; state._regionExpandedZones = false;
+    if (_arRole() !== 'regional manager') state.filterRegions = [];
+    state.arTopOpen = null; render();
   } else if (act === 'arPgGlAll') {
     state.filterGl = []; _arRerenderMain(false);
   } else if (act === 'arPgGlPick') {
@@ -9161,8 +9250,6 @@ function scheduleRender() {
 }
 
 function render(){
-  // AR LOB cards: fade the right edge while some are scrolled out of view (next frame, once drawn)
-  if(state.page==='ar') requestAnimationFrame(function(){ _arLobFade(); });
   if (currentUser && (currentUser.role||'').toLowerCase().trim()==='sales rep' && currentUser.zone) {
     state.zoneOpen[currentUser.zone] = true;
     state.pendencyZoneOpen[currentUser.zone] = true;
@@ -9285,7 +9372,6 @@ function render(){
   if(_sameView && innerScrollTop && _newInner) _newInner.scrollTop=innerScrollTop;
   requestAnimationFrame(positionAllDrops);
 }
-window.addEventListener('resize', function(){ if(state.page==='ar') _arLobFade(); });
 function renderKeepTopbar(){
   // Re-render everything EXCEPT topbar — used when date inputs change
   // so the native date picker doesn't get destroyed mid-interaction
