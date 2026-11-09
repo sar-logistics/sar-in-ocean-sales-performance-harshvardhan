@@ -6821,6 +6821,7 @@ function _arDet(r){ return arDetailMap[_arDetKey(r.c, r.txn, r.h, r.o)] || null;
 // Panel columns after Invoice No / Date / Due Date (k = detail field, or a fn of the row)
 var AR_DETAIL_COLS = [
   ['Receipt Date', 'receiptDate'],
+  ['Overdue Days', function(r){ return !_arIsOa(r) && r.od > 0 ? r.od : ''; }, 0, 1],
   ['Reference No.', 'ref'], ['House No.', function(r){ return r.h; }], ['Master No.', 'master'],
   ['Shipper Name', 'shipper', 1], ['Consignee Name', 'consignee', 1], ['Customer Name', 'custName', 1],
   ['Branch', function(r){ return r.br || r.loc; }], ['Consol No', 'consol'], ['Collection Executive', 'collExec'],
@@ -6887,7 +6888,7 @@ function arDrillDrawer(){
   function fz(i){ return i < nFrozen ? ' class="ard-fz'+(i === nFrozen - 1 ? ' ard-fz-last' : '')+'" data-fz="'+i+'"' : ''; }
   var num = 'text-align:right;font-family:\'DM Mono\',monospace;';
   var heads = (isZone ? [['Customer']] : []).concat([['Invoice No'],['Invoice Date'],['Due Date']],
-    AR_DETAIL_COLS.map(function(c){ return [c[0]]; }), [['LOB'],['Bill Amount',1],['Outstanding',1],['Status']]);
+    AR_DETAIL_COLS.map(function(c){ return [c[0], c[3]]; }), [['LOB'],['Bill Amount',1],['Outstanding',1],['Status']]);
   var dash = detLoading ? '<span style="color:#B8C4D6;">…</span>' : '–';
   var shown = rows.length > AR_DRILL_MAX_ROWS ? rows.slice(0, AR_DRILL_MAX_ROWS) : rows;
   var table = '<style>'
@@ -6911,7 +6912,7 @@ function arDrillDrawer(){
           + '<td'+fz(k + 2)+' style="'+td+cb+'color:#3C5275;"'+(r.bd ? ' title="OVR Receivable: due from arrival ('+esc(r.bd)+') + credit days"' : '')+'>'+(isOa ? '–' : esc(_arDueDate(r.bd || r.d, r.cd) || '–'))+'</td>'
           + AR_DETAIL_COLS.map(function(c, j){
               var v = _arDetVal(r, c);
-              return '<td'+fz(k + 3 + j)+' style="'+td+(k + 3 + j < nFrozen ? cb : '')+'color:#3C5275;'+(c[2] ? 'white-space:normal;min-width:150px;max-width:230px;' : '')+'">'
+              return '<td'+fz(k + 3 + j)+' style="'+td+(k + 3 + j < nFrozen ? cb : '')+'color:#3C5275;'+(c[2] ? 'white-space:normal;min-width:150px;max-width:230px;' : '')+(c[3] ? num : '')+'">'
                 + (v ? esc(String(v).replace(/\n/g, ', ')) : (typeof c[1] === 'function' ? '–' : dash)) + '</td>';
             }).join('')
           + '<td style="'+td+'color:#3C5275;">'+esc(lobLbl[r.lob] || r.lob)+'</td>'
@@ -7002,7 +7003,7 @@ function arExportDrill(){
     AR_DETAIL_COLS.forEach(function(c){ o[c[0]] = String(_arDetVal(r, c)).replace(/\n/g, ', '); });
     o['LOB'] = r.lob;
     o['Bill Amount (INR)'] = Math.round(r.bill || 0); o['Outstanding (INR)'] = Math.round(r.o);
-    o['Credit Days'] = r.cd !== null && r.cd !== undefined ? r.cd : ''; o['Overdue Days'] = isOa ? '' : r.od; o['Status'] = b;
+    o['Credit Days'] = r.cd !== null && r.cd !== undefined ? r.cd : ''; o['Status'] = b;   // Overdue Days: next to Receipt Date (AR_DETAIL_COLS)
     return o;
   });
   var wb = XLSX.utils.book_new();
