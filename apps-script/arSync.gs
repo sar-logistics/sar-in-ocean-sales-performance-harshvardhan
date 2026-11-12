@@ -127,6 +127,7 @@ function pushArToDashboard() {
       doc[e[0]] = typeof v === 'number' ? v : String(v == null ? '' : v).replace(/\s*\n\s*/g, '\n').trim();
     });
     doc.customer = org;
+    if (doc.lob) doc.lob = arLob_(doc.lob);
     const u = usual[doc.customer];
     if (u && (!doc.salesPerson || !doc.lob)) {
       if (!doc.salesPerson) doc.salesPerson = top(u.sp);
@@ -184,7 +185,7 @@ function pushArToDashboard() {
         org: org, bill: bill, td: base, rd: null, open: false, gl: gl,
         cd: col.creditDays > -1 ? arNum_(row[col.creditDays]) : 0,
         sp: (col.salesPerson > -1 ? String(row[col.salesPerson] || '').trim() : '') || top(u.sp),
-        lob: (col.lob > -1 ? String(row[col.lob] || '').replace(/\s*\n\s*/g, '\n').trim() : '') || top(u.lob),
+        lob: (col.lob > -1 ? arLob_(row[col.lob]) : '') || top(u.lob),
         loc: col.location > -1 ? String(row[col.location] || '').trim() : '',
       };
     }
@@ -246,6 +247,13 @@ function arNum_(v) {
   const neg = /^\(.*\)$/.test(s);
   const n = parseFloat(s.replace(/[(),\s]/g, ''));
   return isNaN(n) ? 0 : (neg ? -n : n);
+}
+
+// LOB cells sometimes repeat the same value on several lines ("AIR EXPORT\nAIR EXPORT");
+// keep each value once so they group as one LOB
+function arLob_(v) {
+  const parts = String(v == null ? '' : v).split(/\s*\n\s*/).map(function (s) { return s.trim(); }).filter(Boolean);
+  return parts.filter(function (s, i) { return parts.indexOf(s) === i; }).join(' / ');
 }
 
 // TEMPORARY (user, 12-Nov-2026): the Summary tab title was not refreshed (still says 02-Nov-2026)
