@@ -248,7 +248,12 @@ function arNum_(v) {
   return isNaN(n) ? 0 : (neg ? -n : n);
 }
 
+// TEMPORARY (user, 12-Nov-2026): the Summary tab title was not refreshed (still says 02-Nov-2026)
+// while the Accounts Receivable data is newer, so the as-on date is fixed to 11-Nov-2026 for now.
+const AR_AS_ON_OVERRIDE = '11-Nov-2026';
+
 function arAsOnDate_(src) {
+  if (AR_AS_ON_OVERRIDE) return AR_AS_ON_OVERRIDE;
   const sum = src.getSheetByName(AR_SUMMARY_TAB);
   const title = sum ? String(sum.getRange(1, 1).getDisplayValue() || '') : '';
   const m = title.match(/as on(?: date)?\s+(\d{1,2}-[A-Za-z]{3}-\d{4})/i);
