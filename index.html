@@ -6541,19 +6541,17 @@ function _arGlDropdown(){
   return html + '</div>';
 }
 
-// Document Type filter on the page header (state.arTypes; empty = all), each type with its net outstanding
+// Document Type filter on the page header (state.arTypes; empty = all). Lines with no Type
+// still count under "All Types"; they just don't get an option of their own.
 function _arTypeDropdown(){
   if (!arRows || !arRows.length) return '';
-  var sel = state.arTypes || [], net = {}, all = 0;
-  _arVisibleRows(arRows, false, true).forEach(function(r){
-    _arTypes(r).forEach(function(t){ net[t] = (net[t] || 0) + r.o; });
-    all += r.o;
-  });
-  sel.forEach(function(t){ if (net[t] === undefined) net[t] = 0; });
-  var types = Object.keys(net).sort(function(a, b){ return (a === '') - (b === '') || a.localeCompare(b); });
+  var sel = state.arTypes || [], seen = {};
+  _arVisibleRows(arRows, false, true).forEach(function(r){ _arTypes(r).forEach(function(t){ if (t) seen[t] = 1; }); });
+  sel.forEach(function(t){ seen[t] = 1; });
+  var types = Object.keys(seen).sort(function(a, b){ return a.localeCompare(b); });
   return _arTopDrop('ty', 'Document Type', 'All Types', sel,
-    types.map(function(t){ return { label: t || '(blank)', val: t, on: sel.indexOf(t) > -1, amt: net[t] }; }),
-    { amt: all, right: true, search: types.length > 8, short: function(t){ return t || '(blank)'; } });
+    types.map(function(t){ return { label: t, val: t, on: sel.indexOf(t) > -1 }; }),
+    { right: true, search: types.length > 8 });
 }
 
 // AR top-bar filters (in place of the Filters button): LOB · Region · Zone · Rep dropdowns.
