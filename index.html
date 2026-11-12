@@ -1819,7 +1819,7 @@ var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:f
   filterZoneDropOpen: false,
     filterRegionDropOpen: false,
   filterLobs: ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT','GENERAL'],   // default Ocean LOBs + Air cross-sales + General; empty = All LOBs
-  filterGl: AR_DEFAULT_GL.slice(),   // AR page GL Group Name filter; empty = all
+  filterGl: AR_DEFAULT_GL.slice(), arTypes: [],   // AR page GL Group Name filter; empty = all
   arLobs: [],                        // AR page LOB cards (multi-select); empty = all LOBs
   adminSearch: '',        // admin panel user search
   custOpenFilter:  null, // 'name' or 'rep'
@@ -6237,9 +6237,14 @@ function _arScope(){
   return null;
 }
 
-// Rows the user may see, after the Filters panel (zone / region / rep), GL Group and the LOB cards
-// (skipLob: ignore the LOB cards, so each card can show its own total)
-function _arVisibleRows(list, skipLob){
+// Document Type ("Type" column): a line can carry several, one per line of the cell
+function _arTypes(r){
+  var t = String(r.ty || '').split(/\s*\n\s*/).map(function(x){ return x.trim(); }).filter(Boolean);
+  return t.length ? t : [''];
+}
+// Rows the user may see, after the top-bar filters (LOB / zone / region / rep), GL Group and Document Type
+// (skipLob / skipType: ignore that filter, so its dropdown can show each option's own total)
+function _arVisibleRows(list, skipLob, skipType){
   list = list || arRows;
   if (!list) return [];
   var scope = _arScope();
@@ -6247,6 +6252,7 @@ function _arVisibleRows(list, skipLob){
   var frep = (state.filterReps || []).map(normalizeName);
   var flob = state.arLobs || [];
   var fgl = state.filterGl || [];
+  var fty = skipType ? [] : (state.arTypes || []);
   var regionMap = window._zoneRegionMap || {};
   return list.filter(function(r){
     if (scope) {
@@ -6258,6 +6264,7 @@ function _arVisibleRows(list, skipLob){
     if (frep.length && frep.indexOf(normalizeName(r.sp)) === -1) return false;
     if (!skipLob && flob.length && flob.indexOf(r.lob) === -1) return false;
     if (fgl.length && fgl.indexOf(r.gl || '') === -1) return false;
+    if (fty.length && !_arTypes(r).some(function(t){ return fty.indexOf(t) > -1; })) return false;
     return true;
   });
 }
@@ -6427,6 +6434,7 @@ function arPage(){
       +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A9AB5" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>'
       +'<input type="text" id="ar-search" placeholder="Search customer…" value="'+esc(state.arSearch || '')+'" style="border:none;background:transparent;outline:none;font-size:12.5px;color:#15233B;width:100%;"/>'
     +'</div>'
+    + _arTypeDropdown()
     + _arGlDropdown()
     +(_arCanEditBuckets() ? '<button data-act="arPgBucketOpen" class="btnq" title="Ageing slabs — set the overdue day buckets for everyone" style="'+pill+'width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;">'
       +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>' : '')
@@ -6533,6 +6541,21 @@ function _arGlDropdown(){
   return html + '</div>';
 }
 
+// Document Type filter on the page header (state.arTypes; empty = all), each type with its net outstanding
+function _arTypeDropdown(){
+  if (!arRows || !arRows.length) return '';
+  var sel = state.arTypes || [], net = {}, all = 0;
+  _arVisibleRows(arRows, false, true).forEach(function(r){
+    _arTypes(r).forEach(function(t){ net[t] = (net[t] || 0) + r.o; });
+    all += r.o;
+  });
+  sel.forEach(function(t){ if (net[t] === undefined) net[t] = 0; });
+  var types = Object.keys(net).sort(function(a, b){ return (a === '') - (b === '') || a.localeCompare(b); });
+  return _arTopDrop('ty', 'Document Type', 'All Types', sel,
+    types.map(function(t){ return { label: t || '(blank)', val: t, on: sel.indexOf(t) > -1, amt: net[t] }; }),
+    { amt: all, right: true, search: types.length > 8, short: function(t){ return t || '(blank)'; } });
+}
+
 // AR top-bar filters (in place of the Filters button): LOB · Region · Zone · Rep dropdowns.
 // LOB is the AR page's own (state.arLobs; empty = all, with each LOB's net outstanding);
 // Region / Zone / Rep are the same selections as the rest of the dashboard.
@@ -6559,7 +6582,7 @@ function _arTopDrop(key, title, allLabel, sel, items, opts){
         + '</div>';
     };
     html += '<div data-act="arPgTopClose" style="position:fixed;inset:0;z-index:940;"></div>'
-      + '<div style="position:absolute;top:calc(100% + 6px);left:0;min-width:'+(opts.amt !== undefined ? 250 : 200)+'px;background:#fff;border-radius:12px;box-shadow:0 12px 36px rgba(13,43,94,0.2),0 0 0 1px rgba(13,43,94,0.07);z-index:941;padding:6px;">'
+      + '<div style="position:absolute;top:calc(100% + 6px);'+(opts.right ? 'right' : 'left')+':0;min-width:'+(opts.amt !== undefined ? 250 : 200)+'px;background:#fff;border-radius:12px;box-shadow:0 12px 36px rgba(13,43,94,0.2),0 0 0 1px rgba(13,43,94,0.07);z-index:941;padding:6px;">'
       +   (opts.search ? '<div style="display:flex;align-items:center;gap:7px;border:1.5px solid #E3E9F2;border-radius:7px;padding:6px 10px;margin-bottom:6px;">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>'
             + '<input type="text" placeholder="Search…" autocomplete="off" oninput="_arTopSearch(this)" style="border:none;outline:none;font-size:12.5px;color:#374151;flex:1;min-width:0;background:transparent;"/></div>' : '')
@@ -6789,7 +6812,7 @@ function _arColTitle(col){
 }
 // Rows behind the open panel: one customer in a zone, or (customer null) the whole zone;
 // opened from an On Account cell (oa) → only the on-account lines
-function _arDrillRows(){
+function _arDrillBase(){
   var dr = state.arDrill;
   if (!dr) return [];
   return _arVisibleRows().filter(function(r){ return r.z === dr.zone && (!dr.customer || r.c === dr.customer) && _arInCol(r, dr.col); })
@@ -6846,7 +6869,8 @@ var AR_DETAIL_COLS = [
   ['Sales Person', function(r){ return _arRepName(r.sp); }], ['Load Port', 'loadPort'], ['Place Of Receipt', 'por'],
   ['Discharge Port', 'dischargePort'], ['Place Of Delivery', 'pod'], ['ETD', 'etd'], ['ETA', 'eta'],
   ['ATD', 'atd'], ['ATA', 'ata'], ['Ref No.', 'refNo2'],
-  ['GL Group Name', function(r){ return r.gl; }]
+  ['GL Group Name', function(r){ return r.gl; }],
+  ['Document Type', function(r){ return _arTypes(r).filter(Boolean).join(' / '); }]
 ];
 function _arDetVal(r, col){
   if (typeof col[1] === 'function') return col[1](r) || '';
@@ -6854,6 +6878,142 @@ function _arDetVal(r, col){
   return (x && x[col[1]]) || '';
 }
 var AR_DRILL_MAX_ROWS = 1500;
+
+// Drill-down columns, in table order: txt(r) = the text shown (and filtered on), key(r) = sort value
+var AR_LOB_SHORT = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import','ISOTANK EXPORT':'ISO Export','ISOTANK IMPORT':'ISO Import','GENERAL':'General'};
+function _arDateNum(s){
+  var m = /^(\d{1,2})[- ]([A-Za-z]{3})[- ](\d{4})/.exec(String(s || '').trim());
+  if (!m) return null;
+  var mon = _AR_MON.indexOf(m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase());
+  return mon < 0 ? null : (+m[3]) * 10000 + mon * 100 + (+m[1]);
+}
+function _arDrillCols(isZone){
+  var cols = [];
+  if (isZone) cols.push({ label:'Customer', txt:function(r){ return r.c || ''; } });
+  cols.push({ label:'Invoice No', txt:function(r){ return r.txn || (_arIsOa(r) ? String(r.ty || 'On Account').replace(/\n/g, ' · ') : ''); } });
+  cols.push({ label:'Invoice Date', date:1, txt:function(r){ return r.d || ''; } });
+  cols.push({ label:'Due Date', date:1, txt:function(r){ return _arIsOa(r) ? '' : _arDueDate(r.bd || r.d, r.cd); } });
+  AR_DETAIL_COLS.forEach(function(c){
+    cols.push({ label:c[0], num:c[3], date:/Date$|^(ETD|ETA|ATD|ATA)$/.test(c[0]), txt:function(r){ return String(_arDetVal(r, c)).replace(/\n/g, ', '); } });
+  });
+  cols.push({ label:'LOB', txt:function(r){ return AR_LOB_SHORT[r.lob] || r.lob || ''; } });
+  cols.push({ label:'Bill Amount', num:1, txt:function(r){ return r.bill ? _arFull(r.bill) : ''; }, key:function(r){ return r.bill || 0; } });
+  cols.push({ label:'Outstanding', num:1, txt:function(r){ return _arFull(r.o); }, key:function(r){ return r.o; } });
+  cols.push({ label:'Status', txt:function(r){ return _arIsOa(r) ? 'On Account' : (_arBucket(r.od) === 'nd' ? 'Not Due' : 'Overdue'); },
+    key:function(r){ return _arIsOa(r) ? -1e9 : (r.od || 0); } });
+  return cols;
+}
+// Sort value (null = blank, always last)
+function _arColKey(c, r){
+  if (c.key) return c.key(r);
+  var t = c.txt(r);
+  if (!t) return null;
+  if (c.num) { var n = parseFloat(String(t).replace(/,/g, '')); return isNaN(n) ? null : n; }
+  if (c.date) { var d = _arDateNum(t); if (d !== null) return d; }
+  return String(t).toLowerCase();
+}
+function _arCmpKeys(a, b){
+  if (a === b) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  if (typeof a !== typeof b) return typeof a === 'number' ? -1 : 1;
+  if (typeof a === 'string') return a.localeCompare(b, undefined, { numeric:true });
+  return a < b ? -1 : 1;
+}
+// Base rows with every column filter applied except `skip` (so a filter's own menu lists all its values)
+function _arDrillFiltered(cols, skip){
+  var dr = state.arDrill, F = (dr && dr.f) || {}, rows = _arDrillBase();
+  cols.forEach(function(c){
+    var sel = F[c.label];
+    if (sel && c.label !== skip) rows = rows.filter(function(r){ return sel.indexOf(c.txt(r)) > -1; });
+  });
+  return rows;
+}
+// What the panel shows (and the Excel export holds): column filters, then the chosen sort
+function _arDrillRows(){
+  var dr = state.arDrill;
+  if (!dr) return [];
+  var cols = _arDrillCols(!dr.customer), rows = _arDrillFiltered(cols, null), s = dr.sort;
+  var c = s && cols.filter(function(x){ return x.label === s.k; })[0];
+  if (!c) return rows;
+  return rows.map(function(r, i){ return { r:r, i:i, k:_arColKey(c, r) }; })
+    .sort(function(a, b){
+      if (a.k === null || b.k === null) return _arCmpKeys(a.k, b.k) || a.i - b.i;   // blanks last either way
+      return s.dir * _arCmpKeys(a.k, b.k) || a.i - b.i;
+    })
+    .map(function(x){ return x.r; });
+}
+function _arDrillFilterCount(){
+  var F = (state.arDrill && state.arDrill.f) || {};
+  return Object.keys(F).length;
+}
+// The open column's filter menu: sort, search, and a tick list of its values
+function _arDrillMenu(cols){
+  var dr = state.arDrill, m = dr && dr.menu;
+  var c = m && cols.filter(function(x){ return x.label === m.k; })[0];
+  if (!c) return '';
+  var seen = {}, vals = [];
+  _arDrillFiltered(cols, c.label).forEach(function(r){
+    var t = c.txt(r);
+    if (!seen.hasOwnProperty(t)) { seen[t] = _arColKey(c, r); vals.push(t); }
+  });
+  vals.sort(function(a, b){ return _arCmpKeys(seen[a], seen[b]) || (a < b ? -1 : 1); });
+  window._arDFVals = vals;
+  var sel = (dr.f || {})[c.label], q = (dr.q || '').toLowerCase();
+  var w = 270, left = Math.max(8, Math.min(m.x, window.innerWidth - w - 8));
+  var top = Math.min(m.y, window.innerHeight - 420);
+  var tick = function(on){
+    return '<span style="width:15px;height:15px;border-radius:4px;border:1.5px solid '+(on ? BRAND_A1 : '#C5D0E0')+';background:'+(on ? BRAND_A1 : '#fff')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+      + (on ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '') + '</span>';
+  };
+  var rowSt = 'display:flex;align-items:center;gap:8px;padding:5px 7px;border-radius:6px;cursor:pointer;font-size:12px;color:#374151;';
+  var hov = ' onmouseenter="this.style.background=\'#F4F7FC\'" onmouseleave="this.style.background=\'transparent\'"';
+  var asc = c.num ? 'Smallest to largest' : c.date ? 'Oldest to newest' : 'A to Z';
+  var desc = c.num ? 'Largest to smallest' : c.date ? 'Newest to oldest' : 'Z to A';
+  var sortBtn = function(dir, text){
+    var on = dr.sort && dr.sort.k === c.label && dr.sort.dir === dir;
+    return '<div data-act="arPgDFSort" data-val="'+dir+'" style="'+rowSt+'font-weight:'+(on ? 700 : 500)+';color:'+(on ? BRAND_A1 : '#374151')+';"'+hov+'>'
+      + '<span style="width:15px;text-align:center;">'+(dir > 0 ? '↑' : '↓')+'</span>Sort '+text+'</div>';
+  };
+  return '<div data-act="arPgDFClose" style="position:fixed;inset:0;z-index:20;"></div>'
+    + '<div id="ard-fmenu" style="position:fixed;top:'+top+'px;left:'+left+'px;width:'+w+'px;background:#fff;border-radius:12px;box-shadow:0 12px 36px rgba(13,43,94,0.22),0 0 0 1px rgba(13,43,94,0.08);z-index:21;padding:8px;">'
+    +   '<div style="font-size:10px;font-weight:800;letter-spacing:0.08em;color:#97A1B2;text-transform:uppercase;padding:2px 7px 6px;">'+esc(c.label)+'</div>'
+    +   sortBtn(1, asc) + sortBtn(-1, desc)
+    +   '<div style="height:1px;background:#EEF2F8;margin:6px 0;"></div>'
+    +   '<div style="display:flex;align-items:center;gap:7px;border:1.5px solid #E3E9F2;border-radius:7px;padding:5px 9px;margin-bottom:5px;">'
+    +     '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>'
+    +     '<input id="ard-fsearch" type="text" placeholder="Search…" autocomplete="off" value="'+esc(dr.q || '')+'" oninput="_arDFSearch(this)" style="border:none;outline:none;font-size:12px;color:#374151;flex:1;min-width:0;background:transparent;"/></div>'
+    +   '<div id="ard-flist" style="max-height:250px;overflow:auto;">'
+    +     '<div data-act="arPgDFAll" class="ard-fall" style="'+rowSt+'font-weight:600;'+(q ? 'display:none;' : '')+'"'+hov+'>'+tick(!sel)+'(Select all)</div>'
+    +     vals.map(function(t, i){
+            var shown = t || '(Blanks)', hit = !q || shown.toLowerCase().indexOf(q) > -1;
+            return '<div data-act="arPgDFPick" data-val="'+i+'" class="ard-fopt" data-search="'+esc(shown.toLowerCase())+'" style="'+rowSt+(hit ? '' : 'display:none;')+'"'+hov+'>'
+              + tick(!sel || sel.indexOf(t) > -1) + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+(t ? '' : 'color:#8A9AB5;font-style:italic;')+'">'+esc(shown)+'</span></div>';
+          }).join('')
+    +   '</div>'
+    +   (sel ? '<div style="height:1px;background:#EEF2F8;margin:6px 0;"></div><div data-act="arPgDFClear" style="'+rowSt+'color:#C0392B;font-weight:600;"'+hov+'>Clear filter from '+esc(c.label)+'</div>' : '')
+    + '</div>';
+}
+function _arDFSearch(inp){
+  if (state.arDrill) state.arDrill.q = inp.value;
+  var q = inp.value.toLowerCase().trim();
+  document.querySelectorAll('#ard-flist .ard-fopt').forEach(function(r){
+    r.style.display = !q || (r.getAttribute('data-search') || '').indexOf(q) > -1 ? 'flex' : 'none';
+  });
+  var all = document.querySelector('#ard-flist .ard-fall');
+  if (all) all.style.display = q ? 'none' : 'flex';
+}
+// Re-render the panel keeping the table's and the menu list's scroll positions
+function _arDrillRerender(){
+  var box = document.getElementById('ard-box'), list = document.getElementById('ard-flist');
+  var bt = box ? box.scrollTop : 0, bl = box ? box.scrollLeft : 0, lt = list ? list.scrollTop : 0;
+  render();
+  box = document.getElementById('ard-box'); list = document.getElementById('ard-flist');
+  if (box) { box.scrollTop = bt; box.scrollLeft = bl; }
+  if (list) list.scrollTop = lt;
+  var inp = document.getElementById('ard-fsearch');
+  if (inp && state.arDrill && state.arDrill.q) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+}
 
 function arDrillDrawer(){
   var dr = state.arDrill;
@@ -6877,7 +7037,8 @@ function arDrillDrawer(){
   });
   var overdue = _arOverdue(agg);
   var creditDays = Object.keys(cds).sort(function(a, b){ return cds[b] - cds[a]; })[0];
-  var lobLbl = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import','ISOTANK EXPORT':'ISO Export','ISOTANK IMPORT':'ISO Import','GENERAL':'General'};
+  var lobLbl = AR_LOB_SHORT;
+  var cols = _arDrillCols(isZone), F = dr.f || {}, nF = _arDrillFilterCount();
 
   function chip(r){
     var s = 'display:inline-block;border-radius:999px;padding:3px 9px;font-weight:700;font-size:10.5px;white-space:nowrap;';
@@ -6905,8 +7066,17 @@ function arDrillDrawer(){
   var nFrozen = isZone ? 5 : 4;
   function fz(i){ return i < nFrozen ? ' class="ard-fz'+(i === nFrozen - 1 ? ' ard-fz-last' : '')+'" data-fz="'+i+'"' : ''; }
   var num = 'text-align:right;font-family:\'DM Mono\',monospace;';
-  var heads = (isZone ? [['Customer']] : []).concat([['Invoice No'],['Invoice Date'],['Due Date']],
-    AR_DETAIL_COLS.map(function(c){ return [c[0], c[3]]; }), [['LOB'],['Bill Amount',1],['Outstanding',1],['Status']]);
+  var heads = cols;
+  function headCell(c, i){
+    var srt = dr.sort && dr.sort.k === c.label ? dr.sort.dir : 0, on = !!F[c.label];
+    return '<th'+fz(i)+' style="'+th+'text-align:'+(c.num ? 'right' : 'left')+';">'
+      + '<span style="display:inline-flex;align-items:center;gap:4px;'+(c.num ? 'flex-direction:row-reverse;' : '')+'">'
+      +   '<span data-act="arPgDSort" data-val="'+esc(c.label)+'" title="Sort by '+esc(c.label)+'" style="cursor:pointer;">'+esc(c.label)
+      +     (srt ? ' <span style="color:'+BRAND_A1+';">'+(srt > 0 ? '↑' : '↓')+'</span>' : '')+'</span>'
+      +   '<button data-act="arPgDFOpen" data-val="'+esc(c.label)+'" title="Filter / sort '+esc(c.label)+'" class="ard-fbtn'+(on ? ' on' : '')+'">'
+      +     '<svg width="11" height="11" viewBox="0 0 24 24" fill="'+(on ? 'currentColor' : 'none')+'" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><path d="M3 5h18l-7 8.5V19l-4 2v-7.5z"/></svg></button>'
+      + '</span></th>';
+  }
   var dash = detLoading ? '<span style="color:#B8C4D6;">…</span>' : '–';
   var shown = rows.length > AR_DRILL_MAX_ROWS ? rows.slice(0, AR_DRILL_MAX_ROWS) : rows;
   var table = '<style>'
@@ -6915,10 +7085,14 @@ function arDrillDrawer(){
     + '#ard-table thead .ard-fz{z-index:4 !important;}'
     + '#ard-table .ard-fz-last{box-shadow:inset -1px 0 0 #C9D6E8,4px 0 6px -4px rgba(13,43,94,0.22);}'
     + '#ard-table tbody tr:hover td{background:#EEF4FF !important;}'
+    + '#ard-table .ard-fbtn{border:none;background:transparent;color:#9AAFC8;padding:2px 3px;border-radius:4px;cursor:pointer;display:flex;align-items:center;}'
+    + '#ard-table .ard-fbtn:hover{background:#DCE6F5;color:#2C4E82;}'
+    + '#ard-table .ard-fbtn.on{color:'+BRAND_A1+';background:#DCE8FB;}'
     + '</style>'
     + '<table id="ard-table" style="width:100%;border-collapse:separate;border-spacing:0;"><thead><tr>'
-    + heads.map(function(h, i){ return '<th'+fz(i)+' style="'+th+'text-align:'+(h[1] ? 'right' : 'left')+';">'+h[0]+'</th>'; }).join('')
+    + heads.map(headCell).join('')
     + '</tr></thead><tbody>'
+    + (rows.length ? '' : '<tr><td colspan="'+heads.length+'" style="padding:28px 16px;font-size:12.5px;font-weight:600;color:#8A9AB5;"><span style="position:sticky;left:16px;">No lines match the column filters.</span></td></tr>')
     + shown.map(function(r, i){
         var bg = i % 2 ? '#FBFCFE' : '#FFFFFF';
         var isOa = _arIsOa(r);
@@ -6963,6 +7137,8 @@ function arDrillDrawer(){
     +         '<div style="font-size:17px;font-weight:800;color:#15233B;">'+esc(isZone ? dr.zone : dr.customer)+'</div>'
     +         '<div style="font-size:11.5px;color:#6B82A0;font-weight:600;margin-top:3px;">'+sub.join(' · ')+'</div>'
     +       '</div>'
+    +       (nF ? '<button data-act="arPgDFReset" class="btnq" title="Remove every column filter" style="display:flex;align-items:center;gap:6px;border:1.5px solid #B7C8EA;background:#EEF3FC;border-radius:999px;padding:7px 13px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
+    +         nF + ' column filter' + (nF === 1 ? '' : 's') + ' <span style="color:#6B82A0;">· Clear</span></button>' : '')
     +       '<button data-act="arPgDrillExport" class="btnq" style="display:flex;align-items:center;gap:6px;border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:7px 13px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
     +         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Excel</button>'
     +       '<button data-act="arPgDrillClose" title="Close" style="border:none;background:#F1F5FB;border-radius:999px;width:32px;height:32px;cursor:pointer;color:#3C5275;font-size:16px;line-height:1;">×</button>'
@@ -6980,8 +7156,9 @@ function arDrillDrawer(){
     +     '</div>')
     +   '</div>'
     +   '<div style="flex:1;min-height:0;padding:12px 16px 16px;display:flex;flex-direction:column;">'
-    +     '<div style="max-height:100%;overflow:auto;background:#FFFFFF;border:1px solid #E3EAF4;border-radius:12px;">'+table+'</div>'
+    +     '<div id="ard-box" style="max-height:100%;overflow:auto;background:#FFFFFF;border:1px solid #E3EAF4;border-radius:12px;">'+table+'</div>'
     +   '</div>'
+    +   _arDrillMenu(cols)
     + '</div>';
 }
 
@@ -7095,6 +7272,41 @@ function arHandleAct(act, el){
     if (c) { state.arDrill = { zone:c.zone, customer:c.customer, col:el.getAttribute('data-col') || '' }; render(); }
   } else if (act === 'arPgDrillClose') {
     state.arDrill = null; render();
+  } else if (act === 'arPgDSort') {
+    var ds = state.arDrill;
+    if (ds) {
+      var sc = ds.sort && ds.sort.k === v ? ds.sort.dir : 0;
+      ds.sort = sc === 0 ? { k:v, dir:1 } : sc > 0 ? { k:v, dir:-1 } : null;   // A→Z, Z→A, off
+      _arDrillRerender();
+    }
+  } else if (act === 'arPgDFOpen') {
+    if (state.arDrill) {
+      var rc = el.getBoundingClientRect();
+      state.arDrill.menu = state.arDrill.menu && state.arDrill.menu.k === v ? null : { k:v, x:rc.left - 8, y:rc.bottom + 6 };
+      state.arDrill.q = '';
+      _arDrillRerender();
+    }
+  } else if (act === 'arPgDFClose') {
+    if (state.arDrill) { state.arDrill.menu = null; state.arDrill.q = ''; _arDrillRerender(); }
+  } else if (act === 'arPgDFSort') {
+    var dm = state.arDrill;
+    if (dm && dm.menu) { dm.sort = { k:dm.menu.k, dir:+v }; dm.menu = null; dm.q = ''; _arDrillRerender(); }
+  } else if (act === 'arPgDFAll' || act === 'arPgDFClear') {
+    var da = state.arDrill;
+    if (da && da.menu && da.f) { delete da.f[da.menu.k]; if (act === 'arPgDFClear') { da.menu = null; da.q = ''; } _arDrillRerender(); }
+  } else if (act === 'arPgDFPick') {
+    var dp = state.arDrill, vals = window._arDFVals || [], pv2 = vals[+v];
+    if (dp && dp.menu && pv2 !== undefined) {
+      dp.f = dp.f || {};
+      var cur2 = dp.f[dp.menu.k];
+      cur2 = cur2 ? (cur2.indexOf(pv2) > -1 ? cur2.filter(function(x){ return x !== pv2; }) : cur2.concat([pv2]))
+                  : vals.filter(function(x){ return x !== pv2; });
+      if (vals.every(function(x){ return cur2.indexOf(x) > -1; })) delete dp.f[dp.menu.k];
+      else dp.f[dp.menu.k] = cur2;
+      _arDrillRerender();
+    }
+  } else if (act === 'arPgDFReset') {
+    if (state.arDrill) { state.arDrill.f = {}; state.arDrill.menu = null; state.arDrill.q = ''; _arDrillRerender(); }
   } else if (act === 'arPgDrillExport') {
     arExportDrill();
   } else if (act === 'arPgExport') {
@@ -7105,15 +7317,16 @@ function arHandleAct(act, el){
     if (!state.arSlabsOpen && state.arSort && /^b\d+$/.test(state.arSort.key)) state.arSort = null;
     _arRerenderMain(false);
   } else if (act === 'arPgGlToggle') {
-    state.arGlOpen = !state.arGlOpen; _arRerenderMain(false);
+    state.arGlOpen = !state.arGlOpen; state.arTopOpen = null; _arRerenderMain(false);
   } else if (act === 'arPgGlClose') {
     state.arGlOpen = false; _arRerenderMain(false);
   } else if (act === 'arPgTopToggle') {
-    state.arTopOpen = state.arTopOpen === v ? null : v; render();
+    state.arTopOpen = state.arTopOpen === v ? null : v; state.arGlOpen = false; render();
   } else if (act === 'arPgTopClose') {
     state.arTopOpen = null; render();
   } else if (act === 'arPgTopAll') {
     if (v === 'lob') state.arLobs = [];
+    else if (v === 'ty') state.arTypes = [];
     else if (v === 'rep') state.filterReps = [];
     else {
       // Same as the Filters panel: a Regional Manager's regions are their access, so they stay
@@ -7125,6 +7338,7 @@ function arHandleAct(act, el){
     var cut = (v || '').indexOf('|'), key = v.slice(0, cut), pv = v.slice(cut + 1);
     var tog = function(list){ list = list || []; return list.indexOf(pv) > -1 ? list.filter(function(x){ return x !== pv; }) : list.concat([pv]); };
     if (key === 'lob') state.arLobs = tog(state.arLobs);
+    else if (key === 'ty') state.arTypes = tog(state.arTypes);
     else if (key === 'region') { state.filterRegions = tog(state.filterRegions); state.filterZones = []; state._regionExpandedZones = false; }
     else if (key === 'zone') { state.filterZones = tog(state.filterZones); state._regionExpandedZones = false; state.filterReps = []; }
     else if (key === 'rep') state.filterReps = tog(state.filterReps);
@@ -11322,7 +11536,7 @@ document.addEventListener('click', function(ev){
         else if(act==='toggleFilterZoneDrop'){ ev.stopPropagation(); state.filterZoneDropOpen=!state.filterZoneDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='filterResetAll'){
     ev.stopPropagation();
-    state.filterLobs=[]; state.filterReps=[]; state.filterZones=[]; state.filterGl=AR_DEFAULT_GL.slice(); state.arLobs=[];
+    state.filterLobs=[]; state.filterReps=[]; state.filterZones=[]; state.filterGl=AR_DEFAULT_GL.slice(); state.arLobs=[]; state.arTypes=[];
     // Same reasoning as filterZoneAll above — do not strip a Regional
     // Managers actual RLS scope, only reset manual choices for other roles.
     var _raRole = currentUser ? (currentUser.role||'').toLowerCase().trim() : '';
