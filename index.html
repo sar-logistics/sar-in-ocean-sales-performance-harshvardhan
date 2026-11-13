@@ -5799,6 +5799,8 @@ function financePage(){
 // No incentive data source yet, so the cards show dashes and the table shows an empty state.
 var INC_MGMT_FEE_PCT = 0.15; // Management fees: 15% of GP
 var INC_MIN_ACHV = 75;        // Management fees and everything after it only apply from this ACHV %
+var INC_CORE_LOBS = ['SEA EXPORT', 'SEA IMPORT']; // Core; every other LOB is Cross
+function _incIsCore(lob){ return INC_CORE_LOBS.indexOf(String(lob || '').toUpperCase().trim()) > -1; }
 
 // Shipments with a positive outstanding in ar_outstanding (matched on "Ref No")
 var incOutRefs = null, incOutMeta = null, incOutLoading = false, incOutError = '';
@@ -5829,12 +5831,19 @@ function incToggleGp(k){ state.incGpOpen = state.incGpOpen || {}; state.incGpOpe
 // Outstanding GP shows only the shipments whose Shipment No is an outstanding Ref No.
 function incDrill(el){
   var entity = el.getAttribute('data-entity'), col = el.getAttribute('data-col'), val = el.getAttribute('data-val');
+  var out = el.getAttribute('data-out') === '1', part = el.getAttribute('data-part') || '';
   openDrill(entity, 'GP', col, val);
-  if (el.getAttribute('data-out') !== '1' || !state.drill || !state.drill.rows) return;
-  var rows = state.drill.rows.filter(function(r){ return incOutRefs && incOutRefs[_incShipKey(r.shipmentNo)]; });
+  if ((!out && !part) || !state.drill || !state.drill.rows) return;
+  var rows = state.drill.rows.filter(function(r){
+    if (out && !(incOutRefs && incOutRefs[_incShipKey(r.shipmentNo)])) return false;
+    if (part === 'core' && !_incIsCore(r.lob)) return false;
+    if (part === 'cross' && _incIsCore(r.lob)) return false;
+    return true;
+  });
   var gp = 0, prov = 0, act = 0, rev = 0, met = 0;
   rows.forEach(function(r){ gp += r.g || 0; rev += r.r || 0; met += r.m || 0; if (r.prov === 1) prov += r.g || 0; else act += r.g || 0; });
-  state.drill = Object.assign({}, state.drill, { entity: entity + ' (Outstanding GP)', rows: rows, count: rows.length,
+  var tag = (out ? 'Outstanding GP' : 'GP') + (part ? ' – ' + (part === 'core' ? 'Core' : 'Cross') : '');
+  state.drill = Object.assign({}, state.drill, { entity: entity + ' (' + tag + ')', rows: rows, count: rows.length,
     totalGP: gp, totalProvGP: prov, totalActualGP: act, totalRevenue: rev, totalCost: rev - gp, totalMetric: met,
     columnFilters: {}, openFilterCol: null, filterDraft: {} });
   render();
@@ -5910,86 +5919,100 @@ function _incentivePageInner(foldQ){
     : filteredMonths().map(colDisplayLabel).map(function(l){ var p = String(l).split('||'); return { top:p[0], sub:p[1] || '' }; });
   var nCols = reps[0].gp.length;
 
-  // GP of shipments whose Shipment No is an outstanding Ref No, per rep (display name) per column
+  // One pass over the shipment rows: Core GP (SEA EXPORT / SEA IMPORT) and outstanding GP (Shipment No is an
+  // outstanding Ref No), per rep (display name), per zone and for the Grand Total. Cross = total − Core.
   var colOf = {};
   if (state.reportView === 'Weekly') filteredMonths().forEach(function(k, i){ colOf[k] = i; });
   else if (groups) groups.forEach(function(g, i){ g.idxs.forEach(function(mi){ colOf[months26[mi]] = i; }); });
   else if (qCols) qCols.forEach(function(g, i){ g.months.forEach(function(m){ colOf[m] = i; }); });
   else filteredMonths().forEach(function(m, i){ colOf[m] = i; });
   var lobF = state.filterLobs && state.filterLobs.length ? state.filterLobs : null;
-  var exclByRep = {}, exclShipByRep = {};
-  allDrillRows.forEach(function(row){
-    if (!row._dn || !row.shipmentNo || !incOutRefs[_incShipKey(row.shipmentNo)]) return;
-    if (lobF && lobF.indexOf(row.lob) === -1) return;
-    var ci = colOf[state.reportView === 'Weekly' ? row._wk : row._ml];
-    if (ci === undefined) return;
-    var a = exclByRep[row._dn] || (exclByRep[row._dn] = new Array(nCols).fill(0));
-    a[ci] += row.g || 0;
-    exclShipByRep[row._dn] = (exclShipByRep[row._dn] || 0) + 1;
-  });
-  var gOut = new Array(nCols).fill(0), gOutShip = 0, zOut = {}, zOutShip = {};
   var fz = state.filterZones && state.filterZones.length ? state.filterZones : null;
   var fr = state.filterReps && state.filterReps.length ? state.filterReps.map(function(x){ return normalizeName(x); }) : null;
   var rls = _getRLSReps().map(function(n){ return normalizeName(n); });
+  function newAgg(){ var z = function(){ return new Array(nCols).fill(0); }; return { core:z(), out:z(), outCore:z(), outShip:0, outShipCore:0 }; }
+  function bump(A, ci, g, isCore, isOut){
+    if (isCore) A.core[ci] += g;
+    if (isOut) { A.out[ci] += g; A.outShip++; if (isCore) { A.outCore[ci] += g; A.outShipCore++; } }
+  }
+  var byRep = {}, byZone = {}, gAgg = newAgg();
   allDrillRows.forEach(function(row){
-    if (!row.shipmentNo || !incOutRefs[_incShipKey(row.shipmentNo)]) return;
     if (lobF && lobF.indexOf(row.lob) === -1) return;
+    var ci = colOf[state.reportView === 'Weekly' ? row._wk : row._ml];
+    if (ci === undefined) return;
+    var g = row.g || 0, isCore = _incIsCore(row.lob);
+    var isOut = !!(row.shipmentNo && incOutRefs[_incShipKey(row.shipmentNo)]);
+    if (row._dn) bump(byRep[row._dn] || (byRep[row._dn] = newAgg()), ci, g, isCore, isOut);
     if (fz && fz.indexOf(row._zone || 'Cross Sales') === -1) return;
     if (fr && (!row._sp || fr.indexOf(row._sp) === -1)) return;
     if (rls.length && rls.indexOf(row._sp) === -1 && rls.indexOf(normalizeName(row._sp)) === -1) return;
-    var ci = colOf[state.reportView === 'Weekly' ? row._wk : row._ml];
-    if (ci === undefined) return;
-    gOut[ci] += row.g || 0; gOutShip++;
+    bump(gAgg, ci, g, isCore, isOut);
     var zk = row._zone || 'Cross Sales';
-    (zOut[zk] || (zOut[zk] = new Array(nCols).fill(0)))[ci] += row.g || 0;
-    zOutShip[zk] = (zOutShip[zk] || 0) + 1;
+    bump(byZone[zk] || (byZone[zk] = newAgg()), ci, g, isCore, isOut);
   });
-  reps.forEach(function(r){
-    r.outGp = exclByRep[r.name] || new Array(nCols).fill(0);
-    r.outShip = exclShipByRep[r.name] || 0;
-  });
+  function withAgg(ent, A){
+    A = A || newAgg();
+    ent.coreGp = A.core; ent.outGp = A.out; ent.outCore = A.outCore; ent.outShip = A.outShip; ent.outShipCore = A.outShipCore;
+    return ent;
+  }
+  reps.forEach(function(r){ withAgg(r, byRep[r.name]); });
 
   function colSum(key){ var out = []; for (var i = 0; i < nCols; i++) out.push(sum(reps.map(function(r){ return r[key][i] || 0; }))); return out; }
   var spGrand = cap.filter(function(c){ return c.isGrand; })[0]; // Sales Performance Grand Total (zone targets)
   var grand = spGrand
-    ? { name:'Grand Total', initials:'GT', isGrand:true, gp:spGrand.gp.slice(), tgt:spGrand.tgt.slice(), outGp:gOut, outShip:gOutShip, drillCells:spGrand.drillCells, members:reps }
-    : { name:'Grand Total', initials:'GT', isGrand:true, gp:colSum('gp'), tgt:colSum('tgt'), outGp:colSum('outGp'), outShip:sum(reps.map(function(r){ return r.outShip; })), members:reps };
+    ? withAgg({ name:'Grand Total', initials:'GT', isGrand:true, gp:spGrand.gp.slice(), tgt:spGrand.tgt.slice(), drillCells:spGrand.drillCells, members:reps }, gAgg)
+    : { name:'Grand Total', initials:'GT', isGrand:true, gp:colSum('gp'), tgt:colSum('tgt'), coreGp:colSum('coreGp'), outGp:colSum('outGp'), outCore:colSum('outCore'),
+        outShip:sum(reps.map(function(r){ return r.outShip; })), outShipCore:sum(reps.map(function(r){ return r.outShipCore; })), members:reps };
 
   function pct(gp, tgt){ return tgt > 0 ? Math.round(gp / tgt * 100) : null; }
   function fee(gp){ return Math.max(0, gp) * INC_MGMT_FEE_PCT; }
-  // Fees / amount apply only where the block's own ACHV % (as displayed) is at least INC_MIN_ACHV —
-  // the same rule for a rep, a zone and the Grand Total. The Grand Total column uses the ACHV % over the whole period.
-  function repCalc(r){
-    if (r._calc) return r._calc;
-    var net = r.gp.map(function(v, i){ return v - (r.outGp[i] || 0); });
-    function ok(g, t){ var a = pct(g, t); return !r.noTarget && a !== null && a >= INC_MIN_ACHV; }
-    var feeV = net.map(function(g, i){ return ok(g, r.tgt[i]) ? fee(g) : null; });
-    var G = sum(net), T = sum(r.tgt), okT = ok(G, T);
-    return (r._calc = {
-      fee: feeV, amt: net.map(function(g, i){ return feeV[i] === null ? null : g - feeV[i]; }),
-      feeT: okT ? fee(G) : null, amtT: okT ? G - fee(G) : null
+  function minus(a, b){ return a.map(function(v, i){ return v - (b[i] || 0); }); }
+  // Achieved Target % = Core GP (Achieved − Outstanding) ÷ GP Target. Where it is at least INC_MIN_ACHV
+  // (as displayed), fees and amount are worked out for Core and for Cross — the same rule for a rep, a zone
+  // and the Grand Total. The Grand Total column uses the whole period.
+  function calc(e){
+    if (e._calc) return e._calc;
+    var gpCross = minus(e.gp, e.coreGp), outCross = minus(e.outGp, e.outCore);
+    var netCore = minus(e.coreGp, e.outCore), netCross = minus(gpCross, outCross), net = minus(e.gp, e.outGp);
+    function ok(g, t){ var a = pct(g, t); return !e.noTarget && a !== null && a >= INC_MIN_ACHV; }
+    var okC = netCore.map(function(g, i){ return ok(g, e.tgt[i]); });
+    var NC = sum(netCore), NX = sum(netCross), T = sum(e.tgt), okT = ok(NC, T);
+    function feeA(arr){ return arr.map(function(g, i){ return okC[i] ? fee(g) : null; }); }
+    function amtA(arr){ return arr.map(function(g, i){ return okC[i] ? g - fee(g) : null; }); }
+    return (e._calc = {
+      gpCross: gpCross, outCross: outCross, netCore: netCore, netCross: netCross, net: net,
+      ach: netCore.map(function(g, i){ return pct(g, e.tgt[i]); }), achT: pct(NC, T),
+      feeCore: feeA(netCore), feeCross: feeA(netCross), amtCore: amtA(netCore), amtCross: amtA(netCross),
+      feeCoreT: okT ? fee(NC) : null, feeCrossT: okT ? fee(NX) : null,
+      amtCoreT: okT ? NC - fee(NC) : null, amtCrossT: okT ? NX - fee(NX) : null
     });
   }
-  function stepVals(ent){ return repCalc(ent); }
   function particulars(ent){
-    var out = ent.outGp, gp = ent.gp.map(function(v, i){ return v - (out[i] || 0); }), tgt = ent.tgt, G = sum(gp), T = sum(tgt);
-    var sv = stepVals(ent);
+    var c = calc(ent), tgt = ent.tgt, T = sum(tgt);
     var gk = (ent.isGrand ? 'G:' : ent.isZone ? 'Z:' : 'R:') + ent.name;
     var gOpen = !!(state.incGpOpen && state.incGpOpen[gk]);
     var iOpen = !!(state.incGpOpen && state.incGpOpen['I:' + gk]);
-    var rows = [{ label:'GP (Achieved - Outstanding)', type:'cur', color:'#059669', bold:true, vals:gp, total:G, toggle:gk, open:gOpen }];
+    var none = ent.gp.map(function(){ return null; });
+    function ships(n){ return n ? n + ' shipment' + (n === 1 ? '' : 's') : ''; }
+    var rows = [{ label:'GP (Achieved - Outstanding)', type:'cur', color:'#059669', bold:true, vals:c.net, total:sum(c.net), toggle:gk, open:gOpen }];
     if (gOpen) rows.push(
-      { label:'GP', sub:true, type:'cur', color:'#15233B', vals:ent.gp, total:sum(ent.gp), drill:ent.drillCells, out:false },
-      { label:'Outstanding GP (excluded)', sub:true, type:'cur', color:'#B83A2B', vals:out, total:sum(out), drill:ent.drillCells, out:true,
-        note: ent.outShip ? ent.outShip+' shipment'+(ent.outShip === 1 ? '' : 's') : '' });
+      { label:'GP – Core', sub:true, type:'cur', color:'#15233B', vals:ent.coreGp, total:sum(ent.coreGp), drill:ent.drillCells, part:'core' },
+      { label:'GP – Cross', sub:true, type:'cur', color:'#15233B', vals:c.gpCross, total:sum(c.gpCross), drill:ent.drillCells, part:'cross' },
+      { label:'Outstanding GP – Core', sub:true, type:'cur', color:'#B83A2B', vals:ent.outCore, total:sum(ent.outCore), drill:ent.drillCells, out:true, part:'core', note:ships(ent.outShipCore) },
+      { label:'Outstanding GP – Cross', sub:true, type:'cur', color:'#B83A2B', vals:c.outCross, total:sum(c.outCross), drill:ent.drillCells, out:true, part:'cross', note:ships(ent.outShip - ent.outShipCore) },
+      { label:'GP (Achieved - Outstanding) – Core', sub:true, type:'cur', color:'#059669', vals:c.netCore, total:sum(c.netCore) },
+      { label:'GP (Achieved - Outstanding) – Cross', sub:true, type:'cur', color:'#059669', vals:c.netCross, total:sum(c.netCross) });
     return rows.concat([
       { label:'GP Target', type:ent.noTarget ? 'na' : 'cur', color:'#0D2B5E', vals:tgt, total:T },
-      { label:'Achieved Target %', type:ent.noTarget ? 'na' : 'pct', vals:gp.map(function(v, i){ return pct(v, tgt[i]); }), total:pct(G, T) },
-      { label:'Incentive %', type:'na', bold:true, color:'#6B3FA0', vals:gp.map(function(){ return null; }), total:null, toggle:'I:' + gk, open:iOpen }
+      { label:'Achieved Target % (Core)', type:ent.noTarget ? 'na' : 'pct', vals:c.ach, total:c.achT },
+      { label:'Incentive %', type:'na', bold:true, color:'#6B3FA0', vals:none, total:null, toggle:'I:' + gk, open:iOpen }
     ]).concat(iOpen ? [
-      { label:'Management Fees (15%)', sub:true, type:'cur', color:'#946312', vals:sv.fee, total:sv.feeT },
-      { label:'Amount on which Incentive will be given', sub:true, type:'cur', color:'#1D5FCC', vals:sv.amt, total:sv.amtT },
-      { label:'Incentive Payable', sub:true, type:'na', vals:gp.map(function(){ return null; }), total:null }
+      { label:'Management Fees (15%) – Core', sub:true, type:'cur', color:'#946312', vals:c.feeCore, total:c.feeCoreT },
+      { label:'Management Fees (15%) – Cross', sub:true, type:'cur', color:'#946312', vals:c.feeCross, total:c.feeCrossT },
+      { label:'Amount on which Incentive will be given – Core', sub:true, type:'cur', color:'#1D5FCC', vals:c.amtCore, total:c.amtCoreT },
+      { label:'Amount on which Incentive will be given – Cross', sub:true, type:'cur', color:'#1D5FCC', vals:c.amtCross, total:c.amtCrossT },
+      { label:'Incentive Payable – Core', sub:true, type:'na', vals:none, total:null },
+      { label:'Incentive Payable – Cross', sub:true, type:'na', vals:none, total:null }
     ] : []);
   }
   function fmtVal(v, p){
@@ -6064,7 +6087,7 @@ function _incentivePageInner(foldQ){
       function drillAttrs(v, f, ci){
         if (!p.drill || !p.drill[ci] || !v || f.t === '–') return '';
         var c = p.drill[ci];
-        return ' class="dcell" onclick="incDrill(this)" data-entity="'+esc(c.entity)+'" data-col="'+esc(c.col)+'" data-val="'+esc(f.t)+'"'+(p.out ? ' data-out="1"' : '');
+        return ' class="dcell" onclick="incDrill(this)" data-entity="'+esc(c.entity)+'" data-col="'+esc(c.col)+'" data-val="'+esc(f.t)+'"'+(p.out ? ' data-out="1"' : '')+(p.part ? ' data-part="'+p.part+'"' : '');
       }
       var tot = fmtVal(p.total, p);
       var fyCell = '<td'+drillAttrs(p.total, tot, 0)+' style="position:sticky;left:'+FY_LEFT+'px;z-index:2;'+cell+'background:'+((ent.isGrand || ent.isZone) ? rowBg : '#FCF9EE')+';font-weight:700;color:'+tot.c+';box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">'+tot.t+'</td>';
@@ -6082,8 +6105,8 @@ function _incentivePageInner(foldQ){
   if (zones.length) {
     zones.forEach(function(z){
       var zReps = reps.filter(function(r){ return (r.zone || 'Cross Sales') === z.name; });
-      body += block({ name:z.name, initials:z.initials, avatarBg:z.avatarBg, isZone:true, gp:z.gp, tgt:z.tgt, drillCells:z.drillCells,
-                      outGp:zOut[z.name] || new Array(nCols).fill(0), outShip:zOutShip[z.name] || 0, repCount:zReps.length, members:zReps });
+      body += block(withAgg({ name:z.name, initials:z.initials, avatarBg:z.avatarBg, isZone:true, gp:z.gp, tgt:z.tgt, drillCells:z.drillCells,
+                      repCount:zReps.length, members:zReps }, byZone[z.name]));
       if (state.incZoneOpen && state.incZoneOpen[z.name]) body += zReps.map(block).join('');
     });
   } else {
