@@ -7,7 +7,7 @@
 //    refs     every Ref No that has a positive outstanding (payment not received)
 //    lateRefs Ref No → overdue days, for fully paid invoices paid more than LATE_DAYS
 //             past their due date (the sync's _paid rows: last Receipt Date −
-//             (Trans. Date + Credit Days))
+//             (Trans. Date, or ATA/ETA for OVR Receivable, + Credit Days) — the AR page's rule)
 //  The AR sync stores the sheet's "Reference No." column as refNo; a field literally named "Ref No" also
 //  counts. The Incentive page takes those shipments' GP off, along with jobs whose Financial Lock isn't done.
 // ─────────────────────────────────────────────────────────────────

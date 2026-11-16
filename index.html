@@ -5805,7 +5805,7 @@ var INC_CORE_LOBS = ['SEA EXPORT', 'SEA IMPORT']; // Core; every other LOB is Cr
 var INC_RM = [
   { k:'fl',     label:'Jobs where FL is not done' },                       // Financial Lock blank on the job
   { k:'unpaid', label:'Jobs having O/S Amt' },                             // Ref No still has a positive outstanding in ar_outstanding
-  { k:'late',   label:'Jobs where the amount is paid more than 30 days overdue' } // fully paid, but more than 30 days past the due date (Trans. Date + Credit Days)
+  { k:'late',   label:'Jobs where the amount is paid more than 30 days overdue' } // fully paid, but more than 30 days past the due date (Trans. Date, OVR: ATA/ETA, + Credit Days)
 ];
 function _incRmReason(row){
   if (row.prov === 1) return 'fl';

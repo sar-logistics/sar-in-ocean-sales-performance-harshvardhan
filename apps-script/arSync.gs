@@ -183,7 +183,7 @@ function pushArToDashboard() {
       const base = gl.toLowerCase() === 'ovr receivable'
         ? ((ataCol > -1 && asDate(row[ataCol])) || (etaCol > -1 && asDate(row[etaCol])) || td) : td;
       x = inv[key] = {
-        org: org, txn: txn, bill: bill, td: base, trans: td, rd: null, open: false, gl: gl,
+        org: org, txn: txn, bill: bill, td: base, rd: null, open: false, gl: gl,
         ref: [col.refNo > -1 ? row[col.refNo] : '', ref2Col > -1 ? row[ref2Col] : '']
           .map(function (v) { return String(v == null ? '' : v).trim(); }).filter(Boolean).join('\n'),
         cd: col.creditDays > -1 ? arNum_(row[col.creditDays]) : 0,
@@ -205,11 +205,11 @@ function pushArToDashboard() {
     // days from invoice (OVR: arrival) to receipt — no credit days; a receipt before that date → 0
     const days = Math.max(0, Math.round((end.getTime() - x.td.getTime()) / 86400000));
     // Incentive page: a fully paid invoice with its shipment Ref No, how many days it took to be paid, and how
-    // many days overdue it was when paid = last Receipt Date − (Trans. Date + Credit Days) — the report's own
-    // Overdue Days (e.g. 24-Apr → 14-Jul, 0 credit days = 81); 0 if paid on time
+    // many days overdue it was when paid = last Receipt Date − (Trans. Date + Credit Days); for OVR Receivable
+    // the base is the arrival (ATA, else ETA, else Trans. Date) — the same rule as the AR page; 0 if paid on time
     // (_paid: true, outstanding 0 — pages that read outstanding rows skip it)
     if (!x.open && x.rd && x.ref) paidRows.push({ customer: x.org, txnNo: x.txn, refNo: x.ref, outstanding: 0, _paid: true, payDays: days,
-      creditDays: x.cd, paidOverdueDays: Math.max(0, Math.round((x.rd.getTime() - x.trans.getTime()) / 86400000) - (x.cd || 0)),
+      creditDays: x.cd, paidOverdueDays: Math.max(0, Math.round((x.rd.getTime() - x.td.getTime()) / 86400000) - (x.cd || 0)),
       receiptDate: Utilities.formatDate(x.rd, tz, 'dd-MMM-yyyy') });
     const gk = [x.org, x.sp, x.lob, x.loc, x.gl].join('\u0001');
     const g = dsoGroups[gk] || (dsoGroups[gk] = { customer: x.org, salesPerson: x.sp, lob: x.lob, location: x.loc, glGroup: x.gl,
