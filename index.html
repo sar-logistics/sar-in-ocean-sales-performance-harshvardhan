@@ -5798,7 +5798,7 @@ function financePage(){
 // Sales incentive page. Layout matches Accounts Receivable (title row, KPI cards, table card).
 // No incentive data source yet, so the cards show dashes and the table shows an empty state.
 var INC_MGMT_FEE_PCT = 0.15; // Management fees: 15% of GP
-var INC_MIN_ACHV = 75;        // Management fees and everything after it only apply from this ACHV %
+var INC_MIN_ACHV = 75;        // Outstanding GP, fees and everything after them only apply from this ACHV % (GP ÷ GP Target)
 var INC_CORE_LOBS = ['SEA EXPORT', 'SEA IMPORT']; // Core; every other LOB is Cross
 function _incIsCore(lob){ return INC_CORE_LOBS.indexOf(String(lob || '').toUpperCase().trim()) > -1; }
 
@@ -5969,47 +5969,52 @@ function _incentivePageInner(foldQ){
   function pct(gp, tgt){ return tgt > 0 ? Math.round(gp / tgt * 100) : null; }
   function fee(gp){ return Math.max(0, gp) * INC_MGMT_FEE_PCT; }
   function minus(a, b){ return a.map(function(v, i){ return v - (b[i] || 0); }); }
-  // Achieved Target % = Core GP (Achieved − Outstanding) ÷ GP Target. Where it is at least INC_MIN_ACHV
-  // (as displayed), fees and amount are worked out for Core and for Cross — the same rule for a rep, a zone
-  // and the Grand Total. The Grand Total column uses the whole period.
+  // Step 1: Achieved Target % = Core GP ÷ GP Target (outstanding not taken off yet). Only where that is at
+  // least INC_MIN_ACHV (as displayed) do the next steps apply: Outstanding GP is taken off, and fees and amount
+  // are worked out on what is left, for Core and for Cross. The same rule for a rep, a zone and the Grand Total;
+  // the Grand Total column uses the whole period.
   function calc(e){
     if (e._calc) return e._calc;
     var gpCross = minus(e.gp, e.coreGp), outCross = minus(e.outGp, e.outCore);
-    var netCore = minus(e.coreGp, e.outCore), netCross = minus(gpCross, outCross), net = minus(e.gp, e.outGp);
+    var netCore = minus(e.coreGp, e.outCore), netCross = minus(gpCross, outCross);
     function ok(g, t){ var a = pct(g, t); return !e.noTarget && a !== null && a >= INC_MIN_ACHV; }
-    var okC = netCore.map(function(g, i){ return ok(g, e.tgt[i]); });
-    var NC = sum(netCore), NX = sum(netCross), T = sum(e.tgt), okT = ok(NC, T);
+    var okC = e.coreGp.map(function(g, i){ return ok(g, e.tgt[i]); });
+    var GC = sum(e.coreGp), T = sum(e.tgt), okT = ok(GC, T);
+    function gate(arr){ return arr.map(function(v, i){ return okC[i] ? v : null; }); }
+    function gateT(arr){ return okT ? sum(arr) : null; }
     function feeA(arr){ return arr.map(function(g, i){ return okC[i] ? fee(g) : null; }); }
     function amtA(arr){ return arr.map(function(g, i){ return okC[i] ? g - fee(g) : null; }); }
+    function feeT(arr){ return okT ? fee(sum(arr)) : null; }
+    function amtT(arr){ var n = sum(arr); return okT ? n - fee(n) : null; }
     return (e._calc = {
-      gpCross: gpCross, outCross: outCross, netCore: netCore, netCross: netCross, net: net,
-      ach: netCore.map(function(g, i){ return pct(g, e.tgt[i]); }), achT: pct(NC, T),
+      gpCross: gpCross,
+      ach: e.coreGp.map(function(g, i){ return pct(g, e.tgt[i]); }), achT: pct(GC, T),
+      outCore: gate(e.outCore), outCross: gate(outCross), outCoreT: gateT(e.outCore), outCrossT: gateT(outCross),
+      netCore: gate(netCore), netCross: gate(netCross), netCoreT: gateT(netCore), netCrossT: gateT(netCross),
       feeCore: feeA(netCore), feeCross: feeA(netCross), amtCore: amtA(netCore), amtCross: amtA(netCross),
-      feeCoreT: okT ? fee(NC) : null, feeCrossT: okT ? fee(NX) : null,
-      amtCoreT: okT ? NC - fee(NC) : null, amtCrossT: okT ? NX - fee(NX) : null
+      feeCoreT: feeT(netCore), feeCrossT: feeT(netCross), amtCoreT: amtT(netCore), amtCrossT: amtT(netCross)
     });
   }
   function particulars(ent){
     var c = calc(ent), tgt = ent.tgt, T = sum(tgt);
     var gk = (ent.isGrand ? 'G:' : ent.isZone ? 'Z:' : 'R:') + ent.name;
-    var gOpen = !!(state.incGpOpen && state.incGpOpen[gk]);
     var iOpen = !!(state.incGpOpen && state.incGpOpen['I:' + gk]);
     var none = ent.gp.map(function(){ return null; });
     function ships(n){ return n ? n + ' shipment' + (n === 1 ? '' : 's') : ''; }
     // Only the part picked with the Core / Cross switch. Achieved Target % is always Core's: it decides
-    // whether fees and amount apply, for Core and for Cross alike.
+    // whether the steps after it apply, for Core and for Cross alike. Below INC_MIN_ACHV they show "–".
     var cross = state.incPart === 'cross', part = cross ? 'cross' : 'core';
-    var gpP = cross ? c.gpCross : ent.coreGp, outP = cross ? c.outCross : ent.outCore, netP = cross ? c.netCross : c.netCore;
+    var gpP = cross ? c.gpCross : ent.coreGp;
     var outShips = cross ? ent.outShip - ent.outShipCore : ent.outShipCore;
-    var rows = [{ label:'GP (Achieved - Outstanding)', type:'cur', color:'#059669', bold:true, vals:netP, total:sum(netP), toggle:gk, open:gOpen }];
-    if (gOpen) rows.push(
-      { label:'GP', sub:true, type:'cur', color:'#15233B', vals:gpP, total:sum(gpP), drill:ent.drillCells, part:part },
-      { label:'Outstanding GP', sub:true, type:'cur', color:'#B83A2B', vals:outP, total:sum(outP), drill:ent.drillCells, out:true, part:part, note:ships(outShips) });
-    return rows.concat([
+    return [
+      { label:'GP', type:'cur', color:'#15233B', bold:true, vals:gpP, total:sum(gpP), drill:ent.drillCells, part:part },
       { label:'GP Target', type:ent.noTarget ? 'na' : 'cur', color:'#0D2B5E', vals:tgt, total:T },
       { label:'Achieved Target % (Core)', type:ent.noTarget ? 'na' : 'pct', vals:c.ach, total:c.achT },
+      { label:'Outstanding GP', type:'cur', color:'#B83A2B', vals:cross ? c.outCross : c.outCore, total:cross ? c.outCrossT : c.outCoreT,
+        drill:ent.drillCells, out:true, part:part, note:ships(outShips) },
+      { label:'GP (Achieved - Outstanding)', type:'cur', color:'#059669', bold:true, vals:cross ? c.netCross : c.netCore, total:cross ? c.netCrossT : c.netCoreT },
       { label:'Incentive %', type:'na', bold:true, color:'#6B3FA0', vals:none, total:null, toggle:'I:' + gk, open:iOpen }
-    ]).concat(iOpen ? [
+    ].concat(iOpen ? [
       { label:'Management Fees (15%)', sub:true, type:'cur', color:'#946312', vals:cross ? c.feeCross : c.feeCore, total:cross ? c.feeCrossT : c.feeCoreT },
       { label:'Amount on which Incentive will be given', sub:true, type:'cur', color:'#1D5FCC', vals:cross ? c.amtCross : c.amtCore, total:cross ? c.amtCrossT : c.amtCoreT },
       { label:'Incentive Payable', sub:true, type:'na', vals:none, total:null }
