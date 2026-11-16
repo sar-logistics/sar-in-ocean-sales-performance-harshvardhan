@@ -7,7 +7,7 @@
 //    refs     every Ref No that has a positive outstanding (payment not received)
 //    lateRefs Ref No → overdue days, for fully paid invoices paid more than LATE_DAYS
 //             past their due date (the sync's _paid rows: last Receipt Date −
-//             (invoice date, or arrival for OVR Receivable, + Credit Days))
+//             (Trans. Date + Credit Days))
 //  The AR sync stores the sheet's "Reference No." column as refNo; a field literally named "Ref No" also
 //  counts. The Incentive page takes those shipments' GP off, along with jobs whose Financial Lock isn't done.
 // ─────────────────────────────────────────────────────────────────
@@ -67,6 +67,11 @@ async function incentiveOutstanding(db, force) {
     eachRef(d, (k) => { refs[k] = true; });
   }
 
+  // Paid-invoice rows in the whole collection (any batch, with or without a Ref No) — shows whether the
+  // updated AR sync has run at all
+  const paidAll = await col.countDocuments({ _paid: true });
+  const total = await col.countDocuments({});
+
   // Nothing found → report which fields the collection does have, so a wrong field name is easy to spot
   let fields = null;
   if (!docs.length) {
@@ -82,6 +87,9 @@ async function incentiveOutstanding(db, force) {
     lateDays: LATE_DAYS,
     lateRefs,
     paidDocs, // 0 until the AR sync that sends paid invoices has run
+    paidAll,
+    total,
+    batch: key,
     fields,
   };
   cache = { key, time: Date.now(), data };
