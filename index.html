@@ -6038,15 +6038,13 @@ function _incentivePageInner(foldQ){
       { label:'GP Achieved', sub:true, type:'cur', color:'#15233B', vals:P.gp, total:sum(P.gp), drill:ent.drillCells, part:part },
       { label:'Target GP', sub:true, type:noT ? 'na' : 'cur', color:'#0D2B5E', vals:tgt, total:T },
       { label:'GP%', sub:true, type:noT ? 'na' : 'pct', vals:P.ach, total:P.achT });
-    rows.push({ label:'Final GP after Deductions (A)', type:'cur', color:'#059669', bold:true, shade:true, vals:P.amt, total:P.amtT, toggle:'A:' + gk, open:aOpen });
-    if (aOpen) rows = rows.concat([
-      { label:'Management Fees (15%)', sub:true, type:'cur', color:'#946312', vals:P.fee, total:P.feeT },
-      { label:'GP - Total Deductions', sub:true, type:'cur', color:'#15233B', vals:P.net, total:P.netT },
-      { label:'Total Deductions', sub:true, type:'cur', color:'#B83A2B', vals:P.all, total:P.allT, drill:ent.drillCells, rm:'all', part:part, note:ships(P.shipsAll) }
-    ], INC_RM.map(function(r){
+    rows.push({ label:'Final GP after Deductions', type:'cur', color:'#059669', bold:true, shade:true, vals:P.amt, total:P.amtT, toggle:'A:' + gk, open:aOpen });
+    if (aOpen) rows = rows.concat(INC_RM.map(function(r){
       return { label:r.label, sub:true, type:'cur', color:'#1D5FCC', vals:P.rm[r.k], total:P.rmT[r.k], drill:ent.drillCells, rm:r.k, part:part, note:ships(P.ships[r.k]) };
-    }));
-    rows.push({ label:'Total Incentive (A × Incentive %)', type:'na', bold:true, shade:true, color:'#6B3FA0', vals:none, total:null });
+    }), [
+      { label:'Management Fees (15%)', sub:true, upright:true, type:'cur', color:'#946312', vals:P.fee, total:P.feeT }
+    ]);
+    rows.push({ label:'Total Incentive', type:'na', bold:true, shade:true, color:'#6B3FA0', vals:none, total:null });
     return rows;
   }
   function fmtVal(v, p){
@@ -6116,7 +6114,7 @@ function _incentivePageInner(foldQ){
         + (pi === mid ? '<div style="display:flex;align-items:center;gap:6px;min-width:0;">'+avatar+label+'</div>' : '') + '</td>';
       var bg = p.shade ? '#EEF2F8' : rowBg;
       var partAttrs = p.toggle ? ' data-gk="'+esc(p.toggle)+'" onclick="incToggleGp(this.getAttribute(\'data-gk\'))"' : '';
-      var partCell = '<td'+partAttrs+' style="'+(p.toggle ? 'cursor:pointer;' : '')+(p.sub ? 'font-style:italic;' : '')+'position:sticky;left:'+NAME_W+'px;z-index:2;background:'+bg+';padding:6px 10px;width:'+PART_W+'px;min-width:'+PART_W+'px;max-width:'+PART_W+'px;box-sizing:border-box;white-space:normal;line-height:1.35;font-size:11.5px;font-weight:'+(p.bold ? 600 : 500)+';color:'+(p.bold ? (p.color || '#374151') : '#374151')+';">'+(p.toggle ? '<span style="display:inline-block;width:12px;font-size:9px;color:'+(p.color || '#374151')+';">'+(p.open ? '▼' : '▶')+'</span>' : '')
+      var partCell = '<td'+partAttrs+' style="'+(p.toggle ? 'cursor:pointer;' : '')+(p.sub && !p.upright ? 'font-style:italic;' : '')+'position:sticky;left:'+NAME_W+'px;z-index:2;background:'+bg+';padding:6px 10px;width:'+PART_W+'px;min-width:'+PART_W+'px;max-width:'+PART_W+'px;box-sizing:border-box;white-space:normal;line-height:1.35;font-size:11.5px;font-weight:'+(p.bold ? 600 : 500)+';color:'+(p.bold ? (p.color || '#374151') : '#374151')+';">'+(p.toggle ? '<span style="display:inline-block;width:12px;font-size:9px;color:'+(p.color || '#374151')+';">'+(p.open ? '▼' : '▶')+'</span>' : '')
         +(p.sub ? '<span style="display:inline-block;width:12px;"></span>' : '')
         +esc(p.label)+(p.note ? ' <span style="font-size:9.5px;font-weight:600;color:#94A3B8;">· '+esc(p.note)+'</span>' : '')+'</td>';
       var cell = 'text-align:right;padding:6px 10px;font-family:\'DM Mono\',monospace;font-size:11px;white-space:nowrap;';
