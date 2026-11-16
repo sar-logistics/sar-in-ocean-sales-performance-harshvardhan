@@ -5820,6 +5820,8 @@ function fetchIncentiveOutstanding(callback, force){
     .finally(function(){ incOutLoading = false; if (callback) callback(); });
 }
 function incRetry(){ incOutError = ''; fetchIncentiveOutstanding(function(){ render(); }, true); render(); }
+// Core (SEA EXPORT / SEA IMPORT) or Cross (every other LOB): which part every row shows. Core by default.
+function incSetPart(p){ state.incPart = p === 'cross' ? 'cross' : 'core'; render(); }
 function incToggleZone(z){ state.incZoneOpen = state.incZoneOpen || {}; state.incZoneOpen[z] = !state.incZoneOpen[z]; render(); }
 function incToggleAllZones(open){
   state.incZoneOpen = {};
@@ -5994,25 +5996,23 @@ function _incentivePageInner(foldQ){
     var iOpen = !!(state.incGpOpen && state.incGpOpen['I:' + gk]);
     var none = ent.gp.map(function(){ return null; });
     function ships(n){ return n ? n + ' shipment' + (n === 1 ? '' : 's') : ''; }
-    var rows = [{ label:'GP (Achieved - Outstanding)', type:'cur', color:'#059669', bold:true, vals:c.net, total:sum(c.net), toggle:gk, open:gOpen }];
+    // Only the part picked with the Core / Cross switch. Achieved Target % is always Core's: it decides
+    // whether fees and amount apply, for Core and for Cross alike.
+    var cross = state.incPart === 'cross', part = cross ? 'cross' : 'core';
+    var gpP = cross ? c.gpCross : ent.coreGp, outP = cross ? c.outCross : ent.outCore, netP = cross ? c.netCross : c.netCore;
+    var outShips = cross ? ent.outShip - ent.outShipCore : ent.outShipCore;
+    var rows = [{ label:'GP (Achieved - Outstanding)', type:'cur', color:'#059669', bold:true, vals:netP, total:sum(netP), toggle:gk, open:gOpen }];
     if (gOpen) rows.push(
-      { label:'GP – Core', sub:true, type:'cur', color:'#15233B', vals:ent.coreGp, total:sum(ent.coreGp), drill:ent.drillCells, part:'core' },
-      { label:'GP – Cross', sub:true, type:'cur', color:'#15233B', vals:c.gpCross, total:sum(c.gpCross), drill:ent.drillCells, part:'cross' },
-      { label:'Outstanding GP – Core', sub:true, type:'cur', color:'#B83A2B', vals:ent.outCore, total:sum(ent.outCore), drill:ent.drillCells, out:true, part:'core', note:ships(ent.outShipCore) },
-      { label:'Outstanding GP – Cross', sub:true, type:'cur', color:'#B83A2B', vals:c.outCross, total:sum(c.outCross), drill:ent.drillCells, out:true, part:'cross', note:ships(ent.outShip - ent.outShipCore) },
-      { label:'GP (Achieved - Outstanding) – Core', sub:true, type:'cur', color:'#059669', vals:c.netCore, total:sum(c.netCore) },
-      { label:'GP (Achieved - Outstanding) – Cross', sub:true, type:'cur', color:'#059669', vals:c.netCross, total:sum(c.netCross) });
+      { label:'GP', sub:true, type:'cur', color:'#15233B', vals:gpP, total:sum(gpP), drill:ent.drillCells, part:part },
+      { label:'Outstanding GP', sub:true, type:'cur', color:'#B83A2B', vals:outP, total:sum(outP), drill:ent.drillCells, out:true, part:part, note:ships(outShips) });
     return rows.concat([
       { label:'GP Target', type:ent.noTarget ? 'na' : 'cur', color:'#0D2B5E', vals:tgt, total:T },
       { label:'Achieved Target % (Core)', type:ent.noTarget ? 'na' : 'pct', vals:c.ach, total:c.achT },
       { label:'Incentive %', type:'na', bold:true, color:'#6B3FA0', vals:none, total:null, toggle:'I:' + gk, open:iOpen }
     ]).concat(iOpen ? [
-      { label:'Management Fees (15%) – Core', sub:true, type:'cur', color:'#946312', vals:c.feeCore, total:c.feeCoreT },
-      { label:'Management Fees (15%) – Cross', sub:true, type:'cur', color:'#946312', vals:c.feeCross, total:c.feeCrossT },
-      { label:'Amount on which Incentive will be given – Core', sub:true, type:'cur', color:'#1D5FCC', vals:c.amtCore, total:c.amtCoreT },
-      { label:'Amount on which Incentive will be given – Cross', sub:true, type:'cur', color:'#1D5FCC', vals:c.amtCross, total:c.amtCrossT },
-      { label:'Incentive Payable – Core', sub:true, type:'na', vals:none, total:null },
-      { label:'Incentive Payable – Cross', sub:true, type:'na', vals:none, total:null }
+      { label:'Management Fees (15%)', sub:true, type:'cur', color:'#946312', vals:cross ? c.feeCross : c.feeCore, total:cross ? c.feeCrossT : c.feeCoreT },
+      { label:'Amount on which Incentive will be given', sub:true, type:'cur', color:'#1D5FCC', vals:cross ? c.amtCross : c.amtCore, total:cross ? c.amtCrossT : c.amtCoreT },
+      { label:'Incentive Payable', sub:true, type:'na', vals:none, total:null }
     ] : []);
   }
   function fmtVal(v, p){
@@ -6118,6 +6118,17 @@ function _incentivePageInner(foldQ){
       +'<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid '+BORDER+';flex-wrap:wrap;border-radius:12px 12px 0 0;">'
         +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Incentive</span>'
         +'<span style="font-size:11px;color:#9AAFC8;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+(foldQ ? 'Quarterly' : state.reportView)+' · '+state.currency+'</span>'
+        +(function(){
+          var cur = state.incPart === 'cross' ? 'cross' : 'core';
+          function seg(k, label, hint){
+            var on = cur === k;
+            return '<button onclick="incSetPart(\''+k+'\')" class="btnq" role="radio" aria-checked="'+on+'" title="'+hint+'" style="border:none;border-radius:999px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;'
+              +(on ? 'background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');color:#FFFFFF;box-shadow:0 1px 3px rgba(30,58,102,0.3);' : 'background:transparent;color:#1E3A66;')+'">'+label+'</button>';
+          }
+          return '<div role="radiogroup" aria-label="Core or Cross" style="display:inline-flex;gap:2px;padding:2px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;">'
+            + seg('core', 'Core', 'SEA EXPORT and SEA IMPORT') + seg('cross', 'Cross', 'Every other LOB') + '</div>'
+            + '<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+(cur === 'cross' ? 'Cross: every LOB except Sea Export / Sea Import' : 'Core: Sea Export + Sea Import')+'</span>';
+        })()
         +(zones.length ? '<button onclick="incToggleAllZones('+(allOpen ? 'false' : 'true')+')" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+(allOpen ? 'Collapse All' : 'Expand All')+'</button>' : '')
         +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+zones.length+' zones · '+reps.length+' sales reps</span>'
         +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">· Outstanding from ar_outstanding'+(incOutMeta && incOutMeta.asOn ? ' as on <span style="color:#2C4E82;font-weight:700;">'+esc(incOutMeta.asOn)+'</span>' : '')+'</span>'
