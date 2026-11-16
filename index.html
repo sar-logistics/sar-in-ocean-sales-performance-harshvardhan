@@ -5990,19 +5990,21 @@ function _incentivePageInner(foldQ){
   function pct(gp, tgt){ return tgt > 0 ? Math.round(gp / tgt * 100) : null; }
   function fee(gp){ return Math.max(0, gp) * INC_MGMT_FEE_PCT; }
   function minus(a, b){ return a.map(function(v, i){ return v - (b[i] || 0); }); }
-  // Step 1: Achieved Target % = Core GP ÷ GP Target (nothing taken off yet). Only where that is at least
-  // INC_MIN_ACHV (as displayed) do the next steps apply: the GP of jobs with FL not done, payment not received,
-  // or paid after 90 days is taken off, and fees and amount are worked out on the Final GP, for Core and for
-  // Cross. The same rule for a rep, a zone and the Grand Total; the Grand Total column uses the whole period.
+  // Step 1: GP% = the part's GP ÷ GP Target (nothing taken off yet). Only where that is at least INC_MIN_ACHV
+  // (as displayed) do the next steps apply: the GP of jobs with FL not done, payment not received, or paid
+  // after 90 days is taken off, and fees and amount are worked out on what is left. The same rule for a rep,
+  // a zone and the Grand Total; the Grand Total column uses the whole period.
   function calc(e){
     if (e._calc) return e._calc;
-    function ok(g, t){ var a = pct(g, t); return !e.noTarget && a !== null && a >= INC_MIN_ACHV; }
-    var okC = e.coreGp.map(function(g, i){ return ok(g, e.tgt[i]); });
-    var GC = sum(e.coreGp), T = sum(e.tgt), okT = ok(GC, T);
-    function gate(arr){ return arr.map(function(v, i){ return okC[i] ? v : null; }); }
-    function gateT(arr){ return okT ? sum(arr) : null; }
+    // Core and Cross are worked out on their own: each part's GP ÷ GP Target decides that part's
+    // eligibility, deductions, fees and amount.
     function part(isCore){
       var gp = isCore ? e.coreGp : minus(e.gp, e.coreGp);
+      var ach = gp.map(function(g, i){ return pct(g, e.tgt[i]); }), achT = pct(sum(gp), sum(e.tgt));
+      function yn(a){ return e.noTarget || a === null ? null : a >= INC_MIN_ACHV; }
+      var okC = ach.map(function(a){ return yn(a) === true; }), okT = yn(achT) === true;
+      function gate(arr){ return arr.map(function(v, i){ return okC[i] ? v : null; }); }
+      function gateT(arr){ return okT ? sum(arr) : null; }
       var all = gp.map(function(){ return 0; }), rm = {}, rmT = {}, ships = {}, shipsAll = 0;
       INC_RM.forEach(function(r){
         var R = e.rm[r.k], v = isCore ? R.core : minus(R.all, R.core);
@@ -6012,35 +6014,30 @@ function _incentivePageInner(foldQ){
       });
       var net = minus(gp, all), N = sum(net);
       return {
-        gp: gp, rm: rm, rmT: rmT, ships: ships, all: gate(all), allT: gateT(all), shipsAll: shipsAll,
+        gp: gp, ach: ach, achT: achT, elig: ach.map(yn), eligT: yn(achT),
+        rm: rm, rmT: rmT, ships: ships, all: gate(all), allT: gateT(all), shipsAll: shipsAll,
         net: gate(net), netT: gateT(net),
         fee: net.map(function(g, i){ return okC[i] ? fee(g) : null; }), feeT: okT ? fee(N) : null,
         amt: net.map(function(g, i){ return okC[i] ? g - fee(g) : null; }), amtT: okT ? N - fee(N) : null
       };
     }
-    var ach = e.coreGp.map(function(g, i){ return pct(g, e.tgt[i]); }), achT = pct(GC, T);
-    function yn(a){ return e.noTarget || a === null ? null : a >= INC_MIN_ACHV; }
-    return (e._calc = {
-      ach: ach, achT: achT, elig: ach.map(yn), eligT: yn(achT),
-      core: part(true), cross: part(false)
-    });
+    return (e._calc = { core: part(true), cross: part(false) });
   }
   function particulars(ent){
     var c = calc(ent), tgt = ent.tgt, T = sum(tgt);
     var gk = (ent.isGrand ? 'G:' : ent.isZone ? 'Z:' : 'R:') + ent.name;
     var none = ent.gp.map(function(){ return null; });
     function ships(n){ return n ? n + ' job' + (n === 1 ? '' : 's') : ''; }
-    // Same layout as the incentive sheet. Only the part picked with the Core / Cross switch; Eligibility and
-    // GP% are always Core's: they decide whether the steps after them apply, for Core and for Cross alike.
-    // Not eligible → everything below GP% shows "–".
+    // Same layout as the incentive sheet. Only the part picked with the Core / Cross switch, worked out on its
+    // own GP (Eligibility and GP% included). Not eligible → everything below GP% shows "–".
     var cross = state.incPart === 'cross', part = cross ? 'cross' : 'core', P = cross ? c.cross : c.core;
     var noT = ent.noTarget, open = state.incGpOpen || {};
     var eOpen = !!open['E:' + gk], aOpen = !!open['A:' + gk]; // drill-downs, closed until clicked
-    var rows = [{ label:'Eligibility', type:noT ? 'na' : 'yn', bold:true, shade:true, color:'#0D2B5E', vals:c.elig, total:c.eligT, toggle:'E:' + gk, open:eOpen }];
+    var rows = [{ label:'Eligibility', type:noT ? 'na' : 'yn', bold:true, shade:true, color:'#0D2B5E', vals:P.elig, total:P.eligT, toggle:'E:' + gk, open:eOpen }];
     if (eOpen) rows.push(
       { label:'GP Achieved', sub:true, type:'cur', color:'#15233B', vals:P.gp, total:sum(P.gp), drill:ent.drillCells, part:part },
       { label:'Target GP', sub:true, type:noT ? 'na' : 'cur', color:'#0D2B5E', vals:tgt, total:T },
-      { label:'GP%', sub:true, type:noT ? 'na' : 'pct', vals:c.ach, total:c.achT });
+      { label:'GP%', sub:true, type:noT ? 'na' : 'pct', vals:P.ach, total:P.achT });
     rows.push({ label:'Final GP after Deductions (A)', type:'cur', color:'#059669', bold:true, shade:true, vals:P.amt, total:P.amtT, toggle:'A:' + gk, open:aOpen });
     if (aOpen) rows = rows.concat([
       { label:'Management Fees (15%)', sub:true, type:'cur', color:'#946312', vals:P.fee, total:P.feeT },
