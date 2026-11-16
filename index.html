@@ -5803,9 +5803,9 @@ var INC_CORE_LOBS = ['SEA EXPORT', 'SEA IMPORT']; // Core; every other LOB is Cr
 // GP taken off before fees, once the target is met. A job counts under the first reason that fits, so the
 // three add up to "GP removed" without counting any job twice.
 var INC_RM = [
-  { k:'fl',     label:'FL not done' },              // Financial Lock blank on the job
-  { k:'unpaid', label:'Payment not received' },     // Ref No still has a positive outstanding in ar_outstanding
-  { k:'late',   label:'Paid after 90 days' }        // fully paid, but more than 90 days after the invoice (OVR: arrival)
+  { k:'fl',     label:'Jobs where FL is not done' },                       // Financial Lock blank on the job
+  { k:'unpaid', label:'Jobs having O/S Amt' },                             // Ref No still has a positive outstanding in ar_outstanding
+  { k:'late',   label:'Jobs where the full amount is received after 90 days' } // fully paid, but more than 90 days after the invoice (OVR: arrival)
 ];
 function _incRmReason(row){
   if (row.prov === 1) return 'fl';
@@ -6018,50 +6018,47 @@ function _incentivePageInner(foldQ){
         amt: net.map(function(g, i){ return okC[i] ? g - fee(g) : null; }), amtT: okT ? N - fee(N) : null
       };
     }
+    var ach = e.coreGp.map(function(g, i){ return pct(g, e.tgt[i]); }), achT = pct(GC, T);
+    function yn(a){ return e.noTarget || a === null ? null : a >= INC_MIN_ACHV; }
     return (e._calc = {
-      ach: e.coreGp.map(function(g, i){ return pct(g, e.tgt[i]); }), achT: pct(GC, T),
+      ach: ach, achT: achT, elig: ach.map(yn), eligT: yn(achT),
       core: part(true), cross: part(false)
     });
   }
   function particulars(ent){
     var c = calc(ent), tgt = ent.tgt, T = sum(tgt);
     var gk = (ent.isGrand ? 'G:' : ent.isZone ? 'Z:' : 'R:') + ent.name;
-    var open = state.incGpOpen || {};
-    var iOpen = !!open['I:' + gk];
-    var rOpen = !open['X:' + gk]; // GP removed: open unless closed
     var none = ent.gp.map(function(){ return null; });
     function ships(n){ return n ? n + ' job' + (n === 1 ? '' : 's') : ''; }
-    // Only the part picked with the Core / Cross switch. Achieved Target % is always Core's: it decides
-    // whether the steps after it apply, for Core and for Cross alike. Below INC_MIN_ACHV they show "–".
+    // Same layout as the incentive sheet. Only the part picked with the Core / Cross switch; Eligibility and
+    // GP% are always Core's: they decide whether the steps after them apply, for Core and for Cross alike.
+    // Not eligible → everything below GP% shows "–".
     var cross = state.incPart === 'cross', part = cross ? 'cross' : 'core', P = cross ? c.cross : c.core;
-    var rows = [
-      { label:'GP', type:'cur', color:'#15233B', bold:true, vals:P.gp, total:sum(P.gp), drill:ent.drillCells, part:part },
-      { label:'GP Target', type:ent.noTarget ? 'na' : 'cur', color:'#0D2B5E', vals:tgt, total:T },
-      { label:'Achieved Target % (Core)', type:ent.noTarget ? 'na' : 'pct', vals:c.ach, total:c.achT },
-      { label:'GP removed', type:'cur', color:'#B83A2B', bold:true, vals:P.all, total:P.allT,
-        drill:ent.drillCells, rm:'all', part:part, note:ships(P.shipsAll), toggle:'X:' + gk, open:rOpen }
-    ];
-    if (rOpen) INC_RM.forEach(function(r){
-      rows.push({ label:r.label, sub:true, type:'cur', color:'#B83A2B', vals:P.rm[r.k], total:P.rmT[r.k],
-        drill:ent.drillCells, rm:r.k, part:part, note:ships(P.ships[r.k]) });
-    });
-    return rows.concat([
-      { label:'Final GP (GP - Removed)', type:'cur', color:'#059669', bold:true, vals:P.net, total:P.netT },
-      { label:'Incentive %', type:'na', bold:true, color:'#6B3FA0', vals:none, total:null, toggle:'I:' + gk, open:iOpen }
-    ]).concat(iOpen ? [
-      { label:'Management Fees (15%)', sub:true, type:'cur', color:'#946312', vals:P.fee, total:P.feeT },
-      { label:'Amount on which Incentive will be given', sub:true, type:'cur', color:'#1D5FCC', vals:P.amt, total:P.amtT },
-      { label:'Incentive Payable', sub:true, type:'na', vals:none, total:null }
-    ] : []);
+    var noT = ent.noTarget;
+    return [
+      { label:'Eligibility', type:noT ? 'na' : 'yn', bold:true, shade:true, color:'#0D2B5E', vals:c.elig, total:c.eligT },
+      { label:'GP Achieved', type:'cur', color:'#15233B', vals:P.gp, total:sum(P.gp), drill:ent.drillCells, part:part },
+      { label:'Target GP', type:noT ? 'na' : 'cur', color:'#0D2B5E', vals:tgt, total:T },
+      { label:'GP%', type:noT ? 'na' : 'pct', vals:c.ach, total:c.achT },
+      { label:'Final GP after Deductions (A)', type:'cur', color:'#059669', bold:true, shade:true, vals:P.amt, total:P.amtT },
+      { label:'Management Fees (15%)', type:'cur', color:'#946312', vals:P.fee, total:P.feeT },
+      { label:'GP - Total Deductions', type:'cur', color:'#15233B', vals:P.net, total:P.netT },
+      { label:'Total Deductions', type:'cur', color:'#B83A2B', vals:P.all, total:P.allT, drill:ent.drillCells, rm:'all', part:part, note:ships(P.shipsAll) }
+    ].concat(INC_RM.map(function(r){
+      return { label:r.label, sub:true, type:'cur', color:'#1D5FCC', vals:P.rm[r.k], total:P.rmT[r.k], drill:ent.drillCells, rm:r.k, part:part, note:ships(P.ships[r.k]) };
+    })).concat([
+      { label:'Total Incentive (A × Incentive %)', type:'na', bold:true, shade:true, color:'#6B3FA0', vals:none, total:null }
+    ]);
   }
   function fmtVal(v, p){
     if (p.type === 'na' || v === null || v === undefined) return { t:'–', c:'#B4BFCE' };
+    if (p.type === 'yn') return v ? { t:'Yes', c:'#15875A' } : { t:'No', c:'#DC2626' };
     if (p.type === 'pct') return { t:v+'%', c: v >= 100 ? '#15875A' : v >= 75 ? '#A8720E' : '#DC2626' };
     return { t:fmtCur(v), c: v < 0 ? '#DC2626' : (p.color || '#15233B') };
   }
 
   var BORDER = '#D5DCE6', BORDER_STRONG = '#B0BAC8';
-  var NAME_W = 210, PART_W = 230, FY_LEFT = NAME_W + PART_W;
+  var NAME_W = 210, PART_W = 300, FY_LEFT = NAME_W + PART_W;
   var thBase = 'padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';white-space:nowrap;';
   var head = '<tr>'
     + '<th style="position:sticky;left:0;z-index:3;background:#F0F4FA;text-align:left;color:#475569;'+thBase+'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';width:'+NAME_W+'px;min-width:'+NAME_W+'px;">Sales Rep</th>'
@@ -6118,8 +6115,9 @@ function _incentivePageInner(foldQ){
       var topBorder = pi === 0 ? ((ent.isGrand || ent.isZone) ? 'border-top:2px solid '+BORDER_STRONG+';' : 'border-top:1.5px dashed #9AA6B8;') : 'border-top:1px solid #EEF1F6;';
       var nameCell = '<td'+zoneClick+' style="'+(ent.isZone ? 'cursor:pointer;' : '')+'position:sticky;left:0;z-index:2;background:'+rowBg+';padding:6px 8px 6px 10px;width:'+NAME_W+'px;min-width:'+NAME_W+'px;max-width:'+NAME_W+'px;'+accent+'">'
         + (pi === mid ? '<div style="display:flex;align-items:center;gap:6px;min-width:0;">'+avatar+label+'</div>' : '') + '</td>';
+      var bg = p.shade ? '#EEF2F8' : rowBg;
       var partAttrs = p.toggle ? ' data-gk="'+esc(p.toggle)+'" onclick="incToggleGp(this.getAttribute(\'data-gk\'))"' : '';
-      var partCell = '<td'+partAttrs+' style="'+(p.toggle ? 'cursor:pointer;' : '')+(p.sub ? 'font-style:italic;' : '')+'position:sticky;left:'+NAME_W+'px;z-index:2;background:'+rowBg+';padding:6px 10px;width:'+PART_W+'px;min-width:'+PART_W+'px;white-space:nowrap;font-size:11.5px;font-weight:'+(p.bold ? 600 : 500)+';color:'+(p.bold ? (p.color || '#374151') : '#374151')+';">'+(p.toggle ? '<span style="display:inline-block;width:12px;font-size:9px;color:'+(p.color || '#374151')+';">'+(p.open ? '▼' : '▶')+'</span>' : '')
+      var partCell = '<td'+partAttrs+' style="'+(p.toggle ? 'cursor:pointer;' : '')+(p.sub ? 'font-style:italic;' : '')+'position:sticky;left:'+NAME_W+'px;z-index:2;background:'+bg+';padding:6px 10px;width:'+PART_W+'px;min-width:'+PART_W+'px;max-width:'+PART_W+'px;box-sizing:border-box;white-space:normal;line-height:1.35;font-size:11.5px;font-weight:'+(p.bold ? 600 : 500)+';color:'+(p.bold ? (p.color || '#374151') : '#374151')+';">'+(p.toggle ? '<span style="display:inline-block;width:12px;font-size:9px;color:'+(p.color || '#374151')+';">'+(p.open ? '▼' : '▶')+'</span>' : '')
         +(p.sub ? '<span style="display:inline-block;width:12px;"></span>' : '')
         +esc(p.label)+(p.note ? ' <span style="font-size:9.5px;font-weight:600;color:#94A3B8;">· '+esc(p.note)+'</span>' : '')+'</td>';
       var cell = 'text-align:right;padding:6px 10px;font-family:\'DM Mono\',monospace;font-size:11px;white-space:nowrap;';
@@ -6132,9 +6130,9 @@ function _incentivePageInner(foldQ){
       var fyCell = '<td'+drillAttrs(p.total, tot, 0)+' style="position:sticky;left:'+FY_LEFT+'px;z-index:2;'+cell+'background:'+((ent.isGrand || ent.isZone) ? rowBg : '#FCF9EE')+';font-weight:700;color:'+tot.c+';box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">'+tot.t+'</td>';
       var mCells = p.vals.map(function(v, vi){
         var f = fmtVal(v, p);
-        return '<td'+drillAttrs(v, f, vi + 1)+' style="'+cell+'background:'+rowBg+';border-right:1px solid '+BORDER+';font-weight:'+(p.bold || ent.isGrand || ent.isZone ? 600 : 500)+';color:'+f.c+';">'+f.t+'</td>';
+        return '<td'+drillAttrs(v, f, vi + 1)+' style="'+cell+'background:'+bg+';border-right:1px solid '+BORDER+';font-weight:'+(p.bold || ent.isGrand || ent.isZone ? 600 : 500)+';color:'+f.c+';">'+f.t+'</td>';
       }).join('');
-      return '<tr style="background:'+rowBg+';'+topBorder+'">'+nameCell+partCell+fyCell+mCells+'</tr>';
+      return '<tr style="background:'+bg+';'+topBorder+'">'+nameCell+partCell+fyCell+mCells+'</tr>';
     }).join('');
   }
 
