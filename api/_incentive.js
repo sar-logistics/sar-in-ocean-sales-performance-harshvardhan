@@ -4,14 +4,18 @@
 //
 //  GET action=incentiveOutstanding
 //  Reads the Ref No straight from the ar_outstanding collection and returns
-//  every Ref No that has a positive outstanding. The AR sync stores the sheet's
-//  "Reference No." column as refNo; a field literally named "Ref No" also counts. The Incentive page leaves
-//  those shipments' GP out ("GP (Achieved - Outstanding)").
+//    refs     every Ref No that has a positive outstanding (payment not received)
+//    lateRefs Ref No → days, for fully paid invoices that took more than LATE_DAYS
+//             to be paid (the sync's _paid rows: invoice date, or arrival for
+//             OVR Receivable, to the last Receipt Date)
+//  The AR sync stores the sheet's "Reference No." column as refNo; a field literally named "Ref No" also
+//  counts. The Incentive page takes those shipments' GP off, along with jobs whose Financial Lock isn't done.
 // ─────────────────────────────────────────────────────────────────
 
 const AR_COLLECTION = "ar_outstanding";
 const REF_FIELDS = ["refNo", "Ref No"];
 const CACHE_TTL_MS = 10 * 60 * 1000;
+const LATE_DAYS = 90; // paid after more than this many days → GP taken off
 
 // "1,234.00", "(456.00)", -456 → number
 function num(v) {
@@ -38,21 +42,29 @@ async function incentiveOutstanding(db, force) {
   const col = db.collection(AR_COLLECTION);
   const docs = await col.find(
     { $or: REF_FIELDS.map((f) => ({ [f]: { $exists: true, $nin: ["", null] } })) },
-    { projection: Object.assign({ _id: 0, outstanding: 1, Outstanding: 1, "Outstanding (INR)": 1 }, ...REF_FIELDS.map((f) => ({ [f]: 1 }))) }
+    { projection: Object.assign({ _id: 0, outstanding: 1, Outstanding: 1, "Outstanding (INR)": 1, _paid: 1, payDays: 1 }, ...REF_FIELDS.map((f) => ({ [f]: 1 }))) }
   ).toArray();
 
   const refs = {};
+  const lateRefs = {};
+  let paidDocs = 0;
+  const eachRef = (d, fn) => {
+    // One cell can list more than one shipment
+    const ref = REF_FIELDS.map((f) => d[f]).filter((v) => v !== undefined && v !== null && v !== "").join("\n");
+    String(ref).split(/[\n,;]+/).forEach((part) => { const k = refKey(part); if (k) fn(k); });
+  };
   for (const d of docs) {
+    if (d._paid) {
+      paidDocs++;
+      const days = num(d.payDays);
+      if (days > LATE_DAYS) eachRef(d, (k) => { lateRefs[k] = Math.max(lateRefs[k] || 0, days); });
+      continue;
+    }
     const raw = d.outstanding !== undefined ? d.outstanding
       : d.Outstanding !== undefined ? d.Outstanding
       : d["Outstanding (INR)"];
     if (!(num(raw) > 0)) continue;
-    // One cell can list more than one shipment
-    const ref = REF_FIELDS.map((f) => d[f]).filter((v) => v !== undefined && v !== null && v !== "").join("\n");
-    String(ref).split(/[\n,;]+/).forEach((part) => {
-      const k = refKey(part);
-      if (k) refs[k] = true;
-    });
+    eachRef(d, (k) => { refs[k] = true; });
   }
 
   // Nothing found → report which fields the collection does have, so a wrong field name is easy to spot
@@ -67,6 +79,9 @@ async function incentiveOutstanding(db, force) {
     asOn: meta ? meta.asOn || null : null,
     docsWithRef: docs.length,
     refs: Object.keys(refs),
+    lateDays: LATE_DAYS,
+    lateRefs,
+    paidDocs, // 0 until the AR sync that sends paid invoices has run
     fields,
   };
   cache = { key, time: Date.now(), data };

@@ -218,7 +218,7 @@ async function arGet(db, force, deployTs) {
   const key = meta.currentBatch + "|" + deployTs;
   if (!force && arCache && arCache.key === key) return arCache.data;
   const [rows, repLookup] = await Promise.all([
-    db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch }, { projection: { _id: 0, customer: 1, salesPerson: 1, lob: 1, location: 1, branch: 1, type: 1, txnNo: 1, transDate: 1, billAmt: 1, outstanding: 1, overdueDays: 1, ageingDays: 1, creditDays: 1, houseNo: 1, jobOwner: 1, _dso: 1, dsoBill: 1, dsoBillDays: 1, dsoDays: 1, dsoCount: 1, glGroup: 1, "GL Group Name": 1, ATA: 1, eta: 1, "Receipt Date": 1 } }).toArray(),
+    db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch, _paid: { $ne: true } }, { projection: { _id: 0, customer: 1, salesPerson: 1, lob: 1, location: 1, branch: 1, type: 1, txnNo: 1, transDate: 1, billAmt: 1, outstanding: 1, overdueDays: 1, ageingDays: 1, creditDays: 1, houseNo: 1, jobOwner: 1, _dso: 1, dsoBill: 1, dsoBillDays: 1, dsoDays: 1, dsoCount: 1, glGroup: 1, "GL Group Name": 1, ATA: 1, eta: 1, "Receipt Date": 1 } }).toArray(),
     loadRepLookup(db),
   ]);
   const data = buildArPayload(rows, repLookup, meta);
@@ -293,7 +293,7 @@ async function arDetail(db, customers) {
   const projection = { _id: 0, customer: 1, txnNo: 1, houseNo: 1, outstanding: 1 };
   AR_DETAIL_FIELDS.forEach((f) => { projection[f[1]] = 1; });
   const docs = await db.collection(AR_COLLECTION).find(
-    { _batch: meta.currentBatch, customer: names.length === 1 ? names[0] : { $in: names } },
+    { _batch: meta.currentBatch, customer: names.length === 1 ? names[0] : { $in: names }, _paid: { $ne: true } },
     { projection }
   ).toArray();
   const s = (v) => String(v == null ? "" : v).trim();

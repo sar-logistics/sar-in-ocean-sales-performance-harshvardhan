@@ -155,6 +155,7 @@ function pushArToDashboard() {
   const rdCol = headers.indexOf('Receipt Date');
   // "OVR Receivable" (GL Group Name) counts from arrival: ATA, else ETA, else Trans. Date
   const glCol = headers.indexOf('GL Group Name'), ataCol = headers.indexOf('ATA'), etaCol = headers.indexOf('ETA');
+  const ref2Col = headers.indexOf('Ref No.') > -1 ? headers.indexOf('Ref No.') : headers.indexOf('Ref No');
   const asDate = function (v) { return v instanceof Date && !isNaN(v.getTime()) ? v : arParseDate_(v); };
   const inv = {};
   let last = null; // the invoice on the line above, for follow-on receipt lines
@@ -182,7 +183,9 @@ function pushArToDashboard() {
       const base = gl.toLowerCase() === 'ovr receivable'
         ? ((ataCol > -1 && asDate(row[ataCol])) || (etaCol > -1 && asDate(row[etaCol])) || td) : td;
       x = inv[key] = {
-        org: org, bill: bill, td: base, rd: null, open: false, gl: gl,
+        org: org, txn: txn, bill: bill, td: base, rd: null, open: false, gl: gl,
+        ref: [col.refNo > -1 ? row[col.refNo] : '', ref2Col > -1 ? row[ref2Col] : '']
+          .map(function (v) { return String(v == null ? '' : v).trim(); }).filter(Boolean).join('\n'),
         cd: col.creditDays > -1 ? arNum_(row[col.creditDays]) : 0,
         sp: (col.salesPerson > -1 ? String(row[col.salesPerson] || '').trim() : '') || top(u.sp),
         lob: (col.lob > -1 ? arLob_(row[col.lob]) : '') || top(u.lob),
@@ -195,11 +198,16 @@ function pushArToDashboard() {
     last = x;
   }
   const dsoGroups = {};
+  const paidRows = [];
   Object.keys(inv).forEach(function (k) {
     const x = inv[k];
     const end = x.open || !x.rd ? asOnDate : x.rd;
     // days from invoice (OVR: arrival) to receipt — no credit days; a receipt before that date → 0
     const days = Math.max(0, Math.round((end.getTime() - x.td.getTime()) / 86400000));
+    // Incentive page: a fully paid invoice with its shipment Ref No and how many days it took to be paid
+    // (_paid: true, outstanding 0 — pages that read outstanding rows skip it)
+    if (!x.open && x.rd && x.ref) paidRows.push({ customer: x.org, txnNo: x.txn, refNo: x.ref, outstanding: 0, _paid: true, payDays: days,
+      receiptDate: Utilities.formatDate(x.rd, tz, 'dd-MMM-yyyy') });
     const gk = [x.org, x.sp, x.lob, x.loc, x.gl].join('\u0001');
     const g = dsoGroups[gk] || (dsoGroups[gk] = { customer: x.org, salesPerson: x.sp, lob: x.lob, location: x.loc, glGroup: x.gl,
       outstanding: 0, _dso: true, dsoBill: 0, dsoBillDays: 0, dsoDays: 0, dsoCount: 0 });
@@ -208,6 +216,8 @@ function pushArToDashboard() {
   const dsoRows = Object.keys(dsoGroups).map(function (k) { return dsoGroups[k]; });
   Logger.log('DSO: ' + Object.keys(inv).length + ' invoices in ' + dsoRows.length + ' customer/sales person/LOB groups');
   dsoRows.forEach(function (g) { rows.push(g); });
+  Logger.log('Paid invoices with a Ref No (for the Incentive page): ' + paidRows.length);
+  paidRows.forEach(function (x) { rows.push(x); });
   const batchId = Utilities.getUuid();
   const chunks = Math.max(1, Math.ceil(rows.length / AR_CHUNK));
   for (let i = 0; i < chunks; i++) {
