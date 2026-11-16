@@ -6034,21 +6034,23 @@ function _incentivePageInner(foldQ){
     // GP% are always Core's: they decide whether the steps after them apply, for Core and for Cross alike.
     // Not eligible → everything below GP% shows "–".
     var cross = state.incPart === 'cross', part = cross ? 'cross' : 'core', P = cross ? c.cross : c.core;
-    var noT = ent.noTarget;
-    return [
-      { label:'Eligibility', type:noT ? 'na' : 'yn', bold:true, shade:true, color:'#0D2B5E', vals:c.elig, total:c.eligT },
-      { label:'GP Achieved', type:'cur', color:'#15233B', vals:P.gp, total:sum(P.gp), drill:ent.drillCells, part:part },
-      { label:'Target GP', type:noT ? 'na' : 'cur', color:'#0D2B5E', vals:tgt, total:T },
-      { label:'GP%', type:noT ? 'na' : 'pct', vals:c.ach, total:c.achT },
-      { label:'Final GP after Deductions (A)', type:'cur', color:'#059669', bold:true, shade:true, vals:P.amt, total:P.amtT },
-      { label:'Management Fees (15%)', type:'cur', color:'#946312', vals:P.fee, total:P.feeT },
-      { label:'GP - Total Deductions', type:'cur', color:'#15233B', vals:P.net, total:P.netT },
-      { label:'Total Deductions', type:'cur', color:'#B83A2B', vals:P.all, total:P.allT, drill:ent.drillCells, rm:'all', part:part, note:ships(P.shipsAll) }
-    ].concat(INC_RM.map(function(r){
+    var noT = ent.noTarget, open = state.incGpOpen || {};
+    var eOpen = !!open['E:' + gk], aOpen = !!open['A:' + gk]; // drill-downs, closed until clicked
+    var rows = [{ label:'Eligibility', type:noT ? 'na' : 'yn', bold:true, shade:true, color:'#0D2B5E', vals:c.elig, total:c.eligT, toggle:'E:' + gk, open:eOpen }];
+    if (eOpen) rows.push(
+      { label:'GP Achieved', sub:true, type:'cur', color:'#15233B', vals:P.gp, total:sum(P.gp), drill:ent.drillCells, part:part },
+      { label:'Target GP', sub:true, type:noT ? 'na' : 'cur', color:'#0D2B5E', vals:tgt, total:T },
+      { label:'GP%', sub:true, type:noT ? 'na' : 'pct', vals:c.ach, total:c.achT });
+    rows.push({ label:'Final GP after Deductions (A)', type:'cur', color:'#059669', bold:true, shade:true, vals:P.amt, total:P.amtT, toggle:'A:' + gk, open:aOpen });
+    if (aOpen) rows = rows.concat([
+      { label:'Management Fees (15%)', sub:true, type:'cur', color:'#946312', vals:P.fee, total:P.feeT },
+      { label:'GP - Total Deductions', sub:true, type:'cur', color:'#15233B', vals:P.net, total:P.netT },
+      { label:'Total Deductions', sub:true, type:'cur', color:'#B83A2B', vals:P.all, total:P.allT, drill:ent.drillCells, rm:'all', part:part, note:ships(P.shipsAll) }
+    ], INC_RM.map(function(r){
       return { label:r.label, sub:true, type:'cur', color:'#1D5FCC', vals:P.rm[r.k], total:P.rmT[r.k], drill:ent.drillCells, rm:r.k, part:part, note:ships(P.ships[r.k]) };
-    })).concat([
-      { label:'Total Incentive (A × Incentive %)', type:'na', bold:true, shade:true, color:'#6B3FA0', vals:none, total:null }
-    ]);
+    }));
+    rows.push({ label:'Total Incentive (A × Incentive %)', type:'na', bold:true, shade:true, color:'#6B3FA0', vals:none, total:null });
+    return rows;
   }
   function fmtVal(v, p){
     if (p.type === 'na' || v === null || v === undefined) return { t:'–', c:'#B4BFCE' };
