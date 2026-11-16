@@ -10958,6 +10958,9 @@ document.addEventListener('click', function(ev){
     // Accounts Receivable opens in INR; the previous currency comes back on leaving
     if (state.page === 'ar' && _prevPage !== 'ar') { state._curBeforeAr = state.currency; state.currency = 'INR'; }
     else if (state.page !== 'ar' && _prevPage === 'ar' && state._curBeforeAr) { state.currency = state._curBeforeAr; state._curBeforeAr = null; }
+    // Incentive opens in the Quarterly view; the previous view comes back on leaving
+    if (state.page === 'incentive' && _prevPage !== 'incentive') { state._viewBeforeInc = state.reportView; state.reportView = 'Quarterly'; }
+    else if (state.page !== 'incentive' && _prevPage === 'incentive' && state._viewBeforeInc) { state.reportView = state._viewBeforeInc; state._viewBeforeInc = null; }
     // Clear admin search when navigating away
     if(state.adminSearch) { state.adminSearch = ''; }
     render();
