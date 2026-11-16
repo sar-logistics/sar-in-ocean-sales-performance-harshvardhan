@@ -5,9 +5,9 @@
 //  GET action=incentiveOutstanding
 //  Reads the Ref No straight from the ar_outstanding collection and returns
 //    refs     every Ref No that has a positive outstanding (payment not received)
-//    lateRefs Ref No → days, for fully paid invoices that took more than LATE_DAYS
-//             to be paid (the sync's _paid rows: invoice date, or arrival for
-//             OVR Receivable, to the last Receipt Date)
+//    lateRefs Ref No → overdue days, for fully paid invoices paid more than LATE_DAYS
+//             past their due date (the sync's _paid rows: last Receipt Date −
+//             (invoice date, or arrival for OVR Receivable, + Credit Days))
 //  The AR sync stores the sheet's "Reference No." column as refNo; a field literally named "Ref No" also
 //  counts. The Incentive page takes those shipments' GP off, along with jobs whose Financial Lock isn't done.
 // ─────────────────────────────────────────────────────────────────
@@ -15,7 +15,7 @@
 const AR_COLLECTION = "ar_outstanding";
 const REF_FIELDS = ["refNo", "Ref No"];
 const CACHE_TTL_MS = 10 * 60 * 1000;
-const LATE_DAYS = 90; // paid after more than this many days → GP taken off
+const LATE_DAYS = 30; // paid more than this many days overdue → GP taken off
 
 // "1,234.00", "(456.00)", -456 → number
 function num(v) {
@@ -42,7 +42,7 @@ async function incentiveOutstanding(db, force) {
   const col = db.collection(AR_COLLECTION);
   const docs = await col.find(
     { $or: REF_FIELDS.map((f) => ({ [f]: { $exists: true, $nin: ["", null] } })) },
-    { projection: Object.assign({ _id: 0, outstanding: 1, Outstanding: 1, "Outstanding (INR)": 1, _paid: 1, payDays: 1 }, ...REF_FIELDS.map((f) => ({ [f]: 1 }))) }
+    { projection: Object.assign({ _id: 0, outstanding: 1, Outstanding: 1, "Outstanding (INR)": 1, _paid: 1, paidOverdueDays: 1 }, ...REF_FIELDS.map((f) => ({ [f]: 1 }))) }
   ).toArray();
 
   const refs = {};
@@ -56,7 +56,7 @@ async function incentiveOutstanding(db, force) {
   for (const d of docs) {
     if (d._paid) {
       paidDocs++;
-      const days = num(d.payDays);
+      const days = num(d.paidOverdueDays);
       if (days > LATE_DAYS) eachRef(d, (k) => { lateRefs[k] = Math.max(lateRefs[k] || 0, days); });
       continue;
     }

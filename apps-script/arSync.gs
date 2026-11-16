@@ -204,9 +204,12 @@ function pushArToDashboard() {
     const end = x.open || !x.rd ? asOnDate : x.rd;
     // days from invoice (OVR: arrival) to receipt — no credit days; a receipt before that date → 0
     const days = Math.max(0, Math.round((end.getTime() - x.td.getTime()) / 86400000));
-    // Incentive page: a fully paid invoice with its shipment Ref No and how many days it took to be paid
+    // Incentive page: a fully paid invoice with its shipment Ref No, how many days it took to be paid, and how
+    // many days overdue it was when paid = last Receipt Date − (invoice date (OVR: arrival) + Credit Days),
+    // the same overdue rule as the AR page; 0 if paid on time
     // (_paid: true, outstanding 0 — pages that read outstanding rows skip it)
     if (!x.open && x.rd && x.ref) paidRows.push({ customer: x.org, txnNo: x.txn, refNo: x.ref, outstanding: 0, _paid: true, payDays: days,
+      creditDays: x.cd, paidOverdueDays: Math.max(0, Math.round((x.rd.getTime() - x.td.getTime()) / 86400000) - (x.cd || 0)),
       receiptDate: Utilities.formatDate(x.rd, tz, 'dd-MMM-yyyy') });
     const gk = [x.org, x.sp, x.lob, x.loc, x.gl].join('\u0001');
     const g = dsoGroups[gk] || (dsoGroups[gk] = { customer: x.org, salesPerson: x.sp, lob: x.lob, location: x.loc, glGroup: x.gl,

@@ -5805,7 +5805,7 @@ var INC_CORE_LOBS = ['SEA EXPORT', 'SEA IMPORT']; // Core; every other LOB is Cr
 var INC_RM = [
   { k:'fl',     label:'Jobs where FL is not done' },                       // Financial Lock blank on the job
   { k:'unpaid', label:'Jobs having O/S Amt' },                             // Ref No still has a positive outstanding in ar_outstanding
-  { k:'late',   label:'Jobs where the full amount is received after 90 days' } // fully paid, but more than 90 days after the invoice (OVR: arrival)
+  { k:'late',   label:'Jobs where the amount is paid more than 30 days overdue' } // fully paid, but more than 30 days past the due date (invoice / OVR arrival + Credit Days)
 ];
 function _incRmReason(row){
   if (row.prov === 1) return 'fl';
@@ -5829,7 +5829,7 @@ function fetchIncentiveOutstanding(callback, force){
       (d.refs || []).forEach(function(k){ set[k] = true; });
       incOutRefs = set;
       incLateRefs = d.lateRefs || {};
-      incOutMeta = { asOn:d.asOn, docsWithRef:d.docsWithRef || 0, fields:d.fields || null, paidDocs:d.paidDocs || 0, lateDays:d.lateDays || 90 };
+      incOutMeta = { asOn:d.asOn, docsWithRef:d.docsWithRef || 0, fields:d.fields || null, paidDocs:d.paidDocs || 0, lateDays:d.lateDays || 30 };
       incOutError = '';
     })
     .catch(function(e){ incOutError = e.message || String(e); incOutRefs = null; })
@@ -6166,7 +6166,7 @@ function _incentivePageInner(foldQ){
         +(zones.length ? '<button onclick="incToggleAllZones('+(allOpen ? 'false' : 'true')+')" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+(allOpen ? 'Collapse All' : 'Expand All')+'</button>' : '')
         +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+zones.length+' zones · '+reps.length+' sales reps</span>'
         +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">· Outstanding from ar_outstanding'+(incOutMeta && incOutMeta.asOn ? ' as on <span style="color:#2C4E82;font-weight:700;">'+esc(incOutMeta.asOn)+'</span>' : '')+'</span>'
-        +(incOutMeta && !incOutMeta.paidDocs ? '<span style="font-size:11px;color:#A8720E;font-weight:700;">· Paid after 90 days: no paid invoices in ar_outstanding yet (run the updated AR sync)</span>' : '')
+        +(incOutMeta && !incOutMeta.paidDocs ? '<span style="font-size:11px;color:#A8720E;font-weight:700;">· Paid 30+ days overdue: no paid invoices in ar_outstanding yet (run the updated AR sync)</span>' : '')
         +(incOutMeta && !incOutMeta.docsWithRef ? '<span style="font-size:11px;color:#B83A2B;font-weight:700;">· No Ref No (refNo) found in ar_outstanding'+(incOutMeta.fields ? ' (fields: '+esc(incOutMeta.fields.join(', '))+')' : '')+'</span>' : '')
       +'</div>'
       +'<div style="position:relative;overflow:auto;max-height:calc(100vh - 190px);">'
