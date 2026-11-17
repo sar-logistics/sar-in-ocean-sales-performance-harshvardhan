@@ -5853,6 +5853,9 @@ function incSearchInput(el){
   var n = document.getElementById('incSearch'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} }
 }
 function incSearchClear(){ state.incSearch = ''; incRerender(); }
+// Hierarchical (default) or Detailed: same numbers, two layouts. Filters, period and currency are untouched.
+function incSetView(v){ state.incView = v === 'detailed' ? 'detailed' : 'hier'; render(); }
+function incToggleHelp(){ state.incHelp = !state.incHelp; incRerender(); }
 function incToggleAllZones(open){
   state.incZoneOpen = {};
   if (open) (window._incZoneNames || []).forEach(function(z){ state.incZoneOpen[z] = true; });
@@ -6039,275 +6042,366 @@ function _incentivePageInner(foldQ){
     }
     return (e._calc = { core: part(true), cross: part(false) });
   }
-  // ───────────── Presentation ─────────────
-  // One row per zone / rep: every period shows the result (Final GP after Deductions) with GP% and eligibility
-  // under it. Clicking a row opens its breakdown (Performance → Deductions → Result) lined up under the same
-  // period columns. Zones are section headers, reps sit indented under their zone.
-  var cross = state.incPart === 'cross', partK = cross ? 'cross' : 'core';
-  var open = state.incGpOpen || {};
-  var q = String(state.incSearch || '').trim().toLowerCase();
-  var C = { ink:'#0F1F3A', sub:'#5B6B82', faint:'#9AA8BC', line:'#E4E9F1', lineStrong:'#C9D3E1', navy:'#0D2B5E',
-    good:'#11784F', goodBg:'#E8F5EE', warn:'#9A6A0C', bad:'#B42318', badBg:'#FDEDEC', ded:'#46597A', fee:'#8A5A12', final:'#0B6B47', inc:'#6B3FA0', tot:'#FBF6E9' };
-  function money(v){ return fmtCur(v); }
-  function pctMark(a){
-    if (a === null || a === undefined) return '';
-    var sym = a >= 100 ? '▲' : a >= INC_MIN_ACHV ? '●' : '▼';
-    var col = a >= 100 ? C.good : a >= INC_MIN_ACHV ? C.warn : C.bad;
-    return '<span style="color:'+col+';font-weight:700;">'+sym+' '+a+'%</span>';
-  }
-  function eligTag(e, big){
-    if (e === null || e === undefined) return '<span style="color:'+C.faint+';">No target</span>';
-    var fs = big ? '11px' : '10px';
-    return e ? '<span style="display:inline-block;font-size:'+fs+';font-weight:800;color:'+C.good+';background:'+C.goodBg+';border-radius:999px;padding:1px 7px;">✓ Eligible</span>'
-             : '<span style="display:inline-block;font-size:'+fs+';font-weight:800;color:'+C.bad+';background:'+C.badBg+';border-radius:999px;padding:1px 7px;">✕ Not eligible</span>';
-  }
-  var nPer = heads.length;
-  var totLabel = heads.length ? (function(){ var a = heads[0].sub || heads[0].top, z = heads[heads.length - 1].sub || heads[heads.length - 1].top; return a === z ? a : String(a).split(' – ')[0] + ' – ' + String(z).split(' – ').pop(); })() : '';
-
-  // Sticky first column; total column; one column per period
-  var NAME_W = 300;
-  var colgroup = '<colgroup><col style="width:'+NAME_W+'px;"><col style="width:150px;">' + heads.map(function(){ return '<col style="width:140px;">'; }).join('') + '</colgroup>';
-  var thead = '<thead style="position:sticky;top:0;z-index:5;"><tr>'
-    + '<th style="position:sticky;left:0;z-index:6;background:#F6F8FB;text-align:left;padding:10px 16px;border-bottom:1px solid '+C.lineStrong+';box-shadow:inset -1px 0 0 '+C.lineStrong+';font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:'+C.sub+';">Zone / Sales rep</th>'
-    + '<th style="background:'+C.tot+';text-align:right;padding:8px 14px;border-bottom:1px solid '+C.lineStrong+';box-shadow:inset -1px 0 0 '+C.lineStrong+';">'
-      + '<div style="font-size:11.5px;font-weight:800;color:#8A6410;">Total</div><div style="font-size:9.5px;font-weight:500;color:'+C.faint+';margin-top:1px;">'+esc(totLabel)+'</div></th>'
-    + heads.map(function(h, i){
-        return '<th style="background:#F6F8FB;text-align:right;padding:8px 14px;border-bottom:1px solid '+C.lineStrong+';'+(i < nPer - 1 ? 'box-shadow:inset -1px 0 0 '+C.line+';' : '')+'">'
-          + '<div style="font-size:11.5px;font-weight:800;color:'+C.navy+';">'+esc(h.top)+'</div>'
-          + (h.sub ? '<div style="font-size:9.5px;font-weight:500;color:'+C.faint+';margin-top:1px;">'+esc(h.sub)+'</div>' : '') + '</th>';
-      }).join('')
-    + '</tr></thead>';
-
-  // A period cell of a summary row: result on top, GP% + eligibility under it
-  function sumCell(ent, P, i, isTot){
-    var e = isTot ? P.eligT : P.elig[i], a = isTot ? P.achT : P.ach[i], amt = isTot ? P.amtT : P.amt[i];
-    var gpV = isTot ? sum(P.gp) : P.gp[i];
-    var bg = isTot ? 'background:'+C.tot+';box-shadow:inset -1px 0 0 '+C.lineStrong+';' : (i < nPer - 1 ? 'box-shadow:inset -1px 0 0 '+C.line+';' : '');
-    var top, bot;
-    if (ent.noTarget) { top = '<span style="color:'+C.sub+';font-weight:600;">'+money(gpV)+'</span>'; bot = '<span style="color:'+C.faint+';">GP · no target</span>'; }
-    else if (e === true) { top = '<span style="font-size:'+(ent.isGrand ? 14 : ent.isZone ? 13 : 12.5)+'px;font-weight:800;color:'+(amt < 0 ? C.bad : C.final)+';">'+money(amt)+'</span>'; bot = pctMark(a); }
-    else if (e === false) { top = '<span style="font-size:11px;font-weight:700;color:'+C.bad+';">✕ Not eligible</span>'; bot = pctMark(a); }
-    else { top = gpV ? '<span style="color:'+C.sub+';">'+money(gpV)+'</span>' : ''; bot = ''; }
-    return '<td style="text-align:right;vertical-align:middle;padding:9px 14px;'+bg+'font-family:\'DM Mono\',monospace;white-space:nowrap;">'
-      + '<div style="line-height:1.25;">'+top+'</div>' + (bot ? '<div style="font-size:10px;margin-top:2px;line-height:1.2;">'+bot+'</div>' : '') + '</td>';
-  }
-
-  // Breakdown rows for one entity, aligned with the period columns
-  function breakdown(ent, P, depth){
-    var gk = (ent.isGrand ? 'G:' : ent.isZone ? 'Z:' : 'R:') + ent.name;
-    var accent = ent.isGrand ? C.navy : ent.isZone ? (ent.avatarBg || BRAND_A1) : BRAND_A1;
-    var indent = 16 + depth * 22;
-    var rowsH = '';
-    function section(title, hint){
-      return '<tr><td style="position:sticky;left:0;z-index:2;background:#FAFBFD;padding:10px 16px 4px '+(indent + 14)+'px;box-shadow:inset 3px 0 0 '+accent+', inset -1px 0 0 '+C.lineStrong+';">'
-        + '<span style="font-size:9.5px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:'+C.sub+';">'+title+'</span>'
-        + (hint ? '<span style="font-size:9.5px;color:'+C.faint+';font-weight:500;margin-left:6px;">'+hint+'</span>' : '') + '</td>'
-        + '<td style="background:'+C.tot+';box-shadow:inset -1px 0 0 '+C.lineStrong+';"></td>' + heads.map(function(){ return '<td style="background:#FAFBFD;"></td>'; }).join('') + '</tr>';
-    }
-    // kind: 'cur' | 'pct' | 'elig' | 'ded' | 'final' | 'inc'
-    function line(label, vals, total, kind, opts){
-      opts = opts || {};
-      var strong = kind === 'final';
-      function fmt(v, ci){
-        if (kind === 'elig') return v === null || v === undefined ? '' : v ? '<span style="color:'+C.good+';font-weight:800;">✓ Yes</span>' : '<span style="color:'+C.bad+';font-weight:800;">✕ No</span>';
-        if (kind === 'pct') return v === null || v === undefined ? '' : pctMark(v);
-        if (v === null || v === undefined) return kind === 'inc' && ci === 0 ? '<span style="color:'+C.faint+';font-size:10px;font-family:Inter,sans-serif;">Rate not set</span>' : '';
-        if (kind === 'ded') return !v ? '<span style="color:'+C.faint+';">0</span>' : v > 0 ? '<span style="color:'+C.ded+';">− '+money(v)+'</span>' : '<span style="color:'+C.good+';" title="These jobs have negative GP, so taking them off adds back">+ '+money(-v)+'</span>';
-        if (kind === 'fee') return v ? '<span style="color:'+C.fee+';">− '+money(v)+'</span>' : '<span style="color:'+C.faint+';">0</span>';
-        if (kind === 'final') return '<span style="color:'+(v < 0 ? C.bad : C.final)+';font-weight:800;">'+money(v)+'</span>';
-        return '<span style="color:'+(v < 0 ? C.bad : C.ink)+';">'+money(v)+'</span>';
-      }
-      function drill(v, ci){
-        if (!opts.drill || !ent.drillCells || !ent.drillCells[ci] || !v) return '';
-        var c = ent.drillCells[ci];
-        return ' class="dcell" onclick="incDrill(this)" title="Show the jobs" data-entity="'+esc(c.entity)+'" data-col="'+esc(c.col)+'" data-val="'+esc(fmtCur(v))+'"'+(opts.rm ? ' data-rm="'+opts.rm+'"' : '')+' data-part="'+partK+'"';
-      }
-      var cellBase = 'text-align:right;padding:'+(strong ? '8px' : '5px')+' 14px;font-family:\'DM Mono\',monospace;font-size:'+(strong ? 12.5 : 11.5)+'px;white-space:nowrap;';
-      var bgRow = strong ? '#F1F8F4' : '#FFFFFF';
-      return '<tr style="'+(strong ? 'border-top:1px solid '+C.lineStrong+';' : '')+'">'
-        + '<td style="position:sticky;left:0;z-index:2;background:'+bgRow+';padding:'+(strong ? '8px' : '5px')+' 16px '+(strong ? '8px' : '5px')+' '+(indent + 14)+'px;box-shadow:inset 3px 0 0 '+accent+', inset -1px 0 0 '+C.lineStrong+';font-size:'+(strong ? 12 : 11.5)+'px;font-weight:'+(strong ? 800 : 500)+';color:'+(strong ? C.final : kind === 'ded' || kind === 'fee' ? C.ded : C.ink)+';">'
-          + esc(label) + (opts.note ? '<span style="font-size:10px;font-weight:600;color:'+C.faint+';margin-left:6px;">'+esc(opts.note)+'</span>' : '') + '</td>'
-        + '<td'+drill(total, 0)+' style="'+cellBase+'background:'+(strong ? '#EAF3E6' : C.tot)+';box-shadow:inset -1px 0 0 '+C.lineStrong+';font-weight:'+(strong ? 800 : 600)+';">'+fmt(total, 0)+'</td>'
-        + vals.map(function(v, i){ return '<td'+drill(v, i + 1)+' style="'+cellBase+'background:'+bgRow+';'+(i < nPer - 1 ? 'box-shadow:inset -1px 0 0 '+C.line+';' : '')+'">'+fmt(v, i + 1)+'</td>'; }).join('')
-        + '</tr>';
-    }
-    var noT = ent.noTarget;
-    rowsH += section('Performance', noT ? 'no GP target set' : 'GP% = GP Achieved ÷ Target GP · eligible from '+INC_MIN_ACHV+'%');
-    rowsH += line('GP Achieved', P.gp, sum(P.gp), 'cur', { drill:true });
-    if (!noT) {
-      rowsH += line('Target GP', ent.tgt, sum(ent.tgt), 'cur');
-      rowsH += line('GP%', P.ach, P.achT, 'pct');
-      rowsH += line('Eligibility', P.elig, P.eligT, 'elig');
-    }
-    rowsH += section('Deductions', 'only where eligible · a job counts once, under the first reason that fits');
-    INC_RM.forEach(function(r){
-      var n = P.ships[r.k];
-      rowsH += line(r.label.replace('Jobs where the amount is paid more than 30 days overdue', 'Jobs paid more than 30 days overdue'), P.rm[r.k], P.rmT[r.k], 'ded', { drill:true, rm:r.k, note: n ? n + ' job' + (n === 1 ? '' : 's') : '' });
-    });
-    rowsH += line('Management Fees (15%)', P.fee, P.feeT, 'fee');
-    rowsH += section('Result', '');
-    rowsH += line('Final GP after Deductions', P.amt, P.amtT, 'final');
-    rowsH += line('Total Incentive', P.amt.map(function(){ return null; }), null, 'inc');
-    return rowsH + '<tr><td colspan="'+(nPer + 2)+'" style="height:8px;background:#FAFBFD;border-bottom:1px solid '+C.lineStrong+';"></td></tr>';
-  }
-
-  function chev(on, size){ return '<svg width="'+(size || 12)+'" height="'+(size || 12)+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">'+(on ? '<polyline points="6 9 12 15 18 9"/>' : '<polyline points="9 6 15 12 9 18"/>')+'</svg>'; }
-  function fmtMonthYear(d){ var dt = new Date(d); return isNaN(dt) ? null : dt.toLocaleDateString('en-GB', { month:'short', year:'numeric' }); }
-
-  function grandRow(ent){
-    var P = calc(ent)[partK], k = 'G:' + ent.name, isOpen = open[k] !== false;
-    return '<tr class="inc-row" data-gk="'+esc(k)+'" onclick="incToggleGp(this.getAttribute(\'data-gk\'), true)" style="cursor:pointer;background:#F3F6FB;border-bottom:1px solid '+C.lineStrong+';">'
-      + '<td style="position:sticky;left:0;z-index:2;background:#F3F6FB;padding:12px 16px;box-shadow:inset 4px 0 0 '+C.navy+', inset -1px 0 0 '+C.lineStrong+';">'
-        + '<div style="display:flex;align-items:center;gap:10px;"><span style="color:'+C.navy+';">'+chev(isOpen, 13)+'</span>'
-        + '<div><div style="font-size:13.5px;font-weight:800;color:'+C.navy+';">Grand Total</div><div style="font-size:10.5px;color:'+C.sub+';font-weight:500;">All zones · '+reps.length+' sales reps · '+(isOpen ? 'hide' : 'show')+' breakdown</div></div></div></td>'
-      + sumCell(ent, P, 0, true) + P.gp.map(function(_, i){ return sumCell(ent, P, i, false); }).join('') + '</tr>'
-      + (isOpen ? breakdown(ent, P, 0) : '');
-  }
-  function zoneRow(ent, zReps, forced){
-    var P = calc(ent)[partK];
-    var zOpen = forced || !!(state.incZoneOpen && state.incZoneOpen[ent.name]);
-    var bk = 'Z:' + ent.name, bOpen = !!open[bk];
-    var zp = ent.name === 'Cross Sales' ? [null, 'Cross Sales', ''] : (/^(\S+)\s*(.*)$/.exec(ent.name) || [null, ent.name, '']);
-    var mgr = String(zp[2] || '').replace(/^\(|\)$/g, '');
-    var zReg = ent.name === 'Cross Sales' ? '' : (window._zoneRegionMap && window._zoneRegionMap[ent.name] ? window._zoneRegionMap[ent.name] : '');
-    var col = ent.avatarBg || BRAND_A1;
-    return '<tr><td colspan="'+(nPer + 2)+'" style="height:10px;background:#F6F8FB;"></td></tr>'
-      + '<tr class="inc-row" data-zone="'+esc(ent.name)+'" onclick="incToggleZone(this.getAttribute(\'data-zone\'))" style="cursor:pointer;background:#FFFFFF;border-top:1px solid '+C.lineStrong+';border-bottom:1px solid '+C.line+';">'
-      + '<td style="position:sticky;left:0;z-index:2;background:#FFFFFF;padding:11px 12px 11px 16px;box-shadow:inset 4px 0 0 '+col+', inset -1px 0 0 '+C.lineStrong+';">'
-        + '<div style="display:flex;align-items:center;gap:10px;">'
-          + '<span style="color:'+C.sub+';">'+chev(zOpen, 13)+'</span>'
-          + '<div style="min-width:0;flex:1;">'
-            + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
-              + '<span style="font-size:9px;font-weight:800;letter-spacing:0.1em;color:'+col+';">ZONE</span>'
-              + '<span style="font-size:14px;font-weight:800;color:'+C.navy+';letter-spacing:-0.01em;">'+esc(zp[1])+'</span>'
-              + (zReg ? '<span style="font-size:8.5px;font-weight:800;color:#0D7C6B;border:1px solid #9FD6CC;border-radius:4px;padding:0 5px;text-transform:uppercase;">'+esc(zReg)+'</span>' : '')
-            + '</div>'
-            + '<div style="font-size:11px;color:'+C.sub+';margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(mgr ? esc(mgr) + ' · ' : '')+zReps.length+' rep'+(zReps.length === 1 ? '' : 's')+'</div>'
-          + '</div>'
-          + '<button data-gk="'+esc(bk)+'" onclick="event.stopPropagation();incToggleGp(this.getAttribute(\'data-gk\'))" class="btnq" title="Zone breakdown" style="flex-shrink:0;border:1px solid '+(bOpen ? col : C.lineStrong)+';background:'+(bOpen ? '#F3F6FB' : '#FFFFFF')+';color:'+C.navy+';border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;">'+(bOpen ? 'Hide' : 'Breakdown')+'</button>'
-        + '</div></td>'
-      + sumCell(ent, P, 0, true) + P.gp.map(function(_, i){ return sumCell(ent, P, i, false); }).join('') + '</tr>'
-      + (bOpen ? breakdown(ent, P, 0) : '');
-  }
-  function repRow(ent, last){
-    var P = calc(ent)[partK], k = 'R:' + ent.name, isOpen = !!open[k];
-    var doj = ent.joinDate ? fmtMonthYear(ent.joinDate) : null, doe = ent.exitDate ? fmtMonthYear(ent.exitDate) : null;
-    var nm = String(ent.name).split('|')[0].trim();
-    var zoneCode = String(ent.zone || '').split(' ')[0];
-    var col = BRAND_A1;
-    return '<tr class="inc-row" data-gk="'+esc(k)+'" onclick="incToggleGp(this.getAttribute(\'data-gk\'))" style="cursor:pointer;background:'+(isOpen ? '#F7F9FD' : '#FFFFFF')+';border-bottom:1px solid '+C.line+';">'
-      + '<td style="position:sticky;left:0;z-index:2;background:'+(isOpen ? '#F7F9FD' : '#FFFFFF')+';padding:8px 12px 8px 38px;box-shadow:inset -1px 0 0 '+C.lineStrong+';">'
-        + '<div style="position:absolute;left:22px;top:0;bottom:'+(last && !isOpen ? '50%' : '0')+';border-left:1.5px solid '+C.lineStrong+';"></div>'
-        + '<div style="position:absolute;left:22px;top:50%;width:10px;border-top:1.5px solid '+C.lineStrong+';"></div>'
-        + '<div style="display:flex;align-items:center;gap:8px;">'
-          + '<div style="width:26px;height:26px;border-radius:50%;background:'+(ent.avatarBg || col)+';color:#fff;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+esc(ent.initials || initials(nm))+'</div>'
-          + '<div style="min-width:0;flex:1;">'
-            + '<div style="font-size:12px;font-weight:700;color:'+C.ink+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(ent.name)+'">'+esc(nm)+'</div>'
-            + '<div style="font-size:10px;color:'+C.faint+';white-space:nowrap;">'+esc(zoneCode)+(doj ? ' · <span style="color:#10875A;">Joined '+esc(doj)+'</span>' : '')+(doe ? ' · <span style="color:'+C.bad+';">Left '+esc(doe)+'</span>' : '')+'</div>'
-          + '</div>'
-          + '<span style="color:'+C.faint+';flex-shrink:0;">'+chev(isOpen, 11)+'</span>'
-        + '</div></td>'
-      + sumCell(ent, P, 0, true) + P.gp.map(function(_, i){ return sumCell(ent, P, i, false); }).join('') + '</tr>'
-      + (isOpen ? breakdown(ent, P, 1) : '');
-  }
-
-  // Body: Grand Total, then each zone with its reps (search shows matching reps with their zones opened)
-  var zones = cap.filter(function(c){ return c.isZone; });
-  window._incZoneNames = zones.map(function(z){ return z.name; });
-  var body = (spGrand || !zones.length) && !q ? grandRow(grand) : '';
-  var shownReps = 0;
-  function matches(r){ return !q || String(r.name).toLowerCase().indexOf(q) > -1; }
-  if (zones.length) {
-    zones.forEach(function(z){
-      var zReps = reps.filter(function(r){ return (r.zone || 'Cross Sales') === z.name; });
-      var hit = q ? zReps.filter(matches) : zReps;
-      var zoneHit = q && String(z.name).toLowerCase().indexOf(q) > -1;
-      if (q && !hit.length && !zoneHit) return;
-      var zEnt = withAgg({ name:z.name, initials:z.initials, avatarBg:z.avatarBg, isZone:true, gp:z.gp, tgt:z.tgt, drillCells:z.drillCells, repCount:zReps.length, members:zReps }, byZone[z.name]);
-      var list = zoneHit ? zReps : hit;
-      body += zoneRow(zEnt, zReps, !!q);
-      if (q || (state.incZoneOpen && state.incZoneOpen[z.name])) { body += list.map(function(r, i){ return repRow(r, i === list.length - 1); }).join(''); shownReps += list.length; }
-    });
-  } else {
-    var list = reps.filter(matches);
-    body += list.map(function(r, i){ return repRow(r, i === list.length - 1); }).join('');
-    shownReps = list.length;
-  }
-  if (q && !body) body = '<tr><td colspan="'+(nPer + 2)+'" style="padding:40px;text-align:center;font-size:12px;color:'+C.sub+';">No zone or sales rep matches “'+esc(state.incSearch)+'”.</td></tr>';
-  var allOpen = zones.length > 0 && zones.every(function(z){ return state.incZoneOpen && state.incZoneOpen[z.name]; });
-
-  // Summary cards: Grand Total for the whole period, the part picked
-  var G = calc(grand)[partK];
-  var dedT = G.allT, feeT = G.feeT;
-  function kpi(label, value, sub, opts){
-    opts = opts || {};
-    return '<div style="flex:'+(opts.hero ? '1.5 1 260px' : '1 1 170px')+';min-width:0;background:'+(opts.hero ? 'linear-gradient(135deg,#F0F8F3,#FFFFFF)' : '#FFFFFF')+';border:1px solid '+(opts.hero ? '#BFE3CF' : C.line)+';border-radius:12px;padding:12px 16px;">'
-      + '<div style="font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:'+C.sub+';">'+label+'</div>'
-      + '<div style="font-size:'+(opts.hero ? 24 : 18)+'px;font-weight:800;color:'+(opts.color || C.ink)+';font-family:\'DM Mono\',monospace;margin-top:4px;letter-spacing:-0.02em;">'+value+'</div>'
-      + (sub ? '<div style="font-size:11px;color:'+C.sub+';margin-top:4px;line-height:1.4;">'+sub+'</div>' : '') + '</div>';
-  }
-  var gGp = sum(G.gp), gT = sum(grand.tgt);
-  var bar = gT > 0 ? Math.max(0, Math.min(100, gGp / gT * 100)) : 0;
-  var cards = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">'
-    + kpi('Final GP after Deductions', G.eligT === true ? money(G.amtT) : '<span style="font-size:15px;color:'+C.bad+';">✕ Not eligible</span>',
-        G.eligT === true ? 'GP '+money(gGp)+' − deductions '+money(dedT || 0)+' − fees '+money(feeT || 0) : 'GP% below '+INC_MIN_ACHV+'% for the period', { hero:true, color:C.final })
-    + kpi('GP Achieved vs Target', money(gGp), 'of '+money(gT)+' target · '+pctMark(G.achT)
-        + '<div style="height:5px;background:#EEF1F6;border-radius:3px;margin-top:6px;position:relative;overflow:hidden;"><div style="position:absolute;left:0;top:0;bottom:0;width:'+bar+'%;background:'+(G.achT >= INC_MIN_ACHV ? C.good : C.bad)+';"></div><div style="position:absolute;left:'+INC_MIN_ACHV+'%;top:-2px;bottom:-2px;border-left:1.5px dashed '+C.sub+';" title="'+INC_MIN_ACHV+'% eligibility line"></div></div>')
-    + kpi('Deductions', G.eligT === true ? '− '+money((dedT || 0) + (feeT || 0)) : '<span style="color:'+C.faint+';font-size:15px;">Not applied</span>',
-        G.eligT === true ? 'Jobs '+money(dedT || 0)+' · Management fees '+money(feeT || 0) : 'Only where eligible', { color:C.ded })
-    + kpi('Total Incentive', '<span style="color:'+C.faint+';font-size:15px;">Rate not set</span>', 'Final GP × Incentive % (to be provided)', { color:C.inc })
-    + '</div>';
-
-  // How the numbers are worked out
-  function step(n, t){ return '<span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:17px;height:17px;border-radius:50%;background:'+C.navy+';color:#fff;font-size:9.5px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;">'+n+'</span>'+t+'</span>'; }
-  var arrow = '<span style="color:'+C.faint+';">→</span>';
-  var flow = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;color:'+C.sub+';font-weight:600;padding:10px 14px;background:#F6F8FB;border:1px solid '+C.line+';border-radius:10px;margin-bottom:14px;">'
-    + step(1, 'GP Achieved ÷ Target = GP%') + arrow + step(2, 'GP% ≥ '+INC_MIN_ACHV+'% → eligible') + arrow
-    + step(3, '− jobs with FL not done, O/S amount, paid 30+ days late') + arrow + step(4, '− 15% management fees = <b style="color:'+C.final+';">Final GP</b>') + arrow
-    + step(5, '× Incentive % = <b style="color:'+C.inc+';">Total Incentive</b>') + '</div>';
-
-  var seg = function(k, label, hint){
-    var on = partK === k;
-    return '<button onclick="incSetPart(\''+k+'\')" class="btnq" role="radio" aria-checked="'+on+'" title="'+hint+'" style="border:none;border-radius:999px;padding:5px 14px;font-size:11.5px;font-weight:700;cursor:pointer;'
-      + (on ? 'background:'+C.navy+';color:#FFFFFF;' : 'background:transparent;color:'+C.navy+';')+'">'+label+'</button>';
-  };
-  var btnS = 'display:inline-flex;align-items:center;gap:5px;background:#FFFFFF;border:1px solid '+C.lineStrong+';border-radius:8px;padding:5px 11px;font-size:11px;font-weight:700;color:'+C.navy+';cursor:pointer;';
-  var notes = [];
-  notes.push('Outstanding from ar_outstanding'+(incOutMeta && incOutMeta.asOn ? ' as on <b style="color:'+C.navy+';">'+esc(incOutMeta.asOn)+'</b>' : ''));
-  if (incOutMeta && !incOutMeta.paidDocs) notes.push('<span style="color:'+C.warn+';font-weight:700;">No paid invoices in the AR data yet, so nothing is taken off for paying late</span>');
-  if (incOutMeta && !incOutMeta.docsWithRef) notes.push('<span style="color:'+C.bad+';font-weight:700;">No Ref No found in ar_outstanding</span>');
-
-  var toolbar = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">'
-    + '<div style="display:flex;flex-direction:column;margin-right:6px;"><span style="font-size:16px;font-weight:800;color:'+C.navy+';letter-spacing:-0.01em;">Incentive</span>'
-    + '<span style="font-size:11px;color:'+C.sub+';font-weight:500;">'+(foldQ ? 'Quarterly' : state.reportView)+' · '+state.currency+' · '+zones.length+' zones · '+reps.length+' sales reps</span></div>'
-    + '<div role="radiogroup" aria-label="Core or Cross" style="display:inline-flex;gap:2px;padding:3px;background:#EEF2F8;border-radius:999px;">'
-      + seg('core', 'Core', 'SEA EXPORT and SEA IMPORT') + seg('cross', 'Cross', 'Every other LOB') + '</div>'
-    + '<span style="font-size:11px;color:'+C.sub+';">'+(cross ? 'Every LOB except Sea Export / Sea Import' : 'Sea Export + Sea Import')+'</span>'
-    + '<div style="flex:1;"></div>'
-    + '<div style="display:flex;align-items:center;gap:6px;border:1px solid '+C.lineStrong+';border-radius:8px;padding:4px 10px;background:#fff;">'
-      + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="'+C.faint+'" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16" y2="16"/></svg>'
-      + '<input id="incSearch" value="'+esc(state.incSearch || '')+'" oninput="incSearchInput(this)" placeholder="Find a zone or sales rep" style="border:none;outline:none;font-size:12px;width:180px;color:'+C.ink+';background:transparent;">'
-      + (q ? '<span onclick="incSearchClear()" style="cursor:pointer;color:'+C.faint+';font-size:13px;" title="Clear">✕</span>' : '')
-    + '</div>'
-    + (zones.length && !q ? '<button onclick="incToggleAllZones('+(allOpen ? 'false' : 'true')+')" class="btnq" style="'+btnS+'">'+(allOpen ? 'Collapse all zones' : 'Expand all zones')+'</button>' : '')
-    + '</div>';
-
-  var legend = '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:8px 16px;border-top:1px solid '+C.line+';font-size:10.5px;color:'+C.sub+';">'
-    + '<span>Each cell: <b style="color:'+C.final+';">Final GP after Deductions</b>, with GP% under it</span>'
-    + '<span><b style="color:'+C.good+';">▲</b> 100%+ of target</span><span><b style="color:'+C.warn+';">●</b> '+INC_MIN_ACHV+'–99%</span><span><b style="color:'+C.bad+';">▼</b> below '+INC_MIN_ACHV+'%: not eligible</span>'
-    + '<span>Click a zone to see its reps, a rep (or “Breakdown”) for the calculation, a GP or deduction figure for the jobs</span>'
-    + '<span style="flex:1;"></span><span>'+notes.join(' · ')+'</span></div>';
-
-  return '<div style="padding:16px 24px 28px;">'
-    + toolbar + cards + flow
-    + '<div style="background:#FFFFFF;border:1px solid '+C.lineStrong+';border-radius:12px;box-shadow:0 1px 3px rgba(15,31,58,0.06);overflow:hidden;">'
-      + '<div id="incScroll" style="position:relative;overflow:auto;max-height:calc(100vh - 230px);">'
-        + '<table style="width:100%;border-collapse:collapse;table-layout:fixed;min-width:'+(NAME_W + 150 + nPer * 140)+'px;font-variant-numeric:tabular-nums;">'
-          + colgroup + thead + '<tbody>' + body + '</tbody></table>'
-      + '</div>' + legend
-    + '</div></div>';
+  // ───────────── Presentation: the numbers above, handed to the two views (_incView) ─────────────
+  var partK = state.incPart === 'cross' ? 'cross' : 'core';
+  function pack(e){ return { e:e, P:calc(e)[partK] }; }
+  var zoneList = cap.filter(function(c){ return c.isZone; }).map(function(z){
+    var zReps = reps.filter(function(r){ return (r.zone || 'Cross Sales') === z.name; });
+    var zEnt = withAgg({ name:z.name, initials:z.initials, avatarBg:z.avatarBg, isZone:true, gp:z.gp, tgt:z.tgt, drillCells:z.drillCells, repCount:zReps.length, members:zReps }, byZone[z.name]);
+    return { z:pack(zEnt), reps:zReps.map(pack) };
+  });
+  window._incZoneNames = zoneList.map(function(Z){ return Z.z.e.name; });
+  return _incView({ heads:heads, foldQ:foldQ, partK:partK, grand:(spGrand || !zoneList.length) ? pack(grand) : null,
+    zones:zoneList, loose:zoneList.length ? [] : reps.map(pack), repCount:reps.length });
 }
 
+/* INC-VIEW-START */
+/* ---------------------- Incentive: presentation (two views) ----------------------
+   Pure rendering. _incentivePageInner works out every number (calc) and hands this a context:
+     { heads:[{top,sub}], foldQ, partK, grand:{e,P}|null, zones:[{ z:{e,P}, reps:[{e,P}] }], loose:[{e,P}], repCount }
+   P = one part (Core or Cross) of calc(e): gp[], ach[], achT, elig[], eligT, rm{k:[]}, rmT{k}, ships{k},
+       all[], allT, fee[], feeT, amt[], amtT. Index i = period column; the "T" values are the whole period.
+   Detailed view  — one aligned table: every zone's calculation, its reps under it once the zone is opened.
+   Hierarchical   — Zone → Sales rep → Calculation, each level opened on its own. */
+var IV = { ink:'#14213D', text:'#33415C', sub:'#64748B', faint:'#A3AEBF', line:'#E7EBF1', line2:'#D5DCE6', navy:'#0D2B5E',
+  navyBg:'#F4F6FA', good:'#127A50', bad:'#B42318', amber:'#A16207', inc:'#6B3FA0', tot:'#FBF8EF', totLine:'#EADFC0' };
+
+// ₹4.41 Cr · ₹99.97 L · ₹80.71 K · ₹512 — same scale for every figure (USD: M / K)
+function _ivMoney(v){
+  if (v === null || v === undefined || isNaN(v)) return '';
+  var val = state.currency === 'USD' ? v / state.rate : v, sym = state.currency === 'USD' ? '$' : '₹';
+  var a = Math.abs(val), s;
+  if (state.currency === 'USD') s = a >= 1e6 ? (a / 1e6).toFixed(2) + ' M' : a >= 1e3 ? (a / 1e3).toFixed(2) + ' K' : a.toFixed(0);
+  else s = a >= 1e7 ? (a / 1e7).toFixed(2) + ' Cr' : a >= 1e5 ? (a / 1e5).toFixed(2) + ' L' : a >= 1e3 ? (a / 1e3).toFixed(2) + ' K' : a.toFixed(0);
+  return (val < 0 ? '−' : '') + sym + s;
+}
+// Compact status: ✓ 117% (eligible) · ✕ 71% (below the threshold) · "No target"
+function _ivStatus(elig, ach, noTarget){
+  if (noTarget) return '<span style="font-size:10.5px;color:'+IV.faint+';">No target</span>';
+  if (ach === null || ach === undefined) return '';
+  return elig ? '<span style="white-space:nowrap;font-size:11px;font-weight:700;color:'+IV.good+';"><span style="font-size:10px;">✓</span> '+ach+'%</span>'
+              : '<span style="white-space:nowrap;font-size:11px;font-weight:600;color:'+IV.bad+';"><span style="font-size:10px;">✕</span> '+ach+'%</span>';
+}
+function _ivChev(on, c){ return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="'+(c || IV.sub)+'" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;transition:transform .15s;transform:rotate('+(on ? 90 : 0)+'deg);"><polyline points="9 6 15 12 9 18"/></svg>'; }
+function _ivMY(d){ var dt = new Date(d); return isNaN(dt) ? null : dt.toLocaleDateString('en-GB', { month:'short', year:'numeric' }); }
+function _ivZoneParts(name){
+  if (name === 'Cross Sales') return { code:'Cross Sales', mgr:'', region:'' };
+  var m = /^(\S+)\s*(.*)$/.exec(name) || [null, name, ''];
+  return { code:m[1], mgr:String(m[2] || '').replace(/^\(|\)$/g, '').trim(), region:(window._zoneRegionMap && window._zoneRegionMap[name]) || '' };
+}
+function _ivRepName(n){ return String(n || '').split('|')[0].trim(); }
+// Click-through to the jobs behind a figure (GP, or one deduction reason)
+function _ivDrill(e, ci, v, rm, partK){
+  if (!e.drillCells || !e.drillCells[ci] || !v) return '';
+  var c = e.drillCells[ci];
+  return ' class="dcell" onclick="event.stopPropagation();incDrill(this)" title="Show the jobs" data-entity="'+esc(c.entity)+'" data-col="'+esc(c.col)+'" data-val="'+esc(_ivMoney(v))+'"'+(rm ? ' data-rm="'+rm+'"' : '')+' data-part="'+partK+'"';
+}
+function _ivDedLabel(r){ return r.k === 'fl' ? 'Jobs where FL is not done' : r.k === 'unpaid' ? 'Jobs having O/S amount' : 'Jobs paid more than 30 days overdue'; }
+
+function _incView(ctx){
+  var view = state.incView === 'detailed' ? 'detailed' : 'hier';
+  var q = String(state.incSearch || '').trim().toLowerCase();
+  // Search: zones whose name matches keep all their reps; otherwise only matching reps (and their zone) show
+  var zones = ctx.zones.map(function(Z){
+    if (!q) return Z;
+    var zHit = Z.z.e.name.toLowerCase().indexOf(q) > -1;
+    var reps = zHit ? Z.reps : Z.reps.filter(function(r){ return r.e.name.toLowerCase().indexOf(q) > -1; });
+    return zHit || reps.length ? { z:Z.z, reps:reps, forced:true, total:Z.reps.length } : null;
+  }).filter(Boolean);
+  var loose = ctx.loose.filter(function(r){ return !q || r.e.name.toLowerCase().indexOf(q) > -1; });
+  var c = { ctx:ctx, zones:zones, loose:loose, q:q, heads:ctx.heads, n:ctx.heads.length, partK:ctx.partK };
+  var body = !zones.length && !loose.length
+    ? '<div style="padding:56px 24px;text-align:center;"><div style="font-size:13px;font-weight:700;color:'+IV.ink+';">No zone or sales rep matches “'+esc(state.incSearch || '')+'”</div>'
+      + '<div style="font-size:12px;color:'+IV.sub+';margin-top:6px;">Check the spelling, or <a href="#" onclick="event.preventDefault();incSearchClear()" style="color:'+IV.navy+';font-weight:600;">clear the search</a>.</div></div>'
+    : view === 'detailed' ? _ivDetailed(c) : _ivHier(c);
+  return '<style>@keyframes ivFade{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}.iv-row:hover{background:#F8FAFD!important}.iv-hit:hover{background:#F8FAFD}</style>'
+    + '<div style="padding:16px 24px 28px;">' + _ivToolbar(c) + _ivSummary(c)
+    + '<div style="animation:ivFade .18s ease-out;">' + body + '</div></div>';
+}
+
+function _ivToolbar(c){
+  var view = state.incView === 'detailed' ? 'detailed' : 'hier', ctx = c.ctx;
+  function seg(group, k, label, on, sub){
+    return '<button onclick="'+group+'(\''+k+'\')" class="btnq" role="tab" aria-selected="'+on+'" style="border:none;border-radius:7px;padding:6px 14px;font-size:12px;font-weight:'+(on ? 700 : 600)+';cursor:pointer;display:inline-flex;align-items:center;gap:6px;'
+      + (on ? 'background:#FFFFFF;color:'+IV.navy+';box-shadow:0 1px 2px rgba(13,43,94,0.14);' : 'background:transparent;color:'+IV.sub+';')+'">'+label+(sub ? '<span style="font-size:10.5px;font-weight:500;color:'+IV.faint+';">'+sub+'</span>' : '')+'</button>';
+  }
+  var viewIco = function(k){ return k === 'hier'
+    ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 5h7M8 12h8M12 19h8"/><path d="M4 5v0M8 9v3M12 16v3"/></svg>'
+    : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>'; };
+  var allOpen = c.zones.length > 0 && c.zones.every(function(Z){ return state.incZoneOpen && state.incZoneOpen[Z.z.e.name]; });
+  var btn = 'border:1px solid '+IV.line2+';background:#FFFFFF;border-radius:8px;padding:6px 11px;font-size:11.5px;font-weight:600;color:'+IV.text+';cursor:pointer;';
+  var help = !!state.incHelp;
+  return '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">'
+      + '<div style="margin-right:4px;"><div style="display:flex;align-items:center;gap:6px;"><span style="font-size:16px;font-weight:800;color:'+IV.ink+';letter-spacing:-0.01em;">Incentive</span>'
+        + '<button onclick="incToggleHelp()" class="btnq" title="How the incentive is worked out" aria-expanded="'+help+'" style="border:1px solid '+(help ? IV.navy : IV.line2)+';background:'+(help ? IV.navyBg : '#FFFFFF')+';color:'+(help ? IV.navy : IV.sub)+';border-radius:999px;width:18px;height:18px;padding:0;font-size:10.5px;font-weight:700;line-height:1;cursor:pointer;">i</button></div>'
+      + '<div style="font-size:11px;color:'+IV.sub+';margin-top:1px;">'+(ctx.foldQ ? 'Quarterly' : state.reportView)+' · '+state.currency+' · '+ctx.zones.length+' zones · '+ctx.repCount+' sales reps</div></div>'
+      + '<div role="tablist" aria-label="View" style="display:inline-flex;gap:2px;padding:3px;background:#EEF1F6;border-radius:9px;">'
+        + seg('incSetView', 'hier', viewIco('hier') + 'Hierarchical', view === 'hier') + seg('incSetView', 'detailed', viewIco('detailed') + 'Detailed', view === 'detailed') + '</div>'
+      + '<div role="tablist" aria-label="Core or Cross" style="display:inline-flex;gap:2px;padding:3px;background:#EEF1F6;border-radius:9px;">'
+        + seg('incSetPart', 'core', 'Core', c.partK === 'core', 'Sea Exp + Imp') + seg('incSetPart', 'cross', 'Cross', c.partK === 'cross', 'other LOBs') + '</div>'
+      + '<div style="flex:1;"></div>'
+      + '<label style="display:flex;align-items:center;gap:6px;border:1px solid '+IV.line2+';border-radius:8px;padding:5px 10px;background:#FFFFFF;">'
+        + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="'+IV.faint+'" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16" y2="16"/></svg>'
+        + '<input id="incSearch" value="'+esc(state.incSearch || '')+'" oninput="incSearchInput(this)" placeholder="Search zone or sales rep" style="border:none;outline:none;font-size:12px;width:160px;color:'+IV.ink+';background:transparent;">'
+        + (c.q ? '<span onclick="incSearchClear()" style="cursor:pointer;color:'+IV.faint+';font-size:12px;" title="Clear">✕</span>' : '') + '</label>'
+      + (c.ctx.zones.length && !c.q ? '<button onclick="incToggleAllZones('+(allOpen ? 'false' : 'true')+')" class="btnq" style="'+btn+'">'+(allOpen ? 'Collapse all' : 'Expand all')+'</button>' : '')
+    + '</div>'
+    + (help ? '<div style="font-size:11.5px;color:'+IV.text+';line-height:1.6;background:'+IV.navyBg+';border-radius:10px;padding:10px 14px;margin-bottom:12px;">'
+        + '<b>How it is worked out</b>, for Core and Cross separately, per period: '
+        + '<b>GP%</b> = GP Achieved ÷ Target GP. A rep, zone or the Grand Total is <b>eligible</b> when GP% is '+INC_MIN_ACHV+'% or more. '
+        + 'Only when eligible, the GP of these jobs is taken off (each job once, under the first reason that fits): FL not done, O/S amount, paid more than 30 days overdue. '
+        + '<b>Management fees</b> = 15% of what is left. <b>Final GP after Deductions</b> = GP − deductions − fees. <b>Total Incentive</b> = Final GP × Incentive % (rate not provided yet). '
+        + 'Click any GP or deduction figure to see the jobs behind it.'
+        + (incOutMeta && incOutMeta.asOn ? ' Outstanding and payments from the AR data as on <b>'+esc(incOutMeta.asOn)+'</b>.' : '') + '</div>' : '');
+}
+
+// One compact line for the Grand Total (whole period, the part picked)
+function _ivSummary(c){
+  var G = c.ctx.grand; if (!G) return '';
+  var P = G.P, e = G.e, el = P.eligT === true;
+  function m(label, val, opts){
+    opts = opts || {};
+    return '<div style="padding:0 18px;'+(opts.first ? '' : 'border-left:1px solid '+IV.line+';')+'min-width:0;">'
+      + '<div style="font-size:10px;font-weight:600;color:'+IV.sub+';white-space:nowrap;">'+label+'</div>'
+      + '<div style="font-size:'+(opts.big ? 17 : 14)+'px;font-weight:'+(opts.big ? 800 : 700)+';color:'+(opts.color || IV.ink)+';font-variant-numeric:tabular-nums;white-space:nowrap;margin-top:2px;">'+val+'</div></div>';
+  }
+  var ded = el ? (P.allT || 0) : null, fee = el ? (P.feeT || 0) : null;
+  return '<div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:10px;border:1px solid '+IV.line+';border-radius:10px;padding:10px 0;margin-bottom:14px;background:#FFFFFF;">'
+    + m('Grand Total · '+(c.partK === 'cross' ? 'Cross' : 'Core'), '<span style="font-size:12px;font-weight:600;color:'+IV.sub+';">'+esc(c.heads.length ? (c.heads[0].sub || c.heads[0].top).split(' – ')[0] + ' – ' + (c.heads[c.heads.length - 1].sub || c.heads[c.heads.length - 1].top).split(' – ').pop() : '')+'</span>', { first:true })
+    + m('GP Achieved', _ivMoney(sum(P.gp)))
+    + m('Target GP', _ivMoney(sum(e.tgt)), { color:IV.text })
+    + m('GP%', _ivStatus(P.eligT, P.achT, e.noTarget).replace(/font-size:11px/, 'font-size:14px'))
+    + m('Deductions + fees', el ? '−' + _ivMoney((ded || 0) + (fee || 0)).replace('−', '') : '<span style="color:'+IV.faint+';font-weight:500;font-size:12px;">not applied</span>', { color:IV.sub })
+    + m('Final GP after Deductions', el ? _ivMoney(P.amtT) : '<span style="color:'+IV.faint+';font-weight:500;font-size:12px;">not eligible</span>', { big:true, color:IV.ink })
+    + m('Total Incentive', '<span style="color:'+IV.faint+';font-weight:500;font-size:12px;">rate not set</span>', { color:IV.inc })
+    + '</div>';
+}
+
+/* ---------- Detailed view: one aligned table ---------- */
+function _ivDetailed(c){
+  var n = c.n, LW = 300, CW = 132, TW = 146;
+  var th = 'padding:9px 14px;text-align:right;font-weight:700;border-bottom:1px solid '+IV.line2+';background:#F7F8FB;';
+  var head = '<thead style="position:sticky;top:0;z-index:5;"><tr>'
+    + '<th style="'+th+'text-align:left;position:sticky;left:0;z-index:6;font-size:10.5px;color:'+IV.sub+';letter-spacing:0.04em;text-transform:uppercase;box-shadow:inset -1px 0 0 '+IV.line2+';">Particulars</th>'
+    + '<th style="'+th+'background:'+IV.tot+';box-shadow:inset -1px 0 0 '+IV.totLine+', inset 1px 0 0 '+IV.totLine+';"><div style="font-size:11.5px;color:'+IV.ink+';">Grand Total</div><div style="font-size:9.5px;font-weight:500;color:'+IV.faint+';margin-top:1px;">whole period</div></th>'
+    + c.heads.map(function(h){ return '<th style="'+th+'"><div style="font-size:11.5px;color:'+IV.ink+';">'+esc(h.top)+'</div>'+(h.sub ? '<div style="font-size:9.5px;font-weight:500;color:'+IV.faint+';margin-top:1px;">'+esc(h.sub)+'</div>' : '')+'</th>'; }).join('')
+    + '</tr></thead>';
+  var rows = '';
+  if (c.ctx.grand && !c.q) rows += _ivDBlock(c, c.ctx.grand, 'grand');
+  c.zones.forEach(function(Z){
+    var open = Z.forced || !!(state.incZoneOpen && state.incZoneOpen[Z.z.e.name]);
+    rows += _ivDBlock(c, Z.z, 'zone', open, Z.reps.length);
+    if (open) {
+      rows += '<tr><td style="position:sticky;left:0;z-index:2;background:#FFFFFF;padding:8px 14px 2px 30px;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:'+IV.faint+';box-shadow:inset 18px 0 0 #FFFFFF, inset 19.5px 0 0 '+IV.line2+', inset -1px 0 0 '+IV.line2+';">'
+        + Z.reps.length+' sales rep'+(Z.reps.length === 1 ? '' : 's')+' in '+esc(_ivZoneParts(Z.z.e.name).code)+'</td><td style="background:'+IV.tot+';box-shadow:inset -1px 0 0 '+IV.totLine+', inset 1px 0 0 '+IV.totLine+';"></td><td colspan="'+c.n+'"></td></tr>';
+      Z.reps.forEach(function(R){ rows += _ivDBlock(c, R, 'rep'); });
+    }
+  });
+  c.loose.forEach(function(R){ rows += _ivDBlock(c, R, 'rep'); });
+  return '<div style="border:1px solid '+IV.line2+';border-radius:10px;background:#FFFFFF;overflow:hidden;">'
+    + '<div id="incScroll" style="overflow:auto;max-height:calc(100vh - 250px);">'
+    + '<table style="border-collapse:separate;border-spacing:0;table-layout:fixed;width:100%;min-width:'+(LW + TW + n * CW)+'px;font-variant-numeric:tabular-nums;">'
+    + '<colgroup><col style="width:'+LW+'px"><col style="width:'+TW+'px">' + c.heads.map(function(){ return '<col style="width:'+CW+'px">'; }).join('') + '</colgroup>'
+    + head + '<tbody>' + rows + '</tbody></table></div>'
+    + '<div style="display:flex;gap:16px;flex-wrap:wrap;padding:8px 14px;border-top:1px solid '+IV.line+';font-size:10.5px;color:'+IV.sub+';">'
+      + '<span><b style="color:'+IV.good+';">✓ 117%</b> GP% of target, eligible</span><span><b style="color:'+IV.bad+';">✕ 71%</b> below '+INC_MIN_ACHV+'%, nothing is deducted or paid</span>'
+      + '<span>Click a zone to show its reps · click a GP or deduction figure for its jobs</span></div></div>';
+}
+// One entity's block: a header row (name, and GP% status per period), then its figures
+function _ivDBlock(c, X, level, open, repCount){
+  var e = X.e, P = X.P, n = c.n, partK = c.partK;
+  var isZ = level === 'zone', isG = level === 'grand', isR = level === 'rep';
+  var ind = isR ? 30 : 14;                       // indent of the label column
+  var guide = isR ? 'box-shadow:inset 18px 0 0 #FFFFFF, inset 19.5px 0 0 '+IV.line2+', inset -1px 0 0 '+IV.line2+';' : 'box-shadow:inset -1px 0 0 '+IV.line2+';';
+  var totC = 'background:'+IV.tot+';box-shadow:inset -1px 0 0 '+IV.totLine+', inset 1px 0 0 '+IV.totLine+';';
+  var cell = 'padding:5px 14px;text-align:right;font-size:12px;white-space:nowrap;';
+  // Header row
+  var hdBg = isG ? '#EEF2F8' : isZ ? IV.navyBg : '#FFFFFF';
+  var name;
+  if (isG) name = '<div style="font-size:13.5px;font-weight:800;color:'+IV.navy+';">Grand Total</div><div style="font-size:10.5px;color:'+IV.sub+';margin-top:1px;">All zones · '+c.ctx.repCount+' sales reps</div>';
+  else if (isZ) {
+    var zp = _ivZoneParts(e.name);
+    name = '<div style="display:flex;align-items:center;gap:8px;">'+_ivChev(open, IV.navy)
+      + '<div style="min-width:0;"><div style="display:flex;align-items:baseline;gap:7px;"><span style="font-size:13.5px;font-weight:800;color:'+IV.navy+';">'+esc(zp.code)+'</span>'
+      + (zp.region ? '<span style="font-size:10.5px;font-weight:600;color:'+IV.sub+';">'+esc(zp.region)+'</span>' : '') + '</div>'
+      + '<div style="font-size:10.5px;color:'+IV.sub+';margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(zp.mgr ? esc(zp.mgr) + ' · ' : '')+repCount+' rep'+(repCount === 1 ? '' : 's')+'</div></div></div>';
+  } else {
+    var doj = e.joinDate ? _ivMY(e.joinDate) : null, doe = e.exitDate ? _ivMY(e.exitDate) : null;
+    name = '<div style="font-size:12.5px;font-weight:700;color:'+IV.ink+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(e.name)+'">'+esc(_ivRepName(e.name))+'</div>'
+      + '<div style="font-size:10.5px;color:'+IV.faint+';margin-top:1px;">'+esc(_ivZoneParts(e.zone || 'Cross Sales').code)+(doj ? ' · joined '+esc(doj) : '')+(doe ? ' · left '+esc(doe) : '')+'</div>';
+  }
+  var click = isZ ? ' data-zone="'+esc(e.name)+'" onclick="incToggleZone(this.getAttribute(\'data-zone\'))"' : '';
+  var top = isG ? '' : isZ ? 'border-top:1px solid '+IV.line2+';' : 'border-top:1px solid '+IV.line+';';
+  var h = '<tr'+click+' class="'+(isZ ? 'iv-row' : '')+'" style="background:'+hdBg+';'+(isZ ? 'cursor:pointer;' : '')+'">'
+    + '<td style="position:sticky;left:0;z-index:2;background:'+hdBg+';padding:'+(isR ? '9px' : '11px')+' 14px '+(isR ? '5px' : '7px')+' '+ind+'px;'+top+guide+(isZ || isG ? 'box-shadow:inset 3px 0 0 '+IV.navy+', inset -1px 0 0 '+IV.line2+';' : '')+'">'+name+'</td>'
+    + '<td style="'+cell+top+totC+'vertical-align:bottom;">'+_ivStatus(P.eligT, P.achT, e.noTarget)+'</td>'
+    + P.gp.map(function(_, i){ return '<td style="'+cell+top+'vertical-align:bottom;">'+_ivStatus(P.elig[i], P.ach[i], e.noTarget)+'</td>'; }).join('')
+    + '</tr>';
+  // Figures
+  var lbg = isR ? '#FFFFFF' : hdBg === '#FFFFFF' ? '#FFFFFF' : '#FFFFFF';
+  function row(label, vals, total, kind, opt){
+    opt = opt || {};
+    var prim = kind === 'final', ded = kind === 'ded' || kind === 'fee', inc = kind === 'inc';
+    function f(v, ci){
+      if (inc) return ci === 0 ? '<span style="font-size:10.5px;color:'+IV.faint+';">rate not set</span>' : '';
+      if (v === null || v === undefined) return '';
+      if (ded) return v ? '<span style="color:'+(v < 0 ? IV.good : IV.sub)+';">'+(v < 0 ? '+' : '−')+_ivMoney(Math.abs(v))+'</span>' : '<span style="color:'+IV.faint+';">0</span>';
+      if (prim) return '<span style="font-weight:800;color:'+(v < 0 ? IV.bad : IV.ink)+';">'+_ivMoney(v)+'</span>';
+      return '<span style="color:'+(kind === 'tgt' ? IV.sub : v < 0 ? IV.bad : IV.text)+';'+(kind === 'gp' ? 'font-weight:600;' : '')+'">'+_ivMoney(v)+'</span>';
+    }
+    var pad = prim ? '7px' : '4px';
+    var bt = prim ? 'border-top:1px solid '+IV.line+';' : '';
+    return '<tr>'
+      + '<td style="position:sticky;left:0;z-index:2;background:'+lbg+';padding:'+pad+' 14px '+pad+' '+(ind + (ded ? 30 : 18))+'px;'+guide+bt+'font-size:'+(ded ? 11.5 : 12)+'px;font-weight:'+(prim ? 800 : ded ? 400 : 500)+';color:'+(prim ? IV.ink : inc ? IV.inc : ded ? IV.sub : IV.text)+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
+        + esc(label) + (opt.note ? '<span style="font-size:10.5px;color:'+IV.faint+';margin-left:6px;">'+esc(opt.note)+'</span>' : '') + '</td>'
+      + '<td'+(opt.drill ? _ivDrill(e, 0, total, opt.rm, partK) : '')+' style="'+cell+'padding-top:'+pad+';padding-bottom:'+pad+';'+bt+totC+(prim ? 'font-size:12.5px;' : '')+'">'+f(total, 0)+'</td>'
+      + vals.map(function(v, i){ return '<td'+(opt.drill ? _ivDrill(e, i + 1, v, opt.rm, partK) : '')+' style="'+cell+'padding-top:'+pad+';padding-bottom:'+pad+';'+bt+(prim ? 'font-size:12.5px;' : '')+'">'+f(v, i + 1)+'</td>'; }).join('')
+      + '</tr>';
+  }
+  var b = row('GP Achieved', P.gp, sum(P.gp), 'gp', { drill:true });
+  if (!e.noTarget) b += row('Target GP', e.tgt, sum(e.tgt), 'tgt');
+  INC_RM.forEach(function(r){ var k = P.ships[r.k]; b += row(_ivDedLabel(r), P.rm[r.k], P.rmT[r.k], 'ded', { drill:true, rm:r.k, note:k ? k + ' jobs' : '' }); });
+  b += row('Management fees (15%)', P.fee, P.feeT, 'fee');
+  b += row('Final GP after Deductions', P.amt, P.amtT, 'final');
+  b += row('Total Incentive', P.amt, null, 'inc');
+  var tail = '<tr><td style="height:'+(isR ? 4 : 10)+'px;position:sticky;left:0;background:#FFFFFF;'+guide+'"></td><td style="'+totC+'"></td><td colspan="'+n+'"></td></tr>';
+  return h + b + tail;
+}
+
+/* ---------- Hierarchical view: Zone → Sales rep → Calculation ---------- */
+// Fixed metric columns on the right so zone and rep figures line up down the page
+var IV_COLS = [{ k:'gp', l:'GP Achieved', w:118 }, { k:'tgt', l:'Target GP', w:112 }, { k:'pct', l:'GP%', w:82 }, { k:'final', l:'Final GP after Deductions', w:150 }, { k:'inc', l:'Total Incentive', w:112 }];
+function _ivMetrics(X, size){
+  var e = X.e, P = X.P, el = P.eligT === true;
+  var v = {
+    gp:'<span style="font-weight:600;color:'+IV.text+';">'+_ivMoney(sum(P.gp))+'</span>',
+    tgt:e.noTarget ? '<span style="color:'+IV.faint+';">–</span>' : '<span style="color:'+IV.sub+';">'+_ivMoney(sum(e.tgt))+'</span>',
+    pct:_ivStatus(P.eligT, P.achT, e.noTarget),
+    final:el ? '<span style="font-weight:800;font-size:'+(size || 13)+'px;color:'+(P.amtT < 0 ? IV.bad : IV.ink)+';">'+_ivMoney(P.amtT)+'</span>' : '<span style="font-size:11px;color:'+IV.faint+';">not eligible</span>',
+    inc:'<span style="font-size:11px;color:'+IV.faint+';">rate not set</span>'
+  };
+  return IV_COLS.map(function(col){ return '<div style="width:'+col.w+'px;flex-shrink:0;text-align:right;padding-left:10px;font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums;">'+v[col.k]+'</div>'; }).join('');
+}
+// Period by period at a glance: Q1 ✓ 117% ₹10.9 L
+function _ivQStrip(c, X){
+  var P = X.P, e = X.e;
+  return '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">' + c.heads.map(function(h, i){
+    var el = P.elig[i] === true;
+    return '<span style="display:inline-flex;align-items:center;gap:6px;font-size:10.5px;color:'+IV.sub+';background:#F5F7FA;border-radius:6px;padding:2px 8px;white-space:nowrap;">'
+      + '<b style="color:'+IV.text+';font-weight:600;">'+esc(String(h.top).replace(/ FY\d+$/, ''))+'</b>' + _ivStatus(P.elig[i], P.ach[i], e.noTarget).replace(/font-size:11px/, 'font-size:10.5px')
+      + (el ? '<span style="color:'+IV.ink+';font-weight:600;">'+_ivMoney(P.amt[i])+'</span>' : '') + '</span>';
+  }).join('') + '</div>';
+}
+function _ivHier(c){
+  var head = '<div style="position:sticky;top:0;z-index:3;display:flex;align-items:center;padding:8px 16px 8px 18px;background:#F7F8FB;border:1px solid '+IV.line2+';border-radius:10px 10px 0 0;font-size:10.5px;font-weight:700;color:'+IV.sub+';">'
+    + '<div style="flex:1;min-width:0;">Zone / sales rep <span style="font-weight:500;color:'+IV.faint+';">· figures for the whole period, each quarter under them</span></div>'
+    + IV_COLS.map(function(col){ return '<div style="width:'+col.w+'px;flex-shrink:0;text-align:right;padding-left:10px;white-space:nowrap;">'+col.l+'</div>'; }).join('')
+    + '<div style="width:22px;flex-shrink:0;"></div></div>';
+  var html = '';
+  c.zones.forEach(function(Z, zi){ html += _ivHZone(c, Z, zi === c.zones.length - 1); });
+  if (c.loose.length) html += '<div style="border:1px solid '+IV.line2+';border-top:none;background:#FFFFFF;">' + c.loose.map(function(R){ return _ivHRep(c, R, false); }).join('') + '</div>';
+  return '<div id="incScroll" style="overflow:auto;max-height:calc(100vh - 250px);">' + head + html + '</div>';
+}
+function _ivHZone(c, Z, last){
+  var e = Z.z.e, open = Z.forced || !!(state.incZoneOpen && state.incZoneOpen[e.name]);
+  var zp = _ivZoneParts(e.name);
+  var head = '<div class="iv-hit" data-zone="'+esc(e.name)+'" onclick="incToggleZone(this.getAttribute(\'data-zone\'))" style="cursor:pointer;display:flex;align-items:flex-start;padding:12px 16px 12px 18px;">'
+    + '<div style="flex:1;min-width:0;display:flex;gap:10px;">'
+      + '<div style="padding-top:3px;">'+_ivChev(open, IV.navy)+'</div>'
+      + '<div style="min-width:0;flex:1;">'
+        + '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;"><span style="font-size:14.5px;font-weight:800;color:'+IV.navy+';letter-spacing:-0.01em;">'+esc(zp.code)+'</span>'
+        + (zp.region ? '<span style="font-size:11px;font-weight:600;color:'+IV.sub+';">'+esc(zp.region)+'</span>' : '')
+        + '<span style="font-size:11.5px;color:'+IV.sub+';">'+(zp.mgr ? 'Zone manager <b style="color:'+IV.text+';font-weight:600;">'+esc(zp.mgr)+'</b> · ' : '')+(Z.total !== undefined && Z.total !== Z.reps.length ? Z.reps.length+' of '+Z.total+' sales reps' : Z.reps.length+' sales rep'+(Z.reps.length === 1 ? '' : 's'))+'</span></div>'
+        + _ivQStrip(c, Z.z)
+      + '</div></div>'
+    + '<div style="display:flex;padding-top:2px;">'+_ivMetrics(Z.z, 14)+'</div><div style="width:22px;flex-shrink:0;"></div></div>';
+  var reps = open ? '<div style="position:relative;padding:0 0 8px 0;background:#FFFFFF;border-top:1px solid '+IV.line+';"><div style="position:absolute;left:27px;top:0;bottom:14px;border-left:2px solid '+IV.line+';"></div>' + (Z.reps.length ? Z.reps.map(function(R, i){ return _ivHRep(c, R, i === Z.reps.length - 1); }).join('')
+      : '<div style="padding:14px 46px;font-size:12px;color:'+IV.sub+';">No sales reps in this zone for the current filters.</div>') + '</div>' : '';
+  return '<div style="border:1px solid '+IV.line2+';border-top:none;'+(last ? 'border-radius:0 0 10px 10px;' : '')+'background:'+(open ? '#FBFCFE' : '#FFFFFF')+';box-shadow:inset 3px 0 0 '+(open ? IV.navy : 'transparent')+';">' + head + reps + '</div>';
+}
+function _ivHRep(c, R, last){
+  var e = R.e, k = 'H:' + e.name, open = !!(state.incGpOpen && state.incGpOpen[k]);
+  var doj = e.joinDate ? _ivMY(e.joinDate) : null, doe = e.exitDate ? _ivMY(e.exitDate) : null;
+  var nm = _ivRepName(e.name);
+  var row = '<div class="iv-hit" data-gk="'+esc(k)+'" onclick="incToggleGp(this.getAttribute(\'data-gk\'))" style="cursor:pointer;display:flex;align-items:flex-start;padding:10px 16px 10px 0;position:relative;">'
+    + '<div style="width:0;flex-shrink:0;"></div>'
+    + '<div style="flex:1;min-width:0;display:flex;gap:10px;">'
+      + '<div style="width:28px;height:28px;border-radius:50%;background:'+(e.avatarBg || BRAND_A1)+';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+esc(e.initials || initials(nm))+'</div>'
+      + '<div style="min-width:0;flex:1;">'
+        + '<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:13px;font-weight:700;color:'+IV.ink+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(e.name)+'">'+esc(nm)+'</span>'+_ivChev(open)+'</div>'
+        + '<div style="font-size:10.5px;color:'+IV.faint+';margin-top:1px;">'+esc(_ivZoneParts(e.zone || 'Cross Sales').code)+(doj ? ' · joined '+esc(doj) : '')+(doe ? ' · left '+esc(doe) : '')+'</div>'
+        + _ivQStrip(c, R)
+      + '</div></div>'
+    + '<div style="display:flex;padding-top:4px;">'+_ivMetrics(R, 13)+'</div><div style="width:22px;flex-shrink:0;"></div></div>';
+  return '<div style="margin-left:46px;'+(last ? '' : 'border-bottom:1px solid '+IV.line+';')+'">' + row + (open ? _ivBreakdown(c, R, last) : '') + '</div>';
+}
+// Level 3: Performance → Eligibility → Deductions → Final, per period
+function _ivBreakdown(c, R, last){
+  var e = R.e, P = R.P, n = c.n, partK = c.partK, el = P.eligT === true;
+  var LW = 290, CW = 120, TW = 132;
+  var cell = 'padding:4px 12px;text-align:right;font-size:12px;white-space:nowrap;';
+  var totC = 'background:'+IV.tot+';';
+  function sec(letter, title, hint){
+    return '<tr><td colspan="'+(n + 2)+'" style="padding:12px 12px 4px 0;"><div style="display:flex;align-items:center;gap:8px;">'
+      + '<span style="width:18px;height:18px;border-radius:5px;background:'+IV.navyBg+';color:'+IV.navy+';font-size:10px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;">'+letter+'</span>'
+      + '<span style="font-size:11px;font-weight:800;color:'+IV.navy+';letter-spacing:0.02em;">'+title+'</span>'
+      + (hint ? '<span style="font-size:10.5px;color:'+IV.faint+';">'+hint+'</span>' : '') + '</div></td></tr>';
+  }
+  function row(label, vals, total, fmt, opt){
+    opt = opt || {};
+    var big = opt.big;
+    var bt = big ? 'border-top:1px solid '+IV.line+';' : '';
+    var pad = big ? 'padding-top:8px;padding-bottom:8px;' : '';
+    return '<tr>'
+      + '<td style="padding:4px 12px 4px 26px;'+pad+bt+'font-size:'+(big ? 12.5 : 12)+'px;font-weight:'+(big ? 800 : opt.muted ? 400 : 500)+';color:'+(opt.color || (opt.muted ? IV.sub : IV.text))+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(label)
+        + (opt.note ? '<span style="font-size:10.5px;color:'+IV.faint+';margin-left:6px;font-weight:400;">'+esc(opt.note)+'</span>' : '') + '</td>'
+      + '<td'+(opt.drill ? _ivDrill(e, 0, total, opt.rm, partK) : '')+' style="'+cell+pad+bt+totC+(big ? 'font-size:13px;' : '')+'">'+fmt(total, 0)+'</td>'
+      + vals.map(function(v, i){ return '<td'+(opt.drill ? _ivDrill(e, i + 1, v, opt.rm, partK) : '')+' style="'+cell+pad+bt+(big ? 'font-size:13px;' : '')+'">'+fmt(v, i + 1)+'</td>'; }).join('')
+      + '</tr>';
+  }
+  var money = function(color, weight){ return function(v){ return v === null || v === undefined ? '' : '<span style="color:'+(v < 0 ? IV.bad : color || IV.text)+';'+(weight ? 'font-weight:'+weight+';' : '')+'">'+_ivMoney(v)+'</span>'; }; };
+  var minus = function(v){ return v === null || v === undefined ? '' : !v ? '<span style="color:'+IV.faint+';">0</span>' : '<span style="color:'+(v < 0 ? IV.good : IV.sub)+';">'+(v < 0 ? '+' : '−')+_ivMoney(Math.abs(v))+'</span>'; };
+  var stat = function(arr, tot){ return function(v, ci){ var x = ci === 0 ? tot : arr[ci - 1]; return e.noTarget ? '<span style="color:'+IV.faint+';">no target</span>' : x === null || x === undefined ? '' : x ? '<span style="color:'+IV.good+';font-weight:700;">✓ Eligible</span>' : '<span style="color:'+IV.bad+';font-weight:600;">✕ Not eligible</span>'; }; };
+  var why = function(v, ci){
+    var x = ci === 0 ? P.eligT : P.elig[ci - 1], a = ci === 0 ? P.achT : P.ach[ci - 1];
+    if (e.noTarget) return '<span style="font-size:11px;color:'+IV.sub+';">No GP target set</span>';
+    if (x === false) return '<span style="font-size:11px;color:'+IV.sub+';">'+a+'% is below '+INC_MIN_ACHV+'%</span>';
+    return '';
+  };
+  var pct = function(v){ return v === null || v === undefined ? '' : '<span style="font-weight:600;color:'+(v >= INC_MIN_ACHV ? IV.good : IV.bad)+';">'+v+'%</span>'; };
+  var none = P.gp.map(function(){ return null; });
+  var t = '';
+  t += sec('A', 'Performance', '');
+  t += row('GP Achieved', P.gp, sum(P.gp), money(IV.text, 600), { drill:true });
+  t += row('Target GP', e.tgt, e.noTarget ? null : sum(e.tgt), e.noTarget ? function(){ return '<span style="color:'+IV.faint+';">–</span>'; } : money(IV.sub));
+  t += row('GP%', P.ach, P.achT, pct);
+  t += sec('B', 'Eligibility', 'GP% must be at least '+INC_MIN_ACHV+'% of Target GP');
+  t += row('Status', none, null, stat(P.elig, P.eligT));
+  var anyNo = e.noTarget || P.eligT === false || P.elig.some(function(x){ return x === false; });
+  if (anyNo) t += row('Reason', none, null, why, { muted:true });
+  t += sec('C', 'Deductions', 'only where eligible · each job counted once');
+  INC_RM.forEach(function(r){ var k = P.ships[r.k]; t += row(_ivDedLabel(r), P.rm[r.k], P.rmT[r.k], minus, { drill:true, rm:r.k, muted:true, note:k ? k + ' jobs' : '' }); });
+  t += row('Management fees (15%)', P.fee, P.feeT, minus, { muted:true });
+  t += sec('D', 'Final incentive', '');
+  t += row('Final GP after Deductions', P.amt, P.amtT, money(IV.ink, 800), { big:true, color:IV.ink });
+  t += row('Incentive %', none, null, function(v, ci){ return ci === 0 ? '<span style="color:'+IV.faint+';font-size:11px;">not set yet</span>' : ''; }, { muted:true });
+  t += row('Total Incentive', none, null, function(v, ci){ return ci === 0 ? '<span style="color:'+IV.faint+';font-size:11px;">pending rate</span>' : ''; }, { big:true, color:IV.inc });
+  // The whole period in one line: how the final figure is reached
+  var trace = el
+    ? '<span style="color:'+IV.sub+';">Whole period:</span> GP <b>'+_ivMoney(sum(P.gp))+'</b> <span style="color:'+IV.faint+';">−</span> deductions <b>'+_ivMoney(P.allT || 0)+'</b> <span style="color:'+IV.faint+';">−</span> fees <b>'+_ivMoney(P.feeT || 0)+'</b> <span style="color:'+IV.faint+';">=</span> Final GP <b style="color:'+IV.ink+';">'+_ivMoney(P.amtT)+'</b>'
+    : e.noTarget ? '<span style="color:'+IV.sub+';">No GP target is set, so no incentive is worked out.</span>'
+    : '<span style="color:'+IV.sub+';">Whole period: GP% '+P.achT+'% is below '+INC_MIN_ACHV+'%, so nothing is paid for the period as a whole. Quarters that reach '+INC_MIN_ACHV+'% are worked out below.</span>';
+  return '<div style="margin:0 16px 12px 0;position:relative;">'
+    + '<div style="border:1px solid '+IV.line+';border-radius:10px;background:#FCFDFE;padding:4px 4px 10px 14px;overflow:auto;">'
+      + '<div style="font-size:11.5px;color:'+IV.text+';padding:10px 0 2px;">'+trace+'</div>'
+      + '<table style="border-collapse:collapse;table-layout:fixed;width:'+(LW + TW + n * CW)+'px;font-variant-numeric:tabular-nums;">'
+        + '<colgroup><col style="width:'+LW+'px"><col style="width:'+TW+'px">' + c.heads.map(function(){ return '<col style="width:'+CW+'px">'; }).join('') + '</colgroup>'
+        + '<thead><tr><th></th><th style="padding:8px 12px 2px;text-align:right;font-size:10.5px;font-weight:700;color:'+IV.ink+';'+totC+'border-radius:6px 6px 0 0;">Grand Total</th>'
+        + c.heads.map(function(h){ return '<th style="padding:8px 12px 2px;text-align:right;font-size:10.5px;font-weight:700;color:'+IV.ink+';">'+esc(h.top)+(h.sub ? '<div style="font-size:9.5px;font-weight:500;color:'+IV.faint+';">'+esc(h.sub)+'</div>' : '')+'</th>'; }).join('')
+        + '</tr></thead><tbody>' + t + '</tbody></table>'
+    + '</div></div>';
+}
+/* INC-VIEW-END */
 
 /* ---------------------- Incentive: payout runs (history) ----------------------
    A run takes one FY quarter, works out every rep's Core and Cross numbers exactly as the Incentive table does
