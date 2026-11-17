@@ -6061,8 +6061,7 @@ function _incentivePageInner(foldQ){
   var thBase = 'padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';white-space:nowrap;';
   var head = '<tr>'
     + '<th style="position:sticky;left:0;z-index:3;background:#F0F4FA;text-align:left;color:#475569;'+thBase+'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';width:'+NAME_W+'px;min-width:'+NAME_W+'px;">Sales Rep</th>'
-    + '<th style="position:sticky;left:'+NAME_W+'px;z-index:3;background:#F0F4FA;text-align:left;color:#475569;'+thBase+'width:'+PART_W+'px;min-width:'+PART_W+'px;">Particulars</th>'
-    + '<th style="position:sticky;left:'+FY_LEFT+'px;z-index:3;background:#FCF3DA;text-align:right;color:#A8720E;'+thBase+'box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">Grand Total</th>'
+    + '<th style="position:sticky;left:'+NAME_W+'px;z-index:3;background:#F0F4FA;text-align:left;color:#475569;'+thBase+'width:'+PART_W+'px;min-width:'+PART_W+'px;box-shadow:inset -2px 0 0 '+BORDER_STRONG+';">Particulars</th>'
     + heads.map(function(h){
         return '<th style="text-align:right;background:'+(groups ? '#FCF3DA' : '#F0F4FA')+';color:#475569;'+thBase+'border-right:1px solid '+BORDER+';">'
           +'<div style="font-size:11px;font-weight:800;color:'+(groups ? '#A8720E' : '#0D2B5E')+';">'+esc(h.top)+'</div>'
@@ -6114,7 +6113,7 @@ function _incentivePageInner(foldQ){
       : 'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';';
     var zoneClick = ent.isZone ? ' data-zone="'+esc(ent.name)+'" onclick="incToggleZone(this.getAttribute(\'data-zone\'))"' : '';
     // A gap above every zone / the Grand Total so each reads as its own section
-    var gap = (ent.isZone || ent.isGrand) ? '<tr><td colspan="'+(heads.length + 3)+'" style="height:10px;padding:0;background:#FFFFFF;"></td></tr>' : '';
+    var gap = (ent.isZone || ent.isGrand) ? '<tr><td colspan="'+(heads.length + 2)+'" style="height:10px;padding:0;background:#FFFFFF;"></td></tr>' : '';
     return gap + parts.map(function(p, pi){
       var topBorder = pi === 0 ? ((ent.isGrand || ent.isZone) ? 'border-top:2px solid #8FA3C4;' : 'border-top:1.5px solid #B8C4D6;') : (p.bold ? 'border-top:1px solid #DDE3EC;' : 'border-top:1px solid #F1F3F7;');
       // One name cell for the whole block (rowspan), centred, so it never makes a single row taller
@@ -6123,7 +6122,7 @@ function _incentivePageInner(foldQ){
       var bg = p.shade ? shadeBg : rowBg;
       var partAttrs = p.toggle ? ' data-gk="'+esc(p.toggle)+'" onclick="incToggleGp(this.getAttribute(\'data-gk\'))"' : '';
       // Group rows: bold, upright, coloured; their sub rows: smaller grey labels indented under them
-      var partCell = '<td'+partAttrs+' style="'+(p.toggle ? 'cursor:pointer;' : '')+'position:sticky;left:'+NAME_W+'px;z-index:2;background:'+bg+';padding:'+(p.bold ? '7px' : '5px')+' 10px '+(p.bold ? '7px' : '5px')+' '+(p.sub ? 30 : 10)+'px;width:'+PART_W+'px;min-width:'+PART_W+'px;max-width:'+PART_W+'px;box-sizing:border-box;white-space:normal;line-height:1.35;font-size:'+(p.bold ? 12 : 11)+'px;font-weight:'+(p.bold ? 700 : 500)+';color:'+(p.bold ? (p.color || '#14213D') : p.ded ? '#64748B' : '#3F4B5E')+';'+(p.sub ? 'box-shadow:inset 18px 0 0 '+bg+', inset 19.5px 0 0 #D5DCE6;' : '')+'">'+(p.toggle ? '<span style="display:inline-block;width:14px;font-size:9px;color:'+(p.color || '#374151')+';">'+(p.open ? '▼' : '▶')+'</span>' : '')
+      var partCell = '<td'+partAttrs+' style="'+(p.toggle ? 'cursor:pointer;' : '')+'position:sticky;left:'+NAME_W+'px;z-index:2;background:'+bg+';padding:'+(p.bold ? '7px' : '5px')+' 10px '+(p.bold ? '7px' : '5px')+' '+(p.sub ? 30 : 10)+'px;width:'+PART_W+'px;min-width:'+PART_W+'px;max-width:'+PART_W+'px;box-sizing:border-box;white-space:normal;line-height:1.35;font-size:'+(p.bold ? 12 : 11)+'px;font-weight:'+(p.bold ? 700 : 500)+';color:'+(p.bold ? (p.color || '#14213D') : p.ded ? '#64748B' : '#3F4B5E')+';'+(p.sub ? 'box-shadow:inset 18px 0 0 '+bg+', inset 19.5px 0 0 #D5DCE6, inset -2px 0 0 '+BORDER_STRONG+';' : 'box-shadow:inset -2px 0 0 '+BORDER_STRONG+';')+'">'+(p.toggle ? '<span style="display:inline-block;width:14px;font-size:9px;color:'+(p.color || '#374151')+';">'+(p.open ? '▼' : '▶')+'</span>' : '')
         +esc(p.label)+(p.note ? ' <span style="font-size:9.5px;font-weight:600;color:#94A3B8;">· '+esc(p.note)+'</span>' : '')+'</td>';
       var cell = 'text-align:right;padding:'+(p.bold ? '7px' : '5px')+' 10px;font-family:\'DM Mono\',monospace;font-size:'+(p.primary ? 12 : 11)+'px;white-space:nowrap;';
       function drillAttrs(v, f, ci){
@@ -6138,13 +6137,13 @@ function _incentivePageInner(foldQ){
         var f = fmtVal(v, p);
         return '<td'+drillAttrs(v, f, vi + 1)+' style="'+cell+'background:'+bg+';border-right:1px solid '+BORDER+';font-weight:'+wt(f)+';color:'+f.c+';">'+f.t+'</td>';
       }).join('');
-      return '<tr style="background:'+bg+';'+topBorder+'">'+nameCell+partCell+fyCell+mCells+'</tr>';
+      return '<tr style="background:'+bg+';'+topBorder+'">'+nameCell+partCell+mCells+'</tr>';   // no Grand Total column
     }).join('');
   }
 
   var zones = cap.filter(function(c){ return c.isZone; });
   window._incZoneNames = zones.map(function(z){ return z.name; });
-  var body = spGrand || !zones.length ? block(grand) : '';
+  var body = '';   // no Grand Total block; zones (or reps) only
   if (zones.length) {
     zones.forEach(function(z){
       var zReps = reps.filter(function(r){ return (r.zone || 'Cross Sales') === z.name; });
