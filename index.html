@@ -5837,29 +5837,14 @@ function fetchIncentiveOutstanding(callback, force){
 }
 function incRetry(){ incOutError = ''; fetchIncentiveOutstanding(function(){ render(); }, true); render(); }
 // Core (SEA EXPORT / SEA IMPORT) or Cross (every other LOB): which part every row shows. Core by default.
-function incSetPart(p){ state.incPart = p === 'cross' ? 'cross' : 'core'; incRerender(); }
-// Re-render without losing the table's scroll position
-function incRerender(){
-  var sc = document.getElementById('incScroll'), top = sc ? sc.scrollTop : 0, left = sc ? sc.scrollLeft : 0;
-  var wx = window.scrollX, wy = window.scrollY;
-  render();
-  var sc2 = document.getElementById('incScroll'); if (sc2) { sc2.scrollTop = top; sc2.scrollLeft = left; }
-  window.scrollTo(wx, wy);
-}
-function incToggleZone(z){ state.incZoneOpen = state.incZoneOpen || {}; state.incZoneOpen[z] = !state.incZoneOpen[z]; incRerender(); }
-function incSearchInput(el){
-  state.incSearch = el.value; var pos = el.selectionStart;
-  incRerender();
-  var n = document.getElementById('incSearch'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} }
-}
-function incSearchClear(){ state.incSearch = ''; incRerender(); }
+function incSetPart(p){ state.incPart = p === 'cross' ? 'cross' : 'core'; render(); }
+function incToggleZone(z){ state.incZoneOpen = state.incZoneOpen || {}; state.incZoneOpen[z] = !state.incZoneOpen[z]; render(); }
 function incToggleAllZones(open){
   state.incZoneOpen = {};
   if (open) (window._incZoneNames || []).forEach(function(z){ state.incZoneOpen[z] = true; });
-  incRerender();
+  render();
 }
-// openByDefault: rows that start open (the Grand Total breakdown)
-function incToggleGp(k, openByDefault){ state.incGpOpen = state.incGpOpen || {}; var cur = openByDefault ? state.incGpOpen[k] !== false : !!state.incGpOpen[k]; state.incGpOpen[k] = !cur; incRerender(); }
+function incToggleGp(k){ state.incGpOpen = state.incGpOpen || {}; state.incGpOpen[k] = !state.incGpOpen[k]; render(); }
 // Click on a GP / GP removed number: the same shipment drill-through as Sales Performance.
 // data-rm = 'all' (every removed job) or one INC_RM reason: only those jobs are listed.
 function incDrill(el){
@@ -6039,275 +6024,161 @@ function _incentivePageInner(foldQ){
     }
     return (e._calc = { core: part(true), cross: part(false) });
   }
-  // ───────────── Presentation ─────────────
-  // One row per zone / rep: every period shows the result (Final GP after Deductions) with GP% and eligibility
-  // under it. Clicking a row opens its breakdown (Performance → Deductions → Result) lined up under the same
-  // period columns. Zones are section headers, reps sit indented under their zone.
-  var cross = state.incPart === 'cross', partK = cross ? 'cross' : 'core';
-  var open = state.incGpOpen || {};
-  var q = String(state.incSearch || '').trim().toLowerCase();
-  var C = { ink:'#0F1F3A', sub:'#5B6B82', faint:'#9AA8BC', line:'#E4E9F1', lineStrong:'#C9D3E1', navy:'#0D2B5E',
-    good:'#11784F', goodBg:'#E8F5EE', warn:'#9A6A0C', bad:'#B42318', badBg:'#FDEDEC', ded:'#46597A', fee:'#8A5A12', final:'#0B6B47', inc:'#6B3FA0', tot:'#FBF6E9' };
-  function money(v){ return fmtCur(v); }
-  function pctMark(a){
-    if (a === null || a === undefined) return '';
-    var sym = a >= 100 ? '▲' : a >= INC_MIN_ACHV ? '●' : '▼';
-    var col = a >= 100 ? C.good : a >= INC_MIN_ACHV ? C.warn : C.bad;
-    return '<span style="color:'+col+';font-weight:700;">'+sym+' '+a+'%</span>';
-  }
-  function eligTag(e, big){
-    if (e === null || e === undefined) return '<span style="color:'+C.faint+';">No target</span>';
-    var fs = big ? '11px' : '10px';
-    return e ? '<span style="display:inline-block;font-size:'+fs+';font-weight:800;color:'+C.good+';background:'+C.goodBg+';border-radius:999px;padding:1px 7px;">✓ Eligible</span>'
-             : '<span style="display:inline-block;font-size:'+fs+';font-weight:800;color:'+C.bad+';background:'+C.badBg+';border-radius:999px;padding:1px 7px;">✕ Not eligible</span>';
-  }
-  var nPer = heads.length;
-  var totLabel = heads.length ? (function(){ var a = heads[0].sub || heads[0].top, z = heads[heads.length - 1].sub || heads[heads.length - 1].top; return a === z ? a : String(a).split(' – ')[0] + ' – ' + String(z).split(' – ').pop(); })() : '';
-
-  // Sticky first column; total column; one column per period
-  var NAME_W = 300;
-  var colgroup = '<colgroup><col style="width:'+NAME_W+'px;"><col style="width:150px;">' + heads.map(function(){ return '<col style="width:140px;">'; }).join('') + '</colgroup>';
-  var thead = '<thead style="position:sticky;top:0;z-index:5;"><tr>'
-    + '<th style="position:sticky;left:0;z-index:6;background:#F6F8FB;text-align:left;padding:10px 16px;border-bottom:1px solid '+C.lineStrong+';box-shadow:inset -1px 0 0 '+C.lineStrong+';font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:'+C.sub+';">Zone / Sales rep</th>'
-    + '<th style="background:'+C.tot+';text-align:right;padding:8px 14px;border-bottom:1px solid '+C.lineStrong+';box-shadow:inset -1px 0 0 '+C.lineStrong+';">'
-      + '<div style="font-size:11.5px;font-weight:800;color:#8A6410;">Total</div><div style="font-size:9.5px;font-weight:500;color:'+C.faint+';margin-top:1px;">'+esc(totLabel)+'</div></th>'
-    + heads.map(function(h, i){
-        return '<th style="background:#F6F8FB;text-align:right;padding:8px 14px;border-bottom:1px solid '+C.lineStrong+';'+(i < nPer - 1 ? 'box-shadow:inset -1px 0 0 '+C.line+';' : '')+'">'
-          + '<div style="font-size:11.5px;font-weight:800;color:'+C.navy+';">'+esc(h.top)+'</div>'
-          + (h.sub ? '<div style="font-size:9.5px;font-weight:500;color:'+C.faint+';margin-top:1px;">'+esc(h.sub)+'</div>' : '') + '</th>';
-      }).join('')
-    + '</tr></thead>';
-
-  // A period cell of a summary row: result on top, GP% + eligibility under it
-  function sumCell(ent, P, i, isTot){
-    var e = isTot ? P.eligT : P.elig[i], a = isTot ? P.achT : P.ach[i], amt = isTot ? P.amtT : P.amt[i];
-    var gpV = isTot ? sum(P.gp) : P.gp[i];
-    var bg = isTot ? 'background:'+C.tot+';box-shadow:inset -1px 0 0 '+C.lineStrong+';' : (i < nPer - 1 ? 'box-shadow:inset -1px 0 0 '+C.line+';' : '');
-    var top, bot;
-    if (ent.noTarget) { top = '<span style="color:'+C.sub+';font-weight:600;">'+money(gpV)+'</span>'; bot = '<span style="color:'+C.faint+';">GP · no target</span>'; }
-    else if (e === true) { top = '<span style="font-size:'+(ent.isGrand ? 14 : ent.isZone ? 13 : 12.5)+'px;font-weight:800;color:'+(amt < 0 ? C.bad : C.final)+';">'+money(amt)+'</span>'; bot = pctMark(a); }
-    else if (e === false) { top = '<span style="font-size:11px;font-weight:700;color:'+C.bad+';">✕ Not eligible</span>'; bot = pctMark(a); }
-    else { top = gpV ? '<span style="color:'+C.sub+';">'+money(gpV)+'</span>' : ''; bot = ''; }
-    return '<td style="text-align:right;vertical-align:middle;padding:9px 14px;'+bg+'font-family:\'DM Mono\',monospace;white-space:nowrap;">'
-      + '<div style="line-height:1.25;">'+top+'</div>' + (bot ? '<div style="font-size:10px;margin-top:2px;line-height:1.2;">'+bot+'</div>' : '') + '</td>';
-  }
-
-  // Breakdown rows for one entity, aligned with the period columns
-  function breakdown(ent, P, depth){
+  function particulars(ent){
+    var c = calc(ent), tgt = ent.tgt, T = sum(tgt);
     var gk = (ent.isGrand ? 'G:' : ent.isZone ? 'Z:' : 'R:') + ent.name;
-    var accent = ent.isGrand ? C.navy : ent.isZone ? (ent.avatarBg || BRAND_A1) : BRAND_A1;
-    var indent = 16 + depth * 22;
-    var rowsH = '';
-    function section(title, hint){
-      return '<tr><td style="position:sticky;left:0;z-index:2;background:#FAFBFD;padding:10px 16px 4px '+(indent + 14)+'px;box-shadow:inset 3px 0 0 '+accent+', inset -1px 0 0 '+C.lineStrong+';">'
-        + '<span style="font-size:9.5px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:'+C.sub+';">'+title+'</span>'
-        + (hint ? '<span style="font-size:9.5px;color:'+C.faint+';font-weight:500;margin-left:6px;">'+hint+'</span>' : '') + '</td>'
-        + '<td style="background:'+C.tot+';box-shadow:inset -1px 0 0 '+C.lineStrong+';"></td>' + heads.map(function(){ return '<td style="background:#FAFBFD;"></td>'; }).join('') + '</tr>';
-    }
-    // kind: 'cur' | 'pct' | 'elig' | 'ded' | 'final' | 'inc'
-    function line(label, vals, total, kind, opts){
-      opts = opts || {};
-      var strong = kind === 'final';
-      function fmt(v, ci){
-        if (kind === 'elig') return v === null || v === undefined ? '' : v ? '<span style="color:'+C.good+';font-weight:800;">✓ Yes</span>' : '<span style="color:'+C.bad+';font-weight:800;">✕ No</span>';
-        if (kind === 'pct') return v === null || v === undefined ? '' : pctMark(v);
-        if (v === null || v === undefined) return kind === 'inc' && ci === 0 ? '<span style="color:'+C.faint+';font-size:10px;font-family:Inter,sans-serif;">Rate not set</span>' : '';
-        if (kind === 'ded') return !v ? '<span style="color:'+C.faint+';">0</span>' : v > 0 ? '<span style="color:'+C.ded+';">− '+money(v)+'</span>' : '<span style="color:'+C.good+';" title="These jobs have negative GP, so taking them off adds back">+ '+money(-v)+'</span>';
-        if (kind === 'fee') return v ? '<span style="color:'+C.fee+';">− '+money(v)+'</span>' : '<span style="color:'+C.faint+';">0</span>';
-        if (kind === 'final') return '<span style="color:'+(v < 0 ? C.bad : C.final)+';font-weight:800;">'+money(v)+'</span>';
-        return '<span style="color:'+(v < 0 ? C.bad : C.ink)+';">'+money(v)+'</span>';
-      }
-      function drill(v, ci){
-        if (!opts.drill || !ent.drillCells || !ent.drillCells[ci] || !v) return '';
-        var c = ent.drillCells[ci];
-        return ' class="dcell" onclick="incDrill(this)" title="Show the jobs" data-entity="'+esc(c.entity)+'" data-col="'+esc(c.col)+'" data-val="'+esc(fmtCur(v))+'"'+(opts.rm ? ' data-rm="'+opts.rm+'"' : '')+' data-part="'+partK+'"';
-      }
-      var cellBase = 'text-align:right;padding:'+(strong ? '8px' : '5px')+' 14px;font-family:\'DM Mono\',monospace;font-size:'+(strong ? 12.5 : 11.5)+'px;white-space:nowrap;';
-      var bgRow = strong ? '#F1F8F4' : '#FFFFFF';
-      return '<tr style="'+(strong ? 'border-top:1px solid '+C.lineStrong+';' : '')+'">'
-        + '<td style="position:sticky;left:0;z-index:2;background:'+bgRow+';padding:'+(strong ? '8px' : '5px')+' 16px '+(strong ? '8px' : '5px')+' '+(indent + 14)+'px;box-shadow:inset 3px 0 0 '+accent+', inset -1px 0 0 '+C.lineStrong+';font-size:'+(strong ? 12 : 11.5)+'px;font-weight:'+(strong ? 800 : 500)+';color:'+(strong ? C.final : kind === 'ded' || kind === 'fee' ? C.ded : C.ink)+';">'
-          + esc(label) + (opts.note ? '<span style="font-size:10px;font-weight:600;color:'+C.faint+';margin-left:6px;">'+esc(opts.note)+'</span>' : '') + '</td>'
-        + '<td'+drill(total, 0)+' style="'+cellBase+'background:'+(strong ? '#EAF3E6' : C.tot)+';box-shadow:inset -1px 0 0 '+C.lineStrong+';font-weight:'+(strong ? 800 : 600)+';">'+fmt(total, 0)+'</td>'
-        + vals.map(function(v, i){ return '<td'+drill(v, i + 1)+' style="'+cellBase+'background:'+bgRow+';'+(i < nPer - 1 ? 'box-shadow:inset -1px 0 0 '+C.line+';' : '')+'">'+fmt(v, i + 1)+'</td>'; }).join('')
-        + '</tr>';
-    }
-    var noT = ent.noTarget;
-    rowsH += section('Performance', noT ? 'no GP target set' : 'GP% = GP Achieved ÷ Target GP · eligible from '+INC_MIN_ACHV+'%');
-    rowsH += line('GP Achieved', P.gp, sum(P.gp), 'cur', { drill:true });
-    if (!noT) {
-      rowsH += line('Target GP', ent.tgt, sum(ent.tgt), 'cur');
-      rowsH += line('GP%', P.ach, P.achT, 'pct');
-      rowsH += line('Eligibility', P.elig, P.eligT, 'elig');
-    }
-    rowsH += section('Deductions', 'only where eligible · a job counts once, under the first reason that fits');
-    INC_RM.forEach(function(r){
-      var n = P.ships[r.k];
-      rowsH += line(r.label.replace('Jobs where the amount is paid more than 30 days overdue', 'Jobs paid more than 30 days overdue'), P.rm[r.k], P.rmT[r.k], 'ded', { drill:true, rm:r.k, note: n ? n + ' job' + (n === 1 ? '' : 's') : '' });
-    });
-    rowsH += line('Management Fees (15%)', P.fee, P.feeT, 'fee');
-    rowsH += section('Result', '');
-    rowsH += line('Final GP after Deductions', P.amt, P.amtT, 'final');
-    rowsH += line('Total Incentive', P.amt.map(function(){ return null; }), null, 'inc');
-    return rowsH + '<tr><td colspan="'+(nPer + 2)+'" style="height:8px;background:#FAFBFD;border-bottom:1px solid '+C.lineStrong+';"></td></tr>';
+    var none = ent.gp.map(function(){ return null; });
+    function ships(n){ return n ? n + ' job' + (n === 1 ? '' : 's') : ''; }
+    // Same layout as the incentive sheet. Only the part picked with the Core / Cross switch, worked out on its
+    // own GP (Eligibility and GP% included). Not eligible → everything below GP% shows "–".
+    var cross = state.incPart === 'cross', part = cross ? 'cross' : 'core', P = cross ? c.cross : c.core;
+    var noT = ent.noTarget, open = state.incGpOpen || {};
+    var eOpen = !!open['E:' + gk], aOpen = !!open['A:' + gk]; // drill-downs, closed until clicked
+    var rows = [{ label:'Eligibility', type:noT ? 'na' : 'yn', bold:true, shade:true, color:'#0D2B5E', vals:P.elig, total:P.eligT, toggle:'E:' + gk, open:eOpen }];
+    if (eOpen) rows.push(
+      { label:'GP Achieved', sub:true, type:'cur', color:'#15233B', vals:P.gp, total:sum(P.gp), drill:ent.drillCells, part:part },
+      { label:'Target GP', sub:true, type:noT ? 'na' : 'cur', color:'#0D2B5E', vals:tgt, total:T },
+      { label:'GP%', sub:true, type:noT ? 'na' : 'pct', vals:P.ach, total:P.achT });
+    rows.push({ label:'Final GP after Deductions', type:'cur', color:'#059669', bold:true, shade:true, vals:P.amt, total:P.amtT, toggle:'A:' + gk, open:aOpen });
+    if (aOpen) rows = rows.concat(INC_RM.map(function(r){
+      return { label:r.label, sub:true, type:'cur', color:'#1D5FCC', vals:P.rm[r.k], total:P.rmT[r.k], drill:ent.drillCells, rm:r.k, part:part, note:ships(P.ships[r.k]) };
+    }), [
+      { label:'Management Fees (15%)', sub:true, upright:true, type:'cur', color:'#946312', vals:P.fee, total:P.feeT }
+    ]);
+    rows.push({ label:'Total Incentive', type:'na', bold:true, shade:true, color:'#6B3FA0', vals:none, total:null });
+    return rows;
+  }
+  function fmtVal(v, p){
+    if (p.type === 'na' || v === null || v === undefined) return { t:'–', c:'#B4BFCE' };
+    if (p.type === 'yn') return v ? { t:'Yes', c:'#15875A' } : { t:'No', c:'#DC2626' };
+    if (p.type === 'pct') return { t:v+'%', c: v >= 100 ? '#15875A' : v >= 75 ? '#A8720E' : '#DC2626' };
+    return { t:fmtCur(v), c: v < 0 ? '#DC2626' : (p.color || '#15233B') };
   }
 
-  function chev(on, size){ return '<svg width="'+(size || 12)+'" height="'+(size || 12)+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">'+(on ? '<polyline points="6 9 12 15 18 9"/>' : '<polyline points="9 6 15 12 9 18"/>')+'</svg>'; }
+  var BORDER = '#D5DCE6', BORDER_STRONG = '#B0BAC8';
+  var NAME_W = 210, PART_W = 300, FY_LEFT = NAME_W + PART_W;
+  var thBase = 'padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';white-space:nowrap;';
+  var head = '<tr>'
+    + '<th style="position:sticky;left:0;z-index:3;background:#F0F4FA;text-align:left;color:#475569;'+thBase+'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';width:'+NAME_W+'px;min-width:'+NAME_W+'px;">Sales Rep</th>'
+    + '<th style="position:sticky;left:'+NAME_W+'px;z-index:3;background:#F0F4FA;text-align:left;color:#475569;'+thBase+'width:'+PART_W+'px;min-width:'+PART_W+'px;">Particulars</th>'
+    + '<th style="position:sticky;left:'+FY_LEFT+'px;z-index:3;background:#FCF3DA;text-align:right;color:#A8720E;'+thBase+'box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">Grand Total</th>'
+    + heads.map(function(h){
+        return '<th style="text-align:right;background:'+(groups ? '#FCF3DA' : '#F0F4FA')+';color:#475569;'+thBase+'border-right:1px solid '+BORDER+';">'
+          +'<div style="font-size:11px;font-weight:800;color:'+(groups ? '#A8720E' : '#0D2B5E')+';">'+esc(h.top)+'</div>'
+          +(h.sub ? '<div style="font-size:9px;font-weight:500;color:#8B97A8;margin-top:1px;text-transform:none;letter-spacing:0;">'+esc(h.sub)+'</div>' : '')
+        +'</th>';
+      }).join('')
+    + '</tr>';
+
   function fmtMonthYear(d){ var dt = new Date(d); return isNaN(dt) ? null : dt.toLocaleDateString('en-GB', { month:'short', year:'numeric' }); }
-
-  function grandRow(ent){
-    var P = calc(ent)[partK], k = 'G:' + ent.name, isOpen = open[k] !== false;
-    return '<tr class="inc-row" data-gk="'+esc(k)+'" onclick="incToggleGp(this.getAttribute(\'data-gk\'), true)" style="cursor:pointer;background:#F3F6FB;border-bottom:1px solid '+C.lineStrong+';">'
-      + '<td style="position:sticky;left:0;z-index:2;background:#F3F6FB;padding:12px 16px;box-shadow:inset 4px 0 0 '+C.navy+', inset -1px 0 0 '+C.lineStrong+';">'
-        + '<div style="display:flex;align-items:center;gap:10px;"><span style="color:'+C.navy+';">'+chev(isOpen, 13)+'</span>'
-        + '<div><div style="font-size:13.5px;font-weight:800;color:'+C.navy+';">Grand Total</div><div style="font-size:10.5px;color:'+C.sub+';font-weight:500;">All zones · '+reps.length+' sales reps · '+(isOpen ? 'hide' : 'show')+' breakdown</div></div></div></td>'
-      + sumCell(ent, P, 0, true) + P.gp.map(function(_, i){ return sumCell(ent, P, i, false); }).join('') + '</tr>'
-      + (isOpen ? breakdown(ent, P, 0) : '');
-  }
-  function zoneRow(ent, zReps, forced){
-    var P = calc(ent)[partK];
-    var zOpen = forced || !!(state.incZoneOpen && state.incZoneOpen[ent.name]);
-    var bk = 'Z:' + ent.name, bOpen = !!open[bk];
-    var zp = ent.name === 'Cross Sales' ? [null, 'Cross Sales', ''] : (/^(\S+)\s*(.*)$/.exec(ent.name) || [null, ent.name, '']);
-    var mgr = String(zp[2] || '').replace(/^\(|\)$/g, '');
-    var zReg = ent.name === 'Cross Sales' ? '' : (window._zoneRegionMap && window._zoneRegionMap[ent.name] ? window._zoneRegionMap[ent.name] : '');
-    var col = ent.avatarBg || BRAND_A1;
-    return '<tr><td colspan="'+(nPer + 2)+'" style="height:10px;background:#F6F8FB;"></td></tr>'
-      + '<tr class="inc-row" data-zone="'+esc(ent.name)+'" onclick="incToggleZone(this.getAttribute(\'data-zone\'))" style="cursor:pointer;background:#FFFFFF;border-top:1px solid '+C.lineStrong+';border-bottom:1px solid '+C.line+';">'
-      + '<td style="position:sticky;left:0;z-index:2;background:#FFFFFF;padding:11px 12px 11px 16px;box-shadow:inset 4px 0 0 '+col+', inset -1px 0 0 '+C.lineStrong+';">'
-        + '<div style="display:flex;align-items:center;gap:10px;">'
-          + '<span style="color:'+C.sub+';">'+chev(zOpen, 13)+'</span>'
-          + '<div style="min-width:0;flex:1;">'
-            + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
-              + '<span style="font-size:9px;font-weight:800;letter-spacing:0.1em;color:'+col+';">ZONE</span>'
-              + '<span style="font-size:14px;font-weight:800;color:'+C.navy+';letter-spacing:-0.01em;">'+esc(zp[1])+'</span>'
-              + (zReg ? '<span style="font-size:8.5px;font-weight:800;color:#0D7C6B;border:1px solid #9FD6CC;border-radius:4px;padding:0 5px;text-transform:uppercase;">'+esc(zReg)+'</span>' : '')
-            + '</div>'
-            + '<div style="font-size:11px;color:'+C.sub+';margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(mgr ? esc(mgr) + ' · ' : '')+zReps.length+' rep'+(zReps.length === 1 ? '' : 's')+'</div>'
-          + '</div>'
-          + '<button data-gk="'+esc(bk)+'" onclick="event.stopPropagation();incToggleGp(this.getAttribute(\'data-gk\'))" class="btnq" title="Zone breakdown" style="flex-shrink:0;border:1px solid '+(bOpen ? col : C.lineStrong)+';background:'+(bOpen ? '#F3F6FB' : '#FFFFFF')+';color:'+C.navy+';border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;">'+(bOpen ? 'Hide' : 'Breakdown')+'</button>'
-        + '</div></td>'
-      + sumCell(ent, P, 0, true) + P.gp.map(function(_, i){ return sumCell(ent, P, i, false); }).join('') + '</tr>'
-      + (bOpen ? breakdown(ent, P, 0) : '');
-  }
-  function repRow(ent, last){
-    var P = calc(ent)[partK], k = 'R:' + ent.name, isOpen = !!open[k];
+  function block(ent){
+    var rowBg = ent.isGrand ? '#EEF3FC' : ent.isZone ? '#F0F4FB' : '#FFFFFF';
+    var parts = particulars(ent);
+    var mid = Math.floor((parts.length - 1) / 2);
+    var avatar = ent.isZone
+      ? '<div style="width:28px;height:28px;border-radius:8px;background:'+(ent.avatarBg || BRAND_A1)+';color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 5px rgba(0,0,0,0.15);">'+esc(ent.initials || '')+'</div>'
+      : ent.isGrand
+      ? '<div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#3B5BA5,#0D2B5E);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 6px rgba(13,43,94,0.25);">GT</div>'
+      : '<div style="width:24px;height:24px;border-radius:50%;background:'+(ent.avatarBg || BRAND_A1)+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.1);">'+esc(ent.initials || initials(ent.name))+'</div>';
     var doj = ent.joinDate ? fmtMonthYear(ent.joinDate) : null, doe = ent.exitDate ? fmtMonthYear(ent.exitDate) : null;
-    var nm = String(ent.name).split('|')[0].trim();
-    var zoneCode = String(ent.zone || '').split(' ')[0];
-    var col = BRAND_A1;
-    return '<tr class="inc-row" data-gk="'+esc(k)+'" onclick="incToggleGp(this.getAttribute(\'data-gk\'))" style="cursor:pointer;background:'+(isOpen ? '#F7F9FD' : '#FFFFFF')+';border-bottom:1px solid '+C.line+';">'
-      + '<td style="position:sticky;left:0;z-index:2;background:'+(isOpen ? '#F7F9FD' : '#FFFFFF')+';padding:8px 12px 8px 38px;box-shadow:inset -1px 0 0 '+C.lineStrong+';">'
-        + '<div style="position:absolute;left:22px;top:0;bottom:'+(last && !isOpen ? '50%' : '0')+';border-left:1.5px solid '+C.lineStrong+';"></div>'
-        + '<div style="position:absolute;left:22px;top:50%;width:10px;border-top:1.5px solid '+C.lineStrong+';"></div>'
-        + '<div style="display:flex;align-items:center;gap:8px;">'
-          + '<div style="width:26px;height:26px;border-radius:50%;background:'+(ent.avatarBg || col)+';color:#fff;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+esc(ent.initials || initials(nm))+'</div>'
-          + '<div style="min-width:0;flex:1;">'
-            + '<div style="font-size:12px;font-weight:700;color:'+C.ink+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(ent.name)+'">'+esc(nm)+'</div>'
-            + '<div style="font-size:10px;color:'+C.faint+';white-space:nowrap;">'+esc(zoneCode)+(doj ? ' · <span style="color:#10875A;">Joined '+esc(doj)+'</span>' : '')+(doe ? ' · <span style="color:'+C.bad+';">Left '+esc(doe)+'</span>' : '')+'</div>'
-          + '</div>'
-          + '<span style="color:'+C.faint+';flex-shrink:0;">'+chev(isOpen, 11)+'</span>'
-        + '</div></td>'
-      + sumCell(ent, P, 0, true) + P.gp.map(function(_, i){ return sumCell(ent, P, i, false); }).join('') + '</tr>'
-      + (isOpen ? breakdown(ent, P, 1) : '');
+    var zoneLabel = '';
+    if (ent.isZone) {
+      var zp = ent.name === 'Cross Sales' ? [null, 'Cross Sales', ''] : (/^(\S+)\s*(.*)$/.exec(ent.name) || [null, ent.name, '']);
+      var zReg = ent.name === 'Cross Sales' ? 'Cross Sales' : (window._zoneRegionMap && window._zoneRegionMap[ent.name] ? window._zoneRegionMap[ent.name] : '');
+      var zOpen = !!(state.incZoneOpen && state.incZoneOpen[ent.name]);
+      zoneLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px;">'
+          +'<div style="display:flex;align-items:center;gap:6px;">'
+            +'<span style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5678C2;text-transform:uppercase;">ZONE</span>'
+            +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">'+esc(zp[1])+'</span>'
+            +(zReg ? '<span style="font-size:8px;font-weight:700;color:#FFFFFF;background:#0D7C6B;border-radius:4px;padding:1px 6px;text-transform:uppercase;">'+esc(zReg)+'</span>' : '')
+          +'</div>'
+          +(zp[2] ? '<div style="font-size:10.5px;font-weight:500;color:#5B6678;line-height:1.3;white-space:normal;word-break:break-word;">'+esc(zp[2])+'</div>' : '')
+          +'<div style="font-size:9.5px;font-weight:600;color:#8A9AB5;">'+ent.repCount+' rep'+(ent.repCount === 1 ? '' : 's')+'</div>'
+        +'</div>'
+        +'<div style="width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 3px rgba(30,58,102,0.3);">'
+          +'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">'+(zOpen ? '<polyline points="6 9 12 15 18 9"/>' : '<polyline points="9 6 15 12 9 18"/>')+'</svg></div>';
+    }
+    var label = ent.isZone ? zoneLabel
+      : ent.isGrand
+      ? '<div style="font-size:12px;font-weight:800;color:#0D2B5E;">Grand Total <span style="font-weight:600;color:#6B82A0;font-size:10px;">· '+reps.length+' reps</span></div>'
+      : '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:1px;">'
+          +'<div style="font-size:11px;font-weight:600;color:#1E3A66;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(ent.name)+'">'+esc(ent.name)+'</div>'
+          +(doj || doe ? '<div style="font-size:9px;font-weight:500;white-space:nowrap;">'+(doj ? '<span style="color:#10875A;">DOJ: '+esc(doj)+'</span>' : '')+(doj && doe ? ' <span style="color:#CBD5E1;">·</span> ' : '')+(doe ? '<span style="color:#DC2626;">DOE: '+esc(doe)+'</span>' : '')+'</div>' : '')
+        +'</div>';
+    var accent = ent.isGrand ? 'box-shadow:inset 3px 0 0 '+BRAND_A2+', inset -1.5px 0 0 '+BORDER_STRONG+';'
+      : ent.isZone ? 'box-shadow:inset 3px 0 0 '+BRAND_A1+', inset -1.5px 0 0 '+BORDER_STRONG+';'
+      : 'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';';
+    var zoneClick = ent.isZone ? ' data-zone="'+esc(ent.name)+'" onclick="incToggleZone(this.getAttribute(\'data-zone\'))"' : '';
+    return parts.map(function(p, pi){
+      var topBorder = pi === 0 ? ((ent.isGrand || ent.isZone) ? 'border-top:2px solid '+BORDER_STRONG+';' : 'border-top:1.5px dashed #9AA6B8;') : 'border-top:1px solid #EEF1F6;';
+      var nameCell = '<td'+zoneClick+' style="'+(ent.isZone ? 'cursor:pointer;' : '')+'position:sticky;left:0;z-index:2;background:'+rowBg+';padding:6px 8px 6px 10px;width:'+NAME_W+'px;min-width:'+NAME_W+'px;max-width:'+NAME_W+'px;'+accent+'">'
+        + (pi === mid ? '<div style="display:flex;align-items:center;gap:6px;min-width:0;">'+avatar+label+'</div>' : '') + '</td>';
+      var bg = p.shade ? '#EEF2F8' : rowBg;
+      var partAttrs = p.toggle ? ' data-gk="'+esc(p.toggle)+'" onclick="incToggleGp(this.getAttribute(\'data-gk\'))"' : '';
+      var partCell = '<td'+partAttrs+' style="'+(p.toggle ? 'cursor:pointer;' : '')+(p.sub && !p.upright ? 'font-style:italic;' : '')+'position:sticky;left:'+NAME_W+'px;z-index:2;background:'+bg+';padding:6px 10px;width:'+PART_W+'px;min-width:'+PART_W+'px;max-width:'+PART_W+'px;box-sizing:border-box;white-space:normal;line-height:1.35;font-size:11.5px;font-weight:'+(p.bold ? 600 : 500)+';color:'+(p.bold ? (p.color || '#374151') : '#374151')+';">'+(p.toggle ? '<span style="display:inline-block;width:12px;font-size:9px;color:'+(p.color || '#374151')+';">'+(p.open ? '▼' : '▶')+'</span>' : '')
+        +(p.sub ? '<span style="display:inline-block;width:12px;"></span>' : '')
+        +esc(p.label)+(p.note ? ' <span style="font-size:9.5px;font-weight:600;color:#94A3B8;">· '+esc(p.note)+'</span>' : '')+'</td>';
+      var cell = 'text-align:right;padding:6px 10px;font-family:\'DM Mono\',monospace;font-size:11px;white-space:nowrap;';
+      function drillAttrs(v, f, ci){
+        if (!p.drill || !p.drill[ci] || !v || f.t === '–') return '';
+        var c = p.drill[ci];
+        return ' class="dcell" onclick="incDrill(this)" data-entity="'+esc(c.entity)+'" data-col="'+esc(c.col)+'" data-val="'+esc(f.t)+'"'+(p.rm ? ' data-rm="'+p.rm+'"' : '')+(p.part ? ' data-part="'+p.part+'"' : '');
+      }
+      var tot = fmtVal(p.total, p);
+      var fyCell = '<td'+drillAttrs(p.total, tot, 0)+' style="position:sticky;left:'+FY_LEFT+'px;z-index:2;'+cell+'background:'+((ent.isGrand || ent.isZone) ? rowBg : '#FCF9EE')+';font-weight:700;color:'+tot.c+';box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">'+tot.t+'</td>';
+      var mCells = p.vals.map(function(v, vi){
+        var f = fmtVal(v, p);
+        return '<td'+drillAttrs(v, f, vi + 1)+' style="'+cell+'background:'+bg+';border-right:1px solid '+BORDER+';font-weight:'+(p.bold || ent.isGrand || ent.isZone ? 600 : 500)+';color:'+f.c+';">'+f.t+'</td>';
+      }).join('');
+      return '<tr style="background:'+bg+';'+topBorder+'">'+nameCell+partCell+fyCell+mCells+'</tr>';
+    }).join('');
   }
 
-  // Body: Grand Total, then each zone with its reps (search shows matching reps with their zones opened)
   var zones = cap.filter(function(c){ return c.isZone; });
   window._incZoneNames = zones.map(function(z){ return z.name; });
-  var body = (spGrand || !zones.length) && !q ? grandRow(grand) : '';
-  var shownReps = 0;
-  function matches(r){ return !q || String(r.name).toLowerCase().indexOf(q) > -1; }
+  var body = spGrand || !zones.length ? block(grand) : '';
   if (zones.length) {
     zones.forEach(function(z){
       var zReps = reps.filter(function(r){ return (r.zone || 'Cross Sales') === z.name; });
-      var hit = q ? zReps.filter(matches) : zReps;
-      var zoneHit = q && String(z.name).toLowerCase().indexOf(q) > -1;
-      if (q && !hit.length && !zoneHit) return;
-      var zEnt = withAgg({ name:z.name, initials:z.initials, avatarBg:z.avatarBg, isZone:true, gp:z.gp, tgt:z.tgt, drillCells:z.drillCells, repCount:zReps.length, members:zReps }, byZone[z.name]);
-      var list = zoneHit ? zReps : hit;
-      body += zoneRow(zEnt, zReps, !!q);
-      if (q || (state.incZoneOpen && state.incZoneOpen[z.name])) { body += list.map(function(r, i){ return repRow(r, i === list.length - 1); }).join(''); shownReps += list.length; }
+      body += block(withAgg({ name:z.name, initials:z.initials, avatarBg:z.avatarBg, isZone:true, gp:z.gp, tgt:z.tgt, drillCells:z.drillCells,
+                      repCount:zReps.length, members:zReps }, byZone[z.name]));
+      if (state.incZoneOpen && state.incZoneOpen[z.name]) body += zReps.map(block).join('');
     });
   } else {
-    var list = reps.filter(matches);
-    body += list.map(function(r, i){ return repRow(r, i === list.length - 1); }).join('');
-    shownReps = list.length;
+    body += reps.map(block).join('');
   }
-  if (q && !body) body = '<tr><td colspan="'+(nPer + 2)+'" style="padding:40px;text-align:center;font-size:12px;color:'+C.sub+';">No zone or sales rep matches “'+esc(state.incSearch)+'”.</td></tr>';
   var allOpen = zones.length > 0 && zones.every(function(z){ return state.incZoneOpen && state.incZoneOpen[z.name]; });
-
-  // Summary cards: Grand Total for the whole period, the part picked
-  var G = calc(grand)[partK];
-  var dedT = G.allT, feeT = G.feeT;
-  function kpi(label, value, sub, opts){
-    opts = opts || {};
-    return '<div style="flex:'+(opts.hero ? '1.5 1 260px' : '1 1 170px')+';min-width:0;background:'+(opts.hero ? 'linear-gradient(135deg,#F0F8F3,#FFFFFF)' : '#FFFFFF')+';border:1px solid '+(opts.hero ? '#BFE3CF' : C.line)+';border-radius:12px;padding:12px 16px;">'
-      + '<div style="font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:'+C.sub+';">'+label+'</div>'
-      + '<div style="font-size:'+(opts.hero ? 24 : 18)+'px;font-weight:800;color:'+(opts.color || C.ink)+';font-family:\'DM Mono\',monospace;margin-top:4px;letter-spacing:-0.02em;">'+value+'</div>'
-      + (sub ? '<div style="font-size:11px;color:'+C.sub+';margin-top:4px;line-height:1.4;">'+sub+'</div>' : '') + '</div>';
-  }
-  var gGp = sum(G.gp), gT = sum(grand.tgt);
-  var bar = gT > 0 ? Math.max(0, Math.min(100, gGp / gT * 100)) : 0;
-  var cards = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">'
-    + kpi('Final GP after Deductions', G.eligT === true ? money(G.amtT) : '<span style="font-size:15px;color:'+C.bad+';">✕ Not eligible</span>',
-        G.eligT === true ? 'GP '+money(gGp)+' − deductions '+money(dedT || 0)+' − fees '+money(feeT || 0) : 'GP% below '+INC_MIN_ACHV+'% for the period', { hero:true, color:C.final })
-    + kpi('GP Achieved vs Target', money(gGp), 'of '+money(gT)+' target · '+pctMark(G.achT)
-        + '<div style="height:5px;background:#EEF1F6;border-radius:3px;margin-top:6px;position:relative;overflow:hidden;"><div style="position:absolute;left:0;top:0;bottom:0;width:'+bar+'%;background:'+(G.achT >= INC_MIN_ACHV ? C.good : C.bad)+';"></div><div style="position:absolute;left:'+INC_MIN_ACHV+'%;top:-2px;bottom:-2px;border-left:1.5px dashed '+C.sub+';" title="'+INC_MIN_ACHV+'% eligibility line"></div></div>')
-    + kpi('Deductions', G.eligT === true ? '− '+money((dedT || 0) + (feeT || 0)) : '<span style="color:'+C.faint+';font-size:15px;">Not applied</span>',
-        G.eligT === true ? 'Jobs '+money(dedT || 0)+' · Management fees '+money(feeT || 0) : 'Only where eligible', { color:C.ded })
-    + kpi('Total Incentive', '<span style="color:'+C.faint+';font-size:15px;">Rate not set</span>', 'Final GP × Incentive % (to be provided)', { color:C.inc })
-    + '</div>';
-
-  // How the numbers are worked out
-  function step(n, t){ return '<span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:17px;height:17px;border-radius:50%;background:'+C.navy+';color:#fff;font-size:9.5px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;">'+n+'</span>'+t+'</span>'; }
-  var arrow = '<span style="color:'+C.faint+';">→</span>';
-  var flow = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;color:'+C.sub+';font-weight:600;padding:10px 14px;background:#F6F8FB;border:1px solid '+C.line+';border-radius:10px;margin-bottom:14px;">'
-    + step(1, 'GP Achieved ÷ Target = GP%') + arrow + step(2, 'GP% ≥ '+INC_MIN_ACHV+'% → eligible') + arrow
-    + step(3, '− jobs with FL not done, O/S amount, paid 30+ days late') + arrow + step(4, '− 15% management fees = <b style="color:'+C.final+';">Final GP</b>') + arrow
-    + step(5, '× Incentive % = <b style="color:'+C.inc+';">Total Incentive</b>') + '</div>';
-
-  var seg = function(k, label, hint){
-    var on = partK === k;
-    return '<button onclick="incSetPart(\''+k+'\')" class="btnq" role="radio" aria-checked="'+on+'" title="'+hint+'" style="border:none;border-radius:999px;padding:5px 14px;font-size:11.5px;font-weight:700;cursor:pointer;'
-      + (on ? 'background:'+C.navy+';color:#FFFFFF;' : 'background:transparent;color:'+C.navy+';')+'">'+label+'</button>';
-  };
-  var btnS = 'display:inline-flex;align-items:center;gap:5px;background:#FFFFFF;border:1px solid '+C.lineStrong+';border-radius:8px;padding:5px 11px;font-size:11px;font-weight:700;color:'+C.navy+';cursor:pointer;';
-  var notes = [];
-  notes.push('Outstanding from ar_outstanding'+(incOutMeta && incOutMeta.asOn ? ' as on <b style="color:'+C.navy+';">'+esc(incOutMeta.asOn)+'</b>' : ''));
-  if (incOutMeta && !incOutMeta.paidDocs) notes.push('<span style="color:'+C.warn+';font-weight:700;">No paid invoices in the AR data yet, so nothing is taken off for paying late</span>');
-  if (incOutMeta && !incOutMeta.docsWithRef) notes.push('<span style="color:'+C.bad+';font-weight:700;">No Ref No found in ar_outstanding</span>');
-
-  var toolbar = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">'
-    + '<div style="display:flex;flex-direction:column;margin-right:6px;"><span style="font-size:16px;font-weight:800;color:'+C.navy+';letter-spacing:-0.01em;">Incentive</span>'
-    + '<span style="font-size:11px;color:'+C.sub+';font-weight:500;">'+(foldQ ? 'Quarterly' : state.reportView)+' · '+state.currency+' · '+zones.length+' zones · '+reps.length+' sales reps</span></div>'
-    + '<div role="radiogroup" aria-label="Core or Cross" style="display:inline-flex;gap:2px;padding:3px;background:#EEF2F8;border-radius:999px;">'
-      + seg('core', 'Core', 'SEA EXPORT and SEA IMPORT') + seg('cross', 'Cross', 'Every other LOB') + '</div>'
-    + '<span style="font-size:11px;color:'+C.sub+';">'+(cross ? 'Every LOB except Sea Export / Sea Import' : 'Sea Export + Sea Import')+'</span>'
-    + '<div style="flex:1;"></div>'
-    + '<div style="display:flex;align-items:center;gap:6px;border:1px solid '+C.lineStrong+';border-radius:8px;padding:4px 10px;background:#fff;">'
-      + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="'+C.faint+'" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16" y2="16"/></svg>'
-      + '<input id="incSearch" value="'+esc(state.incSearch || '')+'" oninput="incSearchInput(this)" placeholder="Find a zone or sales rep" style="border:none;outline:none;font-size:12px;width:180px;color:'+C.ink+';background:transparent;">'
-      + (q ? '<span onclick="incSearchClear()" style="cursor:pointer;color:'+C.faint+';font-size:13px;" title="Clear">✕</span>' : '')
-    + '</div>'
-    + (zones.length && !q ? '<button onclick="incToggleAllZones('+(allOpen ? 'false' : 'true')+')" class="btnq" style="'+btnS+'">'+(allOpen ? 'Collapse all zones' : 'Expand all zones')+'</button>' : '')
-    + '</div>';
-
-  var legend = '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:8px 16px;border-top:1px solid '+C.line+';font-size:10.5px;color:'+C.sub+';">'
-    + '<span>Each cell: <b style="color:'+C.final+';">Final GP after Deductions</b>, with GP% under it</span>'
-    + '<span><b style="color:'+C.good+';">▲</b> 100%+ of target</span><span><b style="color:'+C.warn+';">●</b> '+INC_MIN_ACHV+'–99%</span><span><b style="color:'+C.bad+';">▼</b> below '+INC_MIN_ACHV+'%: not eligible</span>'
-    + '<span>Click a zone to see its reps, a rep (or “Breakdown”) for the calculation, a GP or deduction figure for the jobs</span>'
-    + '<span style="flex:1;"></span><span>'+notes.join(' · ')+'</span></div>';
-
-  return '<div style="padding:16px 24px 28px;">'
-    + toolbar + cards + flow
-    + '<div style="background:#FFFFFF;border:1px solid '+C.lineStrong+';border-radius:12px;box-shadow:0 1px 3px rgba(15,31,58,0.06);overflow:hidden;">'
-      + '<div id="incScroll" style="position:relative;overflow:auto;max-height:calc(100vh - 230px);">'
-        + '<table style="width:100%;border-collapse:collapse;table-layout:fixed;min-width:'+(NAME_W + 150 + nPer * 140)+'px;font-variant-numeric:tabular-nums;">'
-          + colgroup + thead + '<tbody>' + body + '</tbody></table>'
-      + '</div>' + legend
-    + '</div></div>';
+  return '<div style="padding:20px 24px 32px;">'
+    +'<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);">'
+      +'<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid '+BORDER+';flex-wrap:wrap;border-radius:12px 12px 0 0;">'
+        +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Incentive</span>'
+        +'<span style="font-size:11px;color:#9AAFC8;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+(foldQ ? 'Quarterly' : state.reportView)+' · '+state.currency+'</span>'
+        +(function(){
+          var cur = state.incPart === 'cross' ? 'cross' : 'core';
+          function seg(k, label, hint){
+            var on = cur === k;
+            return '<button onclick="incSetPart(\''+k+'\')" class="btnq" role="radio" aria-checked="'+on+'" title="'+hint+'" style="border:none;border-radius:999px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;'
+              +(on ? 'background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');color:#FFFFFF;box-shadow:0 1px 3px rgba(30,58,102,0.3);' : 'background:transparent;color:#1E3A66;')+'">'+label+'</button>';
+          }
+          return '<div role="radiogroup" aria-label="Core or Cross" style="display:inline-flex;gap:2px;padding:2px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;">'
+            + seg('core', 'Core', 'SEA EXPORT and SEA IMPORT') + seg('cross', 'Cross', 'Every other LOB') + '</div>'
+            + '<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+(cur === 'cross' ? 'Cross: every LOB except Sea Export / Sea Import' : 'Core: Sea Export + Sea Import')+'</span>';
+        })()
+        +(zones.length ? '<button onclick="incToggleAllZones('+(allOpen ? 'false' : 'true')+')" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+(allOpen ? 'Collapse All' : 'Expand All')+'</button>' : '')
+        +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+zones.length+' zones · '+reps.length+' sales reps</span>'
+        +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">· Outstanding from ar_outstanding'+(incOutMeta && incOutMeta.asOn ? ' as on <span style="color:#2C4E82;font-weight:700;">'+esc(incOutMeta.asOn)+'</span>' : '')+'</span>'
+        +(incOutMeta && !incOutMeta.paidDocs ? '<span style="font-size:11px;color:#A8720E;font-weight:700;">· Paid 30+ days overdue: no paid invoices in ar_outstanding yet. The AR sync that ran'+(incOutMeta.pushedAt ? ' (last push '+esc(new Date(incOutMeta.pushedAt).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }))+')' : '')+' is an old copy: paste apps-script/arSync.gs into the Apps Script project and run it</span>' : '')
+        +(incOutMeta && !incOutMeta.docsWithRef ? '<span style="font-size:11px;color:#B83A2B;font-weight:700;">· No Ref No (refNo) found in ar_outstanding'+(incOutMeta.fields ? ' (fields: '+esc(incOutMeta.fields.join(', '))+')' : '')+'</span>' : '')
+      +'</div>'
+      +'<div style="position:relative;overflow:auto;max-height:calc(100vh - 190px);">'
+        +'<table style="width:100%;border-collapse:collapse;min-width:850px;font-variant-numeric:tabular-nums;">'
+          +'<thead style="position:sticky;top:0;z-index:4;">'+head+'</thead>'
+          +'<tbody>'+body+'</tbody>'
+        +'</table>'
+      +'</div>'
+    +'</div>'
+  +'</div>';
 }
-
 
 /* ---------------------- Incentive: payout runs (history) ----------------------
    A run takes one FY quarter, works out every rep's Core and Cross numbers exactly as the Incentive table does
