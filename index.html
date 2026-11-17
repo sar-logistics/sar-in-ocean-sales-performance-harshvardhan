@@ -6034,23 +6034,24 @@ function _incentivePageInner(foldQ){
     var cross = state.incPart === 'cross', part = cross ? 'cross' : 'core', P = cross ? c.cross : c.core;
     var noT = ent.noTarget, open = state.incGpOpen || {};
     var eOpen = !!open['E:' + gk], aOpen = !!open['A:' + gk]; // drill-downs, closed until clicked
-    var rows = [{ label:'Eligibility', type:noT ? 'na' : 'yn', bold:true, shade:true, color:'#0D2B5E', vals:P.elig, total:P.eligT, toggle:'E:' + gk, open:eOpen }];
+    var rows = [{ label:'Eligibility', type:noT ? 'na' : 'yn', bold:true, shade:true, color:'#1E3A66', vals:P.elig, total:P.eligT, toggle:'E:' + gk, open:eOpen }];
     if (eOpen) rows.push(
       { label:'GP Achieved', sub:true, type:'cur', color:'#15233B', vals:P.gp, total:sum(P.gp), drill:ent.drillCells, part:part },
-      { label:'Target GP', sub:true, type:noT ? 'na' : 'cur', color:'#0D2B5E', vals:tgt, total:T },
+      { label:'Target GP', sub:true, type:noT ? 'na' : 'cur', color:'#64748B', vals:tgt, total:T },
       { label:'GP%', sub:true, type:noT ? 'na' : 'pct', vals:P.ach, total:P.achT });
-    rows.push({ label:'Final GP after Deductions', type:'cur', color:'#059669', bold:true, shade:true, vals:P.amt, total:P.amtT, toggle:'A:' + gk, open:aOpen });
+    rows.push({ label:'Final GP after Deductions', type:'cur', color:'#0B7A4B', bold:true, primary:true, shade:true, vals:P.amt, total:P.amtT, toggle:'A:' + gk, open:aOpen });
     if (aOpen) rows = rows.concat(INC_RM.map(function(r){
-      return { label:r.label, sub:true, type:'cur', color:'#1D5FCC', vals:P.rm[r.k], total:P.rmT[r.k], drill:ent.drillCells, rm:r.k, part:part, note:ships(P.ships[r.k]) };
+      return { label:r.label, sub:true, ded:true, type:'cur', color:'#475569', vals:P.rm[r.k], total:P.rmT[r.k], drill:ent.drillCells, rm:r.k, part:part, note:ships(P.ships[r.k]) };
     }), [
-      { label:'Management Fees (15%)', sub:true, upright:true, type:'cur', color:'#946312', vals:P.fee, total:P.feeT }
+      { label:'Management Fees (15%)', sub:true, ded:true, type:'cur', color:'#475569', vals:P.fee, total:P.feeT }
     ]);
     rows.push({ label:'Total Incentive', type:'na', bold:true, shade:true, color:'#6B3FA0', vals:none, total:null });
     return rows;
   }
   function fmtVal(v, p){
-    if (p.type === 'na' || v === null || v === undefined) return { t:'–', c:'#B4BFCE' };
-    if (p.type === 'yn') return v ? { t:'Yes', c:'#15875A' } : { t:'No', c:'#DC2626' };
+    if (p.type === 'na' || v === null || v === undefined) return { t:'–', c:'#CBD3DF', dash:true };
+    if (p.type === 'yn') return v ? { t:'✓ Yes', c:'#15875A' } : { t:'✕ No', c:'#C2410C' };
+    if (p.ded) return { t:v > 0 ? '−' + fmtCur(v) : v < 0 ? '+' + fmtCur(-v) : fmtCur(0), c:v < 0 ? '#15875A' : '#475569' };
     if (p.type === 'pct') return { t:v+'%', c: v >= 100 ? '#15875A' : v >= 75 ? '#A8720E' : '#DC2626' };
     return { t:fmtCur(v), c: v < 0 ? '#DC2626' : (p.color || '#15233B') };
   }
@@ -6072,7 +6073,10 @@ function _incentivePageInner(foldQ){
 
   function fmtMonthYear(d){ var dt = new Date(d); return isNaN(dt) ? null : dt.toLocaleDateString('en-GB', { month:'short', year:'numeric' }); }
   function block(ent){
-    var rowBg = ent.isGrand ? '#EEF3FC' : ent.isZone ? '#F0F4FB' : '#FFFFFF';
+    // Hierarchy: Grand Total and zones are tinted section bands; reps are white, indented under their zone
+    var rowBg = ent.isGrand ? '#EAF0FA' : ent.isZone ? '#F3F6FC' : '#FFFFFF';
+    var shadeBg = ent.isGrand ? '#E1E9F6' : ent.isZone ? '#E9EFF9' : '#F6F8FB';   // group rows (Eligibility / Final GP / Total Incentive)
+    var totBg = '#FBF6E7';
     var parts = particulars(ent);
     var mid = Math.floor((parts.length - 1) / 2);
     var avatar = ent.isZone
@@ -6102,33 +6106,36 @@ function _incentivePageInner(foldQ){
       : ent.isGrand
       ? '<div style="font-size:12px;font-weight:800;color:#0D2B5E;">Grand Total <span style="font-weight:600;color:#6B82A0;font-size:10px;">· '+reps.length+' reps</span></div>'
       : '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:1px;">'
-          +'<div style="font-size:11px;font-weight:600;color:#1E3A66;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(ent.name)+'">'+esc(ent.name)+'</div>'
+          +'<div style="font-size:12px;font-weight:700;color:#14213D;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(ent.name)+'">'+esc(ent.name)+'</div>'
           +(doj || doe ? '<div style="font-size:9px;font-weight:500;white-space:nowrap;">'+(doj ? '<span style="color:#10875A;">DOJ: '+esc(doj)+'</span>' : '')+(doj && doe ? ' <span style="color:#CBD5E1;">·</span> ' : '')+(doe ? '<span style="color:#DC2626;">DOE: '+esc(doe)+'</span>' : '')+'</div>' : '')
         +'</div>';
-    var accent = ent.isGrand ? 'box-shadow:inset 3px 0 0 '+BRAND_A2+', inset -1.5px 0 0 '+BORDER_STRONG+';'
-      : ent.isZone ? 'box-shadow:inset 3px 0 0 '+BRAND_A1+', inset -1.5px 0 0 '+BORDER_STRONG+';'
-      : 'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';';
+    var accent = ent.isGrand ? 'box-shadow:inset 4px 0 0 #0D2B5E, inset -1.5px 0 0 '+BORDER_STRONG+';'
+      : ent.isZone ? 'box-shadow:inset 4px 0 0 '+(ent.avatarBg || BRAND_A1)+', inset -1.5px 0 0 '+BORDER_STRONG+';'
+      : 'box-shadow:inset 14px 0 0 #FFFFFF, inset 16px 0 0 #C9D6EA, inset -1.5px 0 0 '+BORDER_STRONG+';';   // guide line: belongs to the zone above
     var zoneClick = ent.isZone ? ' data-zone="'+esc(ent.name)+'" onclick="incToggleZone(this.getAttribute(\'data-zone\'))"' : '';
-    return parts.map(function(p, pi){
-      var topBorder = pi === 0 ? ((ent.isGrand || ent.isZone) ? 'border-top:2px solid '+BORDER_STRONG+';' : 'border-top:1.5px dashed #9AA6B8;') : 'border-top:1px solid #EEF1F6;';
-      var nameCell = '<td'+zoneClick+' style="'+(ent.isZone ? 'cursor:pointer;' : '')+'position:sticky;left:0;z-index:2;background:'+rowBg+';padding:6px 8px 6px 10px;width:'+NAME_W+'px;min-width:'+NAME_W+'px;max-width:'+NAME_W+'px;'+accent+'">'
+    // A gap above every zone / the Grand Total so each reads as its own section
+    var gap = (ent.isZone || ent.isGrand) ? '<tr><td colspan="'+(heads.length + 3)+'" style="height:10px;padding:0;background:#FFFFFF;"></td></tr>' : '';
+    return gap + parts.map(function(p, pi){
+      var topBorder = pi === 0 ? ((ent.isGrand || ent.isZone) ? 'border-top:2px solid #8FA3C4;' : 'border-top:1.5px solid #B8C4D6;') : (p.bold ? 'border-top:1px solid #DDE3EC;' : 'border-top:1px solid #F1F3F7;');
+      var nameCell = '<td'+zoneClick+' style="'+(ent.isZone ? 'cursor:pointer;' : '')+'position:sticky;left:0;z-index:2;background:'+rowBg+';padding:6px 8px 6px '+(ent.isZone || ent.isGrand ? 12 : 24)+'px;width:'+NAME_W+'px;min-width:'+NAME_W+'px;max-width:'+NAME_W+'px;'+accent+'">'
         + (pi === mid ? '<div style="display:flex;align-items:center;gap:6px;min-width:0;">'+avatar+label+'</div>' : '') + '</td>';
-      var bg = p.shade ? '#EEF2F8' : rowBg;
+      var bg = p.shade ? shadeBg : rowBg;
       var partAttrs = p.toggle ? ' data-gk="'+esc(p.toggle)+'" onclick="incToggleGp(this.getAttribute(\'data-gk\'))"' : '';
-      var partCell = '<td'+partAttrs+' style="'+(p.toggle ? 'cursor:pointer;' : '')+(p.sub && !p.upright ? 'font-style:italic;' : '')+'position:sticky;left:'+NAME_W+'px;z-index:2;background:'+bg+';padding:6px 10px;width:'+PART_W+'px;min-width:'+PART_W+'px;max-width:'+PART_W+'px;box-sizing:border-box;white-space:normal;line-height:1.35;font-size:11.5px;font-weight:'+(p.bold ? 600 : 500)+';color:'+(p.bold ? (p.color || '#374151') : '#374151')+';">'+(p.toggle ? '<span style="display:inline-block;width:12px;font-size:9px;color:'+(p.color || '#374151')+';">'+(p.open ? '▼' : '▶')+'</span>' : '')
-        +(p.sub ? '<span style="display:inline-block;width:12px;"></span>' : '')
+      // Group rows: bold, upright, coloured; their sub rows: smaller grey labels indented under them
+      var partCell = '<td'+partAttrs+' style="'+(p.toggle ? 'cursor:pointer;' : '')+'position:sticky;left:'+NAME_W+'px;z-index:2;background:'+bg+';padding:'+(p.bold ? '7px' : '5px')+' 10px '+(p.bold ? '7px' : '5px')+' '+(p.sub ? 30 : 10)+'px;width:'+PART_W+'px;min-width:'+PART_W+'px;max-width:'+PART_W+'px;box-sizing:border-box;white-space:normal;line-height:1.35;font-size:'+(p.bold ? 12 : 11)+'px;font-weight:'+(p.bold ? 700 : 500)+';color:'+(p.bold ? (p.color || '#14213D') : p.ded ? '#64748B' : '#3F4B5E')+';'+(p.sub ? 'box-shadow:inset 18px 0 0 '+bg+', inset 19.5px 0 0 #D5DCE6;' : '')+'">'+(p.toggle ? '<span style="display:inline-block;width:14px;font-size:9px;color:'+(p.color || '#374151')+';">'+(p.open ? '▼' : '▶')+'</span>' : '')
         +esc(p.label)+(p.note ? ' <span style="font-size:9.5px;font-weight:600;color:#94A3B8;">· '+esc(p.note)+'</span>' : '')+'</td>';
-      var cell = 'text-align:right;padding:6px 10px;font-family:\'DM Mono\',monospace;font-size:11px;white-space:nowrap;';
+      var cell = 'text-align:right;padding:'+(p.bold ? '7px' : '5px')+' 10px;font-family:\'DM Mono\',monospace;font-size:'+(p.primary ? 12 : 11)+'px;white-space:nowrap;';
       function drillAttrs(v, f, ci){
         if (!p.drill || !p.drill[ci] || !v || f.t === '–') return '';
         var c = p.drill[ci];
         return ' class="dcell" onclick="incDrill(this)" data-entity="'+esc(c.entity)+'" data-col="'+esc(c.col)+'" data-val="'+esc(f.t)+'"'+(p.rm ? ' data-rm="'+p.rm+'"' : '')+(p.part ? ' data-part="'+p.part+'"' : '');
       }
       var tot = fmtVal(p.total, p);
-      var fyCell = '<td'+drillAttrs(p.total, tot, 0)+' style="position:sticky;left:'+FY_LEFT+'px;z-index:2;'+cell+'background:'+((ent.isGrand || ent.isZone) ? rowBg : '#FCF9EE')+';font-weight:700;color:'+tot.c+';box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">'+tot.t+'</td>';
+      function wt(f){ return f.dash ? 400 : p.primary ? 800 : p.bold ? 700 : p.ded ? 500 : 600; }
+      var fyCell = '<td'+drillAttrs(p.total, tot, 0)+' style="position:sticky;left:'+FY_LEFT+'px;z-index:2;'+cell+'background:'+(p.shade ? '#F5EDD3' : totBg)+';font-weight:'+wt(tot)+';color:'+tot.c+';box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">'+tot.t+'</td>';
       var mCells = p.vals.map(function(v, vi){
         var f = fmtVal(v, p);
-        return '<td'+drillAttrs(v, f, vi + 1)+' style="'+cell+'background:'+bg+';border-right:1px solid '+BORDER+';font-weight:'+(p.bold || ent.isGrand || ent.isZone ? 600 : 500)+';color:'+f.c+';">'+f.t+'</td>';
+        return '<td'+drillAttrs(v, f, vi + 1)+' style="'+cell+'background:'+bg+';border-right:1px solid '+BORDER+';font-weight:'+wt(f)+';color:'+f.c+';">'+f.t+'</td>';
       }).join('');
       return '<tr style="background:'+bg+';'+topBorder+'">'+nameCell+partCell+fyCell+mCells+'</tr>';
     }).join('');
