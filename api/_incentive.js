@@ -32,6 +32,19 @@ function refKey(v) {
   return String(v == null ? "" : v).trim().toUpperCase();
 }
 
+// "22-Sep-2026", "22-09-2026", "22/09/2026", "2026-09-22", a Date → day number (null when it can't be read)
+const MON = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+function dayNo(v) {
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : Math.floor(Date.UTC(v.getFullYear(), v.getMonth(), v.getDate()) / 86400000);
+  const t = String(v == null ? "" : v).trim();
+  let m = /^(\d{1,2})[-\/ ]([A-Za-z]{3})[-\/ ](\d{4})$/.exec(t);
+  if (m) { const mo = MON.indexOf(m[2].toLowerCase()); return mo < 0 ? null : Date.UTC(+m[3], mo, +m[1]) / 86400000; }
+  m = /^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/.exec(t);
+  if (m && +m[2] >= 1 && +m[2] <= 12 && +m[1] >= 1 && +m[1] <= 31) return Date.UTC(+m[3], +m[2] - 1, +m[1]) / 86400000;
+  m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86400000 : null;
+}
+
 let cache = null; // { key, time, data }
 
 async function incentiveOutstanding(db, force) {
@@ -40,9 +53,11 @@ async function incentiveOutstanding(db, force) {
   if (!force && cache && cache.key === key && Date.now() - cache.time < CACHE_TTL_MS) return cache.data;
 
   const col = db.collection(AR_COLLECTION);
+  const refQ = { $or: REF_FIELDS.map((f) => ({ [f]: { $exists: true, $nin: ["", null] } })) };
   const docs = await col.find(
-    { $or: REF_FIELDS.map((f) => ({ [f]: { $exists: true, $nin: ["", null] } })) },
-    { projection: Object.assign({ _id: 0, outstanding: 1, Outstanding: 1, "Outstanding (INR)": 1, _paid: 1, paidOverdueDays: 1 }, ...REF_FIELDS.map((f) => ({ [f]: 1 }))) }
+    key ? { $and: [refQ, { _batch: key }] } : refQ,
+    { projection: Object.assign({ _id: 0, outstanding: 1, Outstanding: 1, "Outstanding (INR)": 1, _paid: 1, paidOverdueDays: 1,
+      customer: 1, txnNo: 1, transDate: 1, creditDays: 1, billAmt: 1, "Receipt Date": 1, "GL Group Name": 1, ATA: 1, eta: 1 }, ...REF_FIELDS.map((f) => ({ [f]: 1 }))) }
   ).toArray();
 
   const refs = {};
@@ -53,6 +68,43 @@ async function incentiveOutstanding(db, force) {
     const ref = REF_FIELDS.map((f) => d[f]).filter((v) => v !== undefined && v !== null && v !== "").join("\n");
     String(ref).split(/[\n,;]+/).forEach((part) => { const k = refKey(part); if (k) fn(k); });
   };
+  // Paid late, worked out here from the invoice rows the AR sync pushes (every row of the report, paid ones
+  // included). One invoice = Organization + Transaction No. Fully paid = no row of it has a positive outstanding.
+  // Overdue days = last Receipt Date − (Trans. Date + Credit Days); for GL Group "OVR Receivable" the base is the
+  // arrival (ATA, else ETA, else Trans. Date), the AR page's rule. More than LATE_DAYS → that shipment's GP is taken off.
+  const inv = {};
+  for (const d of docs) {
+    if (d._paid) continue;
+    const txn = String(d.txnNo || "").trim(), org = String(d.customer || "").trim();
+    if (!txn || !org) continue;
+    const k = org + "\u0001" + txn;
+    const x = inv[k] || (inv[k] = { open: false, rd: null, base: null, cd: 0, bill: 0, refs: {}, txn, org });
+    const o = num(d.outstanding !== undefined ? d.outstanding : d.Outstanding !== undefined ? d.Outstanding : d["Outstanding (INR)"]);
+    if (o > 0) x.open = true;
+    const rd = dayNo(d["Receipt Date"]);
+    if (rd !== null && (x.rd === null || rd > x.rd)) x.rd = rd;
+    if (x.base === null) {
+      const td = dayNo(d.transDate);
+      const ovr = String(d["GL Group Name"] || "").trim().toLowerCase() === "ovr receivable";
+      const arr = ovr ? (dayNo(d.ATA) !== null ? dayNo(d.ATA) : dayNo(d.eta)) : null;
+      x.base = arr !== null ? arr : td;
+      x.cd = num(d.creditDays);
+    }
+    x.bill = Math.max(x.bill, num(d.billAmt));
+    eachRef(d, (r) => { x.refs[r] = true; });
+  }
+  let paidInvoices = 0;
+  const lateWhy = {};
+  for (const k in inv) {
+    const x = inv[k];
+    if (x.open || x.rd === null || x.base === null || !(x.bill > 0)) continue;
+    paidInvoices++;
+    const days = x.rd - x.base - (x.cd || 0);
+    if (days > LATE_DAYS) Object.keys(x.refs).forEach((r) => {
+      if (!(lateRefs[r] >= days)) { lateRefs[r] = days; lateWhy[r] = { txn: x.txn, customer: x.org, days }; }
+    });
+  }
+
   for (const d of docs) {
     if (d._paid) {
       paidDocs++;
@@ -87,12 +139,14 @@ async function incentiveOutstanding(db, force) {
     refs: Object.keys(refs),
     lateDays: LATE_DAYS,
     lateRefs,
-    paidDocs, // 0 until the AR sync that sends paid invoices has run
+    paidDocs: paidDocs + paidInvoices, // fully paid invoices found (0 = the AR data has no paid invoices)
+    paidInvoices,
     paidAll,
     total,
     batch: key,
     fields,
   };
+  data.lateWhy = lateWhy;
   cache = { key, time: Date.now(), data };
   return data;
 }
