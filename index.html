@@ -5871,17 +5871,59 @@ function incDrill(el){
   state.drill = Object.assign({}, state.drill, { entity: entity + ' (' + tag + ')', rows: rows, count: rows.length,
     totalGP: gp, totalProvGP: prov, totalActualGP: act, totalRevenue: rev, totalCost: rev - gp, totalMetric: met,
     columnFilters: {}, openFilterCol: null, filterDraft: {} });
-  render();
+  renderDrillOnly();
 }
+// Keep the Incentive table where it was when the page is redrawn: opening / closing a drill-through, ▶ groups,
+// zones, Core / Cross. render() rebuilds the page, and the table's own scroll box would start again at the top.
+function _incKeepScroll(name){
+  var orig = window[name];
+  if (typeof orig !== 'function' || orig._incKeep) return;
+  var w = function(){
+    if (state.page !== 'incentive') return orig.apply(this, arguments);
+    var sc = document.getElementById('incScroll'), ms = document.getElementById('main-slot');
+    var pos = { t:sc ? sc.scrollTop : 0, l:sc ? sc.scrollLeft : 0, m:ms ? ms.scrollTop : 0 };
+    var out = orig.apply(this, arguments);
+    function put(){
+      if (state.page !== 'incentive') return;
+      var sc2 = document.getElementById('incScroll'), ms2 = document.getElementById('main-slot');
+      if (sc2) { sc2.scrollTop = pos.t; sc2.scrollLeft = pos.l; }
+      if (ms2) ms2.scrollTop = pos.m;
+    }
+    put(); requestAnimationFrame(put);
+    return out;
+  };
+  w._incKeep = true;
+  window[name] = w;
+}
+_incKeepScroll('render'); _incKeepScroll('renderKeepTopbar');
 function _incShipKey(v){ return String(v == null ? '' : v).trim().toUpperCase(); }
 
 // Quarterly view on this page: FY quarters (Q1 Apr–Jun … Q4 Jan–Mar) side by side for the months picked
 // in From/To, added up from Sales Performance's monthly columns. Monthly and Yearly follow Sales Performance.
+// Payout timing (user, 17-Nov-2026): a quarter's incentive is paid two quarters later. The page shows only the
+// quarter being paid now, from today's date: in Q3 FY27 (Oct–Dec 26) that is Q1 FY27 (Apr–Jun 26).
+function _incPayQuarter(now){
+  now = now || new Date();
+  var m = now.getMonth(), y = now.getFullYear();
+  var fy = m >= 3 ? y + 1 : y, q = m >= 3 ? Math.floor((m - 3) / 3) + 1 : 4;
+  var n = fy * 4 + (q - 1) - 2, pfy = Math.floor(n / 4), pq = n % 4 + 1;
+  var months = [0, 1, 2].map(function(k){
+    var mm = (pq - 1) * 3 + 3 + k, yy = pfy - 1;
+    if (mm >= 12) { mm -= 12; yy += 1; }
+    return MONTH_IDX_TO_NAME[mm] + '-' + String(yy).slice(-2);
+  });
+  return { key:'FY' + String(pfy).slice(-2) + '-Q' + pq, label:'Q' + pq + ' FY' + String(pfy).slice(-2), months:months,
+           payLabel:'Q' + q + ' FY' + String(fy).slice(-2) };
+}
 function incentivePage(){
   if (state.incTab === 'history') return _incTabs() + incHistoryPage();
-  if (state.reportView !== 'Quarterly') return _incTabs() + _incentivePageInner(false);
-  state.reportView = 'Monthly';
-  try { return _incTabs() + _incentivePageInner(true); } finally { state.reportView = 'Quarterly'; }
+  // Work out the page for the quarter being paid now, whatever period is picked in the top bar (put back after)
+  var pq = _incPayQuarter();
+  var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo };
+  state.reportView = 'Monthly'; state.dateFrom = pq.months[0]; state.dateTo = pq.months[2];
+  window._incPay = pq;
+  try { return _incTabs() + _incentivePageInner(true); }
+  finally { state.reportView = keep.reportView; state.dateFrom = keep.dateFrom; state.dateTo = keep.dateTo; }
 }
 function _incentivePageInner(foldQ){
   var idxs = filteredMonthIndices();
@@ -6175,7 +6217,9 @@ function _incentivePageInner(foldQ){
     +'<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);">'
       +'<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid '+BORDER+';flex-wrap:wrap;border-radius:12px 12px 0 0;">'
         +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Incentive</span>'
-        +'<span style="font-size:11px;color:#9AAFC8;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+(foldQ ? 'Quarterly' : state.reportView)+' · '+state.currency+'</span>'
+        +(window._incPay
+          ? '<span style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 10px;border:1px solid #D3DFF3;" title="A quarter\'s incentive is paid two quarters later">Paid in '+esc(window._incPay.payLabel)+' · for '+esc(window._incPay.label)+' ('+esc(window._incPay.months[0])+' – '+esc(window._incPay.months[2])+') · '+state.currency+'</span>'
+          : '<span style="font-size:11px;color:#9AAFC8;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+(foldQ ? 'Quarterly' : state.reportView)+' · '+state.currency+'</span>')
         +(function(){
           var cur = state.incPart === 'cross' ? 'cross' : 'core';
           function seg(k, label, hint){
@@ -6193,7 +6237,7 @@ function _incentivePageInner(foldQ){
         +(incOutMeta && !incOutMeta.paidDocs ? '<span style="font-size:11px;color:#A8720E;font-weight:700;">· Paid 30+ days overdue: no paid invoices in ar_outstanding yet. The AR sync that ran'+(incOutMeta.pushedAt ? ' (last push '+esc(new Date(incOutMeta.pushedAt).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }))+')' : '')+' is an old copy: paste apps-script/arSync.gs into the Apps Script project and run it</span>' : '')
         +(incOutMeta && !incOutMeta.docsWithRef ? '<span style="font-size:11px;color:#B83A2B;font-weight:700;">· No Ref No (refNo) found in ar_outstanding'+(incOutMeta.fields ? ' (fields: '+esc(incOutMeta.fields.join(', '))+')' : '')+'</span>' : '')
       +'</div>'
-      +'<div style="position:relative;overflow:auto;max-height:calc(100vh - 190px);">'
+      +'<div id="incScroll" style="position:relative;overflow:auto;max-height:calc(100vh - 190px);">'
         +'<table style="width:100%;border-collapse:collapse;min-width:850px;font-variant-numeric:tabular-nums;">'
           +'<thead style="position:sticky;top:0;z-index:4;">'+head+'</thead>'
           +'<tbody>'+body+'</tbody>'
@@ -6411,6 +6455,7 @@ function incHistoryPage(){
 
   // Generate
   var qs = _incQuarters();
+  if (!state.incGenQ && qs.some(function(x){ return x.key === _incPayQuarter().key; })) state.incGenQ = _incPayQuarter().key;
   if (!state.incGenQ) { var last = qs.filter(function(x){ return hasDataForIndices(x.months.map(function(m){ return months26.indexOf(m); })); }); state.incGenQ = (last[last.length - 1] || qs[0] || {}).key; }
   var canGen = !_getRLSReps().length;
   out += card(head('Generate a payout run',
