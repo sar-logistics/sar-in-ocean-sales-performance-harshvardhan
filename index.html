@@ -6109,16 +6109,17 @@ function _incentivePageInner(foldQ){
           +'<div style="font-size:12px;font-weight:700;color:#14213D;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(ent.name)+'">'+esc(ent.name)+'</div>'
           +(doj || doe ? '<div style="font-size:9px;font-weight:500;white-space:nowrap;">'+(doj ? '<span style="color:#10875A;">DOJ: '+esc(doj)+'</span>' : '')+(doj && doe ? ' <span style="color:#CBD5E1;">·</span> ' : '')+(doe ? '<span style="color:#DC2626;">DOE: '+esc(doe)+'</span>' : '')+'</div>' : '')
         +'</div>';
-    var accent = ent.isGrand ? 'box-shadow:inset 4px 0 0 #0D2B5E, inset -1.5px 0 0 '+BORDER_STRONG+';'
-      : ent.isZone ? 'box-shadow:inset 4px 0 0 '+(ent.avatarBg || BRAND_A1)+', inset -1.5px 0 0 '+BORDER_STRONG+';'
-      : 'box-shadow:inset 14px 0 0 #FFFFFF, inset 16px 0 0 #C9D6EA, inset -1.5px 0 0 '+BORDER_STRONG+';';   // guide line: belongs to the zone above
+    var accent = ent.isGrand ? 'box-shadow:inset 3px 0 0 #0D2B5E, inset -1.5px 0 0 '+BORDER_STRONG+';'
+      : ent.isZone ? 'box-shadow:inset 3px 0 0 '+BRAND_A1+', inset -1.5px 0 0 '+BORDER_STRONG+';'
+      : 'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';';
     var zoneClick = ent.isZone ? ' data-zone="'+esc(ent.name)+'" onclick="incToggleZone(this.getAttribute(\'data-zone\'))"' : '';
     // A gap above every zone / the Grand Total so each reads as its own section
     var gap = (ent.isZone || ent.isGrand) ? '<tr><td colspan="'+(heads.length + 3)+'" style="height:10px;padding:0;background:#FFFFFF;"></td></tr>' : '';
     return gap + parts.map(function(p, pi){
       var topBorder = pi === 0 ? ((ent.isGrand || ent.isZone) ? 'border-top:2px solid #8FA3C4;' : 'border-top:1.5px solid #B8C4D6;') : (p.bold ? 'border-top:1px solid #DDE3EC;' : 'border-top:1px solid #F1F3F7;');
-      var nameCell = '<td'+zoneClick+' style="'+(ent.isZone ? 'cursor:pointer;' : '')+'position:sticky;left:0;z-index:2;background:'+rowBg+';padding:6px 8px 6px '+(ent.isZone || ent.isGrand ? 12 : 24)+'px;width:'+NAME_W+'px;min-width:'+NAME_W+'px;max-width:'+NAME_W+'px;'+accent+'">'
-        + (pi === mid ? '<div style="display:flex;align-items:center;gap:6px;min-width:0;">'+avatar+label+'</div>' : '') + '</td>';
+      // One name cell for the whole block (rowspan), centred, so it never makes a single row taller
+      var nameCell = pi > 0 ? '' : '<td rowspan="'+parts.length+'"'+zoneClick+' style="'+(ent.isZone ? 'cursor:pointer;' : '')+'position:sticky;left:0;z-index:2;vertical-align:middle;background:'+rowBg+';padding:6px 8px 6px '+(ent.isZone || ent.isGrand ? 12 : 22)+'px;width:'+NAME_W+'px;min-width:'+NAME_W+'px;max-width:'+NAME_W+'px;'+topBorder+accent+'">'
+        + '<div style="display:flex;align-items:center;gap:8px;min-width:0;">'+avatar+label+'</div></td>';
       var bg = p.shade ? shadeBg : rowBg;
       var partAttrs = p.toggle ? ' data-gk="'+esc(p.toggle)+'" onclick="incToggleGp(this.getAttribute(\'data-gk\'))"' : '';
       // Group rows: bold, upright, coloured; their sub rows: smaller grey labels indented under them
