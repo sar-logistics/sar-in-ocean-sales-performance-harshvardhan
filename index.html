@@ -6121,7 +6121,7 @@ function _incentivePageInner(foldQ){
     + '<th style="position:sticky;left:0;z-index:3;background:#F0F4FA;text-align:left;color:#475569;'+thBase+'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';width:'+NAME_W+'px;min-width:'+NAME_W+'px;">Sales Rep</th>'
     + '<th style="position:sticky;left:'+NAME_W+'px;z-index:3;background:#F0F4FA;text-align:left;color:#475569;'+thBase+'width:'+PART_W+'px;min-width:'+PART_W+'px;box-shadow:inset -2px 0 0 '+BORDER_STRONG+';">Particulars</th>'
     + heads.map(function(h){
-        return '<th style="text-align:right;background:'+(groups ? '#FCF3DA' : '#F0F4FA')+';color:#475569;'+thBase+'border-right:1px solid '+BORDER+';">'
+        return '<th style="text-align:right;background:'+(groups ? '#FCF3DA' : '#F0F4FA')+';color:#475569;'+thBase+'border-right:1px solid '+BORDER+';width:190px;min-width:190px;">'
           +'<div style="font-size:11px;font-weight:800;color:'+(groups ? '#A8720E' : '#0D2B5E')+';">'+esc(h.top)+'</div>'
           +(h.sub ? '<div style="font-size:9px;font-weight:500;color:#8B97A8;margin-top:1px;text-transform:none;letter-spacing:0;">'+esc(h.sub)+'</div>' : '')
         +'</th>';
@@ -6214,7 +6214,7 @@ function _incentivePageInner(foldQ){
   }
   var allOpen = zones.length > 0 && zones.every(function(z){ return state.incZoneOpen && state.incZoneOpen[z.name]; });
   return '<div style="padding:20px 24px 32px;">'
-    +'<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);">'
+    +'<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);width:fit-content;max-width:100%;">'
       +'<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid '+BORDER+';flex-wrap:wrap;border-radius:12px 12px 0 0;">'
         +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Incentive</span>'
         +(window._incPay
@@ -6238,7 +6238,7 @@ function _incentivePageInner(foldQ){
         +(incOutMeta && !incOutMeta.docsWithRef ? '<span style="font-size:11px;color:#B83A2B;font-weight:700;">· No Ref No (refNo) found in ar_outstanding'+(incOutMeta.fields ? ' (fields: '+esc(incOutMeta.fields.join(', '))+')' : '')+'</span>' : '')
       +'</div>'
       +'<div id="incScroll" style="position:relative;overflow:auto;max-height:calc(100vh - 190px);">'
-        +'<table style="width:100%;border-collapse:collapse;min-width:850px;font-variant-numeric:tabular-nums;">'
+        +'<table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;">'
           +'<thead style="position:sticky;top:0;z-index:4;">'+head+'</thead>'
           +'<tbody>'+body+'</tbody>'
         +'</table>'
