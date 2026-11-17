@@ -5829,7 +5829,7 @@ function fetchIncentiveOutstanding(callback, force){
       (d.refs || []).forEach(function(k){ set[k] = true; });
       incOutRefs = set;
       incLateRefs = d.lateRefs || {};
-      incOutMeta = { asOn:d.asOn, docsWithRef:d.docsWithRef || 0, fields:d.fields || null, paidDocs:d.paidDocs || 0, lateDays:d.lateDays || 30 };
+      incOutMeta = { asOn:d.asOn, docsWithRef:d.docsWithRef || 0, fields:d.fields || null, paidDocs:d.paidDocs || 0, lateDays:d.lateDays || 30, pushedAt:d.pushedAt || null };
       incOutError = '';
     })
     .catch(function(e){ incOutError = e.message || String(e); incOutRefs = null; })
@@ -5872,9 +5872,10 @@ function _incShipKey(v){ return String(v == null ? '' : v).trim().toUpperCase();
 // Quarterly view on this page: FY quarters (Q1 Apr–Jun … Q4 Jan–Mar) side by side for the months picked
 // in From/To, added up from Sales Performance's monthly columns. Monthly and Yearly follow Sales Performance.
 function incentivePage(){
-  if (state.reportView !== 'Quarterly') return _incentivePageInner(false);
+  if (state.incTab === 'history') return _incTabs() + incHistoryPage();
+  if (state.reportView !== 'Quarterly') return _incTabs() + _incentivePageInner(false);
   state.reportView = 'Monthly';
-  try { return _incentivePageInner(true); } finally { state.reportView = 'Quarterly'; }
+  try { return _incTabs() + _incentivePageInner(true); } finally { state.reportView = 'Quarterly'; }
 }
 function _incentivePageInner(foldQ){
   var idxs = filteredMonthIndices();
@@ -6166,7 +6167,7 @@ function _incentivePageInner(foldQ){
         +(zones.length ? '<button onclick="incToggleAllZones('+(allOpen ? 'false' : 'true')+')" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+(allOpen ? 'Collapse All' : 'Expand All')+'</button>' : '')
         +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+zones.length+' zones · '+reps.length+' sales reps</span>'
         +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">· Outstanding from ar_outstanding'+(incOutMeta && incOutMeta.asOn ? ' as on <span style="color:#2C4E82;font-weight:700;">'+esc(incOutMeta.asOn)+'</span>' : '')+'</span>'
-        +(incOutMeta && !incOutMeta.paidDocs ? '<span style="font-size:11px;color:#A8720E;font-weight:700;">· Paid 30+ days overdue: no paid invoices in ar_outstanding yet (run the updated AR sync)</span>' : '')
+        +(incOutMeta && !incOutMeta.paidDocs ? '<span style="font-size:11px;color:#A8720E;font-weight:700;">· Paid 30+ days overdue: no paid invoices in ar_outstanding yet. The AR sync that ran'+(incOutMeta.pushedAt ? ' (last push '+esc(new Date(incOutMeta.pushedAt).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }))+')' : '')+' is an old copy: paste apps-script/arSync.gs into the Apps Script project and run it</span>' : '')
         +(incOutMeta && !incOutMeta.docsWithRef ? '<span style="font-size:11px;color:#B83A2B;font-weight:700;">· No Ref No (refNo) found in ar_outstanding'+(incOutMeta.fields ? ' (fields: '+esc(incOutMeta.fields.join(', '))+')' : '')+'</span>' : '')
       +'</div>'
       +'<div style="position:relative;overflow:auto;max-height:calc(100vh - 190px);">'
@@ -6177,6 +6178,338 @@ function _incentivePageInner(foldQ){
       +'</div>'
     +'</div>'
   +'</div>';
+}
+
+/* ---------------------- Incentive: payout runs (history) ----------------------
+   A run takes one FY quarter, works out every rep's Core and Cross numbers exactly as the Incentive table does
+   (no zone / rep / LOB / region filter, whoever is looking), and saves a snapshot on the server: every rep's
+   GP, target, GP% and eligibility, and one ledger entry per shipment with what happened to it (paid, held,
+   removed, already paid in an earlier run). The server decides the statuses and refuses to pay a shipment twice.
+   Trial runs only for now: final runs stay off until the Incentive % and the paid-late data are in. */
+// LOBs a run covers: Sales Performance's default LOB set (Ocean + Air cross-sales + General)
+var INC_RUN_LOBS = ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT','GENERAL'];
+var incRuns = null, incRunsLoading = false, incRunsError = '', incRunCache = {}, incGenBusy = false, incGenMsg = null;
+var INC_STATUS = {
+  paid:    { l:'Paid',         c:'#15875A', bg:'#E7F6EE' },
+  held:    { l:'Held',         c:'#A8720E', bg:'#FCF3DA' },
+  removed: { l:'Removed',      c:'#DC2626', bg:'#FDECEC' },
+  already: { l:'Already paid', c:'#64748B', bg:'#EEF1F6' }
+};
+var INC_WHY = { fl:'FL not done', unpaid:'O/S amount', late:'Paid 30+ days overdue', below:'Rep below 75% GP%', already:'Paid / removed in an earlier run' };
+function incSetTab(t){ state.incTab = t === 'history' ? 'history' : 'calc'; render(); }
+function _incTabs(){
+  var cur = state.incTab === 'history' ? 'history' : 'calc';
+  function tab(k, label){
+    var on = cur === k;
+    return '<button onclick="incSetTab(\''+k+'\')" class="btnq" style="border:none;background:transparent;padding:8px 2px;margin-right:18px;font-size:12.5px;font-weight:'+(on ? 800 : 600)+';color:'+(on ? '#0D2B5E' : '#6B82A0')+';border-bottom:2.5px solid '+(on ? BRAND_A2 : 'transparent')+';cursor:pointer;">'+label+'</button>';
+  }
+  return '<div style="padding:14px 24px 0;display:flex;align-items:flex-end;border-bottom:1px solid #E3EAF3;">'+tab('calc','Calculation')+tab('history','Payout History')+'</div>';
+}
+// FY quarters that have Sales Performance months: [{ key:'FY27-Q2', label:'Q2 FY27', months:['Jul-26','Aug-26','Sep-26'] }]
+function _incQuarters(){
+  var out = [], by = {};
+  months26.forEach(function(m){
+    var b = m.split('-'), mi = MONTH_NAME_TO_IDX[b[0]], yy = parseInt(b[1], 10);
+    var fy = mi >= 3 ? yy + 1 : yy, q = mi >= 3 ? Math.floor((mi - 3) / 3) + 1 : 4, k = 'FY' + fy + '-Q' + q;
+    if (!by[k]) { by[k] = { key:k, label:'Q' + q + ' FY' + fy, months:[] }; out.push(by[k]); }
+    by[k].months.push(m);
+  });
+  return out;
+}
+function incLoadRuns(force){
+  if (incRunsLoading) return;
+  incRunsLoading = true; incRunsError = '';
+  fetch('/api/mongo-batch?action=incentiveRuns' + (force ? '&t=' + Date.now() : ''))
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Runs failed to load'); incRuns = d.runs || []; })
+    .catch(function(e){ incRunsError = e.message || String(e); })
+    .finally(function(){ incRunsLoading = false; if (state.page === 'incentive') render(); });
+}
+function incOpenRun(id){
+  state.incRunSel = id; state.incRepSel = null; state.incStatusF = '';
+  if (!incRunCache[id]) {
+    incRunCache[id] = { loading:true };
+    fetch('/api/mongo-batch?action=incentiveRun&id=' + encodeURIComponent(id))
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Run failed to load'); incRunCache[id] = { run:d.run, entries:d.entries || [] }; })
+      .catch(function(e){ incRunCache[id] = { error:e.message || String(e) }; })
+      .finally(function(){ if (state.page === 'incentive') render(); });
+  }
+  render();
+}
+function incCloseRun(){ state.incRunSel = null; state.incRepSel = null; render(); }
+function incPickRep(k){ state.incRepSel = state.incRepSel === k ? null : k; state.incStatusF = ''; render(); }
+function incSetStatusF(s){ state.incStatusF = state.incStatusF === s ? '' : s; render(); }
+function incSetGenQ(k){ state.incGenQ = k; render(); }
+function incShipSearch(){
+  var el = document.getElementById('incShipQ'), q = el ? el.value.trim() : '';
+  state.incShipQ = q;
+  if (!q) { state.incShipRes = null; render(); return; }
+  state.incShipRes = { loading:true };
+  render();
+  fetch('/api/mongo-batch?action=incentiveShipment&s=' + encodeURIComponent(q))
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Search failed'); state.incShipRes = d; })
+    .catch(function(e){ state.incShipRes = { error:e.message || String(e) }; })
+    .finally(function(){ render(); });
+}
+function incDeleteRun(id){
+  if (!confirm('Delete this trial run? Trial runs are only for checking; this cannot be undone.')) return;
+  fetch('/api/mongo-batch?action=incentiveRunDelete', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ action:'incentiveRunDelete', id:id }) })
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Delete failed'); delete incRunCache[id]; state.incRunSel = null; incLoadRuns(true); })
+    .catch(function(e){ alert(e.message || String(e)); });
+}
+// Every entry of a run as a CSV file
+function incExportRun(id){
+  var R = incRunCache[id]; if (!R || !R.entries) return;
+  var cols = [['Run', function(){ return R.run.label + ' (' + R.run.mode + ')'; }], ['Shipment No', function(e){ return e.s || '(no Shipment No)'; }],
+    ['Sales Rep', 'rep'], ['Zone', 'zone'], ['Core/Cross', 'part'], ['Month', 'month'], ['Customer', 'customer'], ['GP (INR)', 'gp'],
+    ['Status', function(e){ return (INC_STATUS[e.status] || {}).l || e.status; }], ['Reason', function(e){ return e.why ? INC_WHY[e.why] || e.why : ''; }],
+    ['Released from', function(e){ return e.released ? e.fromLabel : ''; }], ['Earlier run', function(e){ return e.prevRun ? e.prevRun.label + ' (' + e.prevRun.status + ')' : ''; }], ['Note', 'note']];
+  function q(v){ v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  var lines = [cols.map(function(c){ return q(c[0]); }).join(',')].concat(R.entries.map(function(e){
+    return cols.map(function(c){ return q(typeof c[1] === 'function' ? c[1](e) : e[c[1]]); }).join(',');
+  }));
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\n')], { type:'text/csv' }));
+  a.download = 'Incentive ' + R.run.label + ' ' + R.run.mode + '.csv';
+  document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+// Rep numbers for the months of one quarter, the same as the Incentive table shows with no filters
+function _incCaptureQuarter(months){
+  var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo, filterLobs:state.filterLobs, filterZones:state.filterZones,
+    filterReps:state.filterReps, filterRegions:state.filterRegions, filterGl:state.filterGl };
+  var cap;
+  try {
+    state.reportView = 'Monthly'; state.dateFrom = months[0]; state.dateTo = months[months.length - 1];
+    state.filterLobs = INC_RUN_LOBS.slice(); state.filterZones = []; state.filterReps = []; state.filterRegions = []; state.filterGl = [];
+    computeFilteredRepsRaw();
+    window._incCapture = []; window._incForceOpen = true;
+    try { tableRows(); } finally { cap = window._incCapture; window._incCapture = null; window._incForceOpen = false; }
+  } finally {
+    Object.keys(keep).forEach(function(k){ state[k] = keep[k]; });
+    computeFilteredRepsRaw();
+  }
+  return cap || [];
+}
+function incGenerateRun(){
+  var q = _incQuarters().filter(function(x){ return x.key === state.incGenQ; })[0];
+  if (!q || incGenBusy) return;
+  if (_getRLSReps().length) { incGenMsg = { err:'Only users who can see every sales rep can generate a run.' }; render(); return; }
+  incGenBusy = true; incGenMsg = { info:'Loading the latest outstanding and paid-invoice data…' }; render();
+  function fail(e){ incGenBusy = false; incGenMsg = { err:e.message || String(e) }; render(); }
+  var steps = function(){
+    if (!allDrillRows || !allDrillRows.length) return loadDrillData(steps);
+    fetchIncentiveOutstanding(function(){
+      if (!incOutRefs) return fail(new Error('Outstanding data failed to load: ' + incOutError));
+      fetch('/api/mongo-batch?action=incentiveHeld&mode=trial&quarter=' + encodeURIComponent(q.key) + '&t=' + Date.now())
+        .then(function(r){ return r.json(); })
+        .then(function(h){
+          if (!h || !h.success) throw new Error((h && h.error) || 'Held shipments failed to load');
+          incGenMsg = { info:'Working out ' + q.label + '…' }; render();
+          var body = _incBuildRun(q, h.held || []);
+          incGenMsg = { info:'Saving ' + body.ships.length + ' shipments…' }; render();
+          return fetch('/api/mongo-batch?action=incentiveRunSave', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
+        })
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if (!d || !d.success) throw new Error((d && d.error) || 'Run failed to save');
+          incGenBusy = false; incGenMsg = { ok:'Trial run saved for ' + q.label + '.' };
+          Object.keys(incRunCache).forEach(function(k){ if (k.indexOf(q.key + ':') === 0) delete incRunCache[k]; });
+          incLoadRuns(true); incOpenRun(d.runId);
+        })
+        .catch(fail);
+    }, true);
+  };
+  steps();
+}
+function _incBuildRun(q, held){
+  var cap = _incCaptureQuarter(q.months);
+  var reps = cap.filter(function(c){ return c.isRep && !c.isBranch; });
+  if (!reps.length) throw new Error('No sales reps found for ' + q.label);
+  var inQ = {}; q.months.forEach(function(m){ inQ[m] = true; });
+  var repByName = {}; reps.forEach(function(r){ repByName[r.name] = r; });
+  var core = {}, ships = {}, unassignedGp = 0, unassignedRows = 0;
+  var rank = { fl:1, unpaid:2, late:3 };
+  allDrillRows.forEach(function(row){
+    if (!inQ[row._ml] || INC_RUN_LOBS.indexOf(row.lob) === -1) return;
+    var g = row.g || 0;
+    var r = row._dn && repByName[row._dn];
+    if (!r) { unassignedGp += g; unassignedRows++; return; }
+    var isCore = _incIsCore(row.lob), part = isCore ? 'core' : 'cross';
+    if (isCore) core[r.name] = (core[r.name] || 0) + g;
+    var s = row.shipmentNo && row.shipmentNo !== '—' ? _incShipKey(row.shipmentNo) : '';
+    var key = (s || 'NOREF:' + row._ml) + '|' + part + '|' + r.name;
+    var x = ships[key] || (ships[key] = { s:s, rep:r.name, zone:r.zone || 'Cross Sales', part:part, month:row._ml, gp:0, customer:row.customer || '', why:null });
+    x.gp += g;
+    var why = _incRmReason(row);
+    if (why && (!x.why || rank[why] < rank[x.why])) x.why = why;
+  });
+  // Shipments held by earlier runs: how they stand in today's data
+  var now = {};
+  allDrillRows.forEach(function(row){
+    if (!row.shipmentNo || row.shipmentNo === '—') return;
+    var k = _incShipKey(row.shipmentNo) + '|' + (_incIsCore(row.lob) ? 'core' : 'cross');
+    var why = _incRmReason(row), n = now[k] || (now[k] = { why:null });
+    if (why && (!n.why || rank[why] < rank[n.why])) n.why = why;
+  });
+  var recheck = {};
+  held.forEach(function(h){ recheck[h.key] = now[h.s + '|' + h.part] || { missing:true }; });
+  var spGp = 0;
+  var repsOut = reps.map(function(r){
+    var gp = sum(r.gp), tgt = sum(r.tgt), c = core[r.name] || 0;
+    spGp += gp;
+    return { rep:r.name, zone:r.zone || 'Cross Sales', noTarget:!!r.noTarget, core:{ gp:c, tgt:tgt }, cross:{ gp:gp - c, tgt:tgt } };
+  });
+  return {
+    action:'incentiveRunSave', quarter:q.key, label:q.label, months:q.months, mode:'trial',
+    asOn:incOutMeta && incOutMeta.asOn, arPaidDocs:incOutMeta ? incOutMeta.paidDocs : 0,
+    by:currentUser ? { name:currentUser.name || '', email:currentUser.email || '' } : null,
+    rules:{ lobs:INC_RUN_LOBS, minAchv:INC_MIN_ACHV, feePct:INC_MGMT_FEE_PCT, lateDays:(incOutMeta && incOutMeta.lateDays) || 30, ratePct:null, coreLobs:INC_CORE_LOBS },
+    reps:repsOut, ships:Object.keys(ships).map(function(k){ var x = ships[k]; x.gp = Math.round(x.gp * 100) / 100; return x; }),
+    recheck:recheck, checks:{ spGp:spGp, unassignedGp:unassignedGp, unassignedRows:unassignedRows }
+  };
+}
+
+function incHistoryPage(){
+  if (!incRuns && !incRunsLoading && !incRunsError) incLoadRuns();
+  var BORDER = '#D5DCE6';
+  var card = function(inner){ return '<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);margin-bottom:16px;">'+inner+'</div>'; };
+  var head = function(title, right){ return '<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid '+BORDER+';flex-wrap:wrap;"><span style="font-size:13px;font-weight:800;color:#0D2B5E;">'+title+'</span>'+(right || '')+'</div>'; };
+  var pill = function(st){ var S = INC_STATUS[st] || { l:st, c:'#475569', bg:'#EEF1F6' }; return '<span style="display:inline-block;font-size:10px;font-weight:800;color:'+S.c+';background:'+S.bg+';border-radius:999px;padding:2px 8px;">'+S.l+'</span>'; };
+  var btn = 'border:1.5px solid #D8E1F0;background:#F4F7FC;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;';
+  var th = 'padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#475569;background:#F0F4FA;border-bottom:2px solid #B0BAC8;white-space:nowrap;';
+  var td = 'padding:6px 10px;font-size:11.5px;border-top:1px solid #EEF1F6;white-space:nowrap;';
+  var num = 'text-align:right;font-family:\'DM Mono\',monospace;';
+  var cur = function(v){ return v == null ? '–' : fmtCur(v); };
+  var out = '<div style="padding:16px 24px 32px;">';
+
+  // Generate
+  var qs = _incQuarters();
+  if (!state.incGenQ) { var last = qs.filter(function(x){ return hasDataForIndices(x.months.map(function(m){ return months26.indexOf(m); })); }); state.incGenQ = (last[last.length - 1] || qs[0] || {}).key; }
+  var canGen = !_getRLSReps().length;
+  out += card(head('Generate a payout run',
+      '<span style="font-size:11px;color:#6B82A0;font-weight:600;">Trial only: shows exactly what a real run would pay, hold and remove, without counting anything as paid.</span>')
+    + '<div style="padding:12px 18px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+      + '<select onchange="incSetGenQ(this.value)" style="border:1.5px solid #D8E1F0;border-radius:8px;padding:5px 8px;font-size:12px;font-weight:600;color:#1E3A66;">'
+        + qs.map(function(x){ return '<option value="'+x.key+'"'+(x.key === state.incGenQ ? ' selected' : '')+'>'+x.label+' ('+x.months[0]+' – '+x.months[x.months.length - 1]+')</option>'; }).join('') + '</select>'
+      + (canGen ? '<button onclick="incGenerateRun()" class="btnq" '+(incGenBusy ? 'disabled ' : '')+'style="border:none;border-radius:999px;padding:6px 16px;font-size:11.5px;font-weight:800;color:#fff;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');cursor:pointer;opacity:'+(incGenBusy ? 0.6 : 1)+';">'+(incGenBusy ? 'Working…' : 'Generate trial run')+'</button>'
+                : '<span style="font-size:11px;color:#A8720E;font-weight:700;">Only users who can see every sales rep can generate a run.</span>')
+      + (incGenMsg ? '<span style="font-size:11.5px;font-weight:700;color:'+(incGenMsg.err ? '#B83A2B' : incGenMsg.ok ? '#15875A' : '#2C4E82')+';">'+esc(incGenMsg.err || incGenMsg.ok || incGenMsg.info)+'</span>' : '')
+    + '</div>'
+    + '<div style="padding:0 18px 12px;font-size:10.5px;color:#8A9AB5;line-height:1.5;">Each shipment gets one status. <b>Paid</b>: incentive given. <b>Held</b>: FL not done or O/S amount; checked again by the next quarter\'s run and paid once clean. <b>Removed</b>: rep below 75% GP% that quarter, or paid more than 30 days overdue; never paid. <b>Already paid</b>: an earlier run paid or removed it, so it is skipped. Running a trial again for the same quarter replaces it.</div>');
+
+  // Shipment search
+  var SR = state.incShipRes;
+  out += card(head('Find a shipment', '<input id="incShipQ" value="'+esc(state.incShipQ || '')+'" placeholder="Shipment No, e.g. SH00030473" onkeydown="if(event.key===\'Enter\')incShipSearch()" style="border:1.5px solid #D8E1F0;border-radius:8px;padding:5px 10px;font-size:12px;width:240px;">'
+      + '<button onclick="incShipSearch()" class="btnq" style="'+btn+'">Search</button>')
+    + (!SR ? '' : SR.loading ? '<div style="padding:14px 18px;font-size:12px;color:#9AAFC8;">Searching…</div>'
+      : SR.error ? '<div style="padding:14px 18px;font-size:12px;color:#B83A2B;">'+esc(SR.error)+'</div>'
+      : !SR.entries.length ? '<div style="padding:14px 18px;font-size:12px;color:#6B82A0;">'+esc(SR.s)+' is not in any run yet.</div>'
+      : '<div style="overflow:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr>'
+          + ['Run','Sales Rep','Core/Cross','Month','GP','Status','Reason / note'].map(function(h, i){ return '<th style="'+th+(i === 4 ? 'text-align:right;' : 'text-align:left;')+'">'+h+'</th>'; }).join('') + '</tr></thead><tbody>'
+          + SR.entries.map(function(e){
+              return '<tr><td style="'+td+'">'+esc(e.runLabel)+' <span style="font-size:9.5px;color:#94A3B8;font-weight:700;text-transform:uppercase;">'+esc(e.runMode || '')+'</span></td><td style="'+td+'">'+esc(e.rep || '')+'</td><td style="'+td+'">'+(e.part === 'cross' ? 'Cross' : 'Core')+'</td><td style="'+td+'">'+esc(e.month || '')+'</td>'
+                + '<td style="'+td+num+'">'+cur(e.gp)+'</td><td style="'+td+'">'+pill(e.status)+'</td>'
+                + '<td style="'+td+'white-space:normal;">'+esc([e.why ? INC_WHY[e.why] || e.why : '', e.released ? 'Released from ' + e.fromLabel : '', e.prevRun ? 'See ' + e.prevRun.label : '', e.note || ''].filter(Boolean).join(' · '))+'</td></tr>';
+            }).join('') + '</tbody></table></div>'));
+
+  // Runs
+  if (incRunsError) out += card('<div style="padding:24px;text-align:center;font-size:12px;color:#B83A2B;font-weight:600;">Couldn\'t load runs: '+esc(incRunsError)+' <button onclick="incLoadRuns(true)" class="btnq" style="'+btn+'">Try again</button></div>');
+  else if (!incRuns) out += card('<div style="padding:40px;text-align:center;"><div class="login-spinner" style="width:28px;height:28px;border-width:3px;margin:0 auto;"></div></div>');
+  else if (!state.incRunSel) {
+    out += card(head('Payout runs', '<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+incRuns.length+' run'+(incRuns.length === 1 ? '' : 's')+'</span>')
+      + (!incRuns.length ? '<div style="padding:28px;text-align:center;font-size:12px;color:#6B82A0;">No runs yet. Generate a trial run above.</div>'
+      : '<div style="overflow:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr>'
+        + ['Quarter','Type','Run on','By','AR as on','Paid','Held','Removed','Already paid','Final GP','Checks'].map(function(h, i){ return '<th style="'+th+(i >= 5 && i <= 9 ? 'text-align:right;' : 'text-align:left;')+'">'+h+'</th>'; }).join('') + '</tr></thead><tbody>'
+        + incRuns.map(function(r){
+            var c = r.counts || {}, t = r.totals || {}, k = r.checks || {};
+            var issues = [k.gpMatches ? '' : 'GP mismatch', k.paidDataMissing ? 'No paid-late data' : '', k.rateMissing ? 'No Incentive %' : ''].filter(Boolean);
+            return '<tr class="dcell" data-id="'+esc(r._id)+'" onclick="incOpenRun(this.getAttribute(\'data-id\'))" style="cursor:pointer;">'
+              + '<td style="'+td+'font-weight:800;color:#0D2B5E;">'+esc(r.label)+'</td>'
+              + '<td style="'+td+'"><span style="font-size:10px;font-weight:800;border-radius:999px;padding:2px 8px;'+(r.mode === 'final' ? 'color:#fff;background:#0D2B5E;' : 'color:#6B3FA0;background:#F1EAFB;')+'">'+(r.mode === 'final' ? 'FINAL' : 'TRIAL')+'</span></td>'
+              + '<td style="'+td+'">'+esc(new Date(r.at).toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }))+'</td>'
+              + '<td style="'+td+'">'+esc((r.by && r.by.name) || '')+'</td><td style="'+td+'">'+esc(r.asOn || '')+'</td>'
+              + '<td style="'+td+num+'color:#15875A;">'+cur(t.paid)+'<div style="font-size:9.5px;color:#94A3B8;">'+(c.paid || 0)+' jobs</div></td>'
+              + '<td style="'+td+num+'color:#A8720E;">'+cur(t.held)+'<div style="font-size:9.5px;color:#94A3B8;">'+(c.held || 0)+' jobs</div></td>'
+              + '<td style="'+td+num+'color:#DC2626;">'+cur(t.removed)+'<div style="font-size:9.5px;color:#94A3B8;">'+(c.removed || 0)+' jobs</div></td>'
+              + '<td style="'+td+num+'color:#64748B;">'+cur(t.already)+'<div style="font-size:9.5px;color:#94A3B8;">'+(c.already || 0)+' jobs</div></td>'
+              + '<td style="'+td+num+'font-weight:700;">'+cur(t.final)+'</td>'
+              + '<td style="'+td+'font-size:10.5px;font-weight:700;color:'+(issues.length ? '#A8720E' : '#15875A')+';">'+(issues.length ? esc(issues.join(' · ')) : 'All passed')+'</td></tr>';
+          }).join('') + '</tbody></table></div>'));
+  } else {
+    out += _incRunDetail(state.incRunSel, card, head, pill, btn, th, td, num, cur);
+  }
+  return out + '</div>';
+}
+
+function _incRunDetail(id, card, head, pill, btn, th, td, num, cur){
+  var R = incRunCache[id];
+  var back = '<button onclick="incCloseRun()" class="btnq" style="'+btn+'">← All runs</button>';
+  if (!R || R.loading) return card(head('Loading run…', back) + '<div style="padding:40px;text-align:center;"><div class="login-spinner" style="width:28px;height:28px;border-width:3px;margin:0 auto;"></div></div>');
+  if (R.error) return card(head('Run', back) + '<div style="padding:24px;font-size:12px;color:#B83A2B;">'+esc(R.error)+'</div>');
+  var run = R.run, k = run.checks || {}, t = run.totals || {};
+  var html = '';
+  var chk = function(ok, label, detail){ return '<div style="display:flex;gap:8px;align-items:baseline;font-size:11.5px;padding:3px 0;"><span style="font-weight:800;color:'+(ok ? '#15875A' : '#A8720E')+';">'+(ok ? '✓' : '!')+'</span><span style="color:#15233B;font-weight:600;">'+label+'</span><span style="color:#6B82A0;">'+detail+'</span></div>'; };
+  html += card(head(esc(run.label) + ' · ' + (run.mode === 'final' ? 'Final run' : 'Trial run'),
+      back + '<button onclick="incExportRun(\''+esc(run._id)+'\')" class="btnq" style="'+btn+'">Export to Excel (CSV)</button>'
+      + (run.mode === 'trial' ? '<button onclick="incDeleteRun(\''+esc(run._id)+'\')" class="btnq" style="'+btn+'color:#B83A2B;">Delete trial</button>' : '')
+      + '<span style="font-size:11px;color:#6B82A0;font-weight:600;">Run on '+esc(new Date(run.at).toLocaleString('en-GB'))+(run.by && run.by.name ? ' by '+esc(run.by.name) : '')+' · AR as on '+esc(run.asOn || '–')+' · '+esc((run.months || []).join(', '))+'</span>')
+    + '<div style="padding:10px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">'
+      + [['Paid GP', t.paid, '#15875A'], ['of which released', t.released, '#15875A'], ['Held GP', t.held, '#A8720E'], ['Removed GP', t.removed, '#DC2626'], ['Already paid GP', t.already, '#64748B'], ['Management fees', t.fee, '#946312'], ['Final GP', t.final, '#0D2B5E']]
+        .map(function(x){ return '<div style="background:#F7F9FC;border:1px solid #E3EAF3;border-radius:10px;padding:8px 12px;"><div style="font-size:10px;font-weight:700;color:#6B82A0;text-transform:uppercase;letter-spacing:0.04em;">'+x[0]+'</div><div style="font-size:15px;font-weight:800;color:'+x[2]+';font-family:\'DM Mono\',monospace;margin-top:2px;">'+cur(x[1])+'</div></div>'; }).join('')
+    + '</div>'
+    + '<div style="padding:4px 18px 12px;">'
+      + chk(k.gpMatches, 'GP matches Sales Performance', 'Sales Performance '+cur(k.spGp)+' · reps in this run '+cur(k.repGp)+(k.repGapCount ? ' · '+k.repGapCount+' rep part'+(k.repGapCount === 1 ? '' : 's')+' where shipments don\'t add up to the GP' : ''))
+      + chk(!k.paidDataMissing, 'Paid-late data present', k.paidDataMissing ? 'ar_outstanding has no paid invoices yet, so no shipment could be removed for paying 30+ days overdue' : 'Paid invoices found in ar_outstanding')
+      + chk(!k.rateMissing, 'Incentive % set', k.rateMissing ? 'Not provided yet: Final GP is worked out, the incentive amount is not' : '')
+      + (k.unassignedRows ? chk(false, 'Shipments with no sales rep', k.unassignedRows+' rows, '+cur(k.unassignedGp)+' GP: not in any rep\'s numbers, so not in this run') : '')
+    + '</div>');
+
+  // Reps
+  var rows = [];
+  (run.reps || []).forEach(function(x){ ['core', 'cross'].forEach(function(p){ if (x[p] && (x[p].gp || x[p].shipGp || x[p].paid || x[p].held)) rows.push({ x:x, p:p, P:x[p] }); }); });
+  rows.sort(function(a, b){ return (a.x.zone || '').localeCompare(b.x.zone || '') || a.x.rep.localeCompare(b.x.rep) || (a.p === 'core' ? -1 : 1); });
+  var sel = state.incRepSel;
+  html += card(head('Sales reps', '<span style="font-size:11px;color:#6B82A0;font-weight:600;">Click a rep to see every shipment and what happened to it</span>')
+    + '<div style="overflow:auto;max-height:calc(100vh - 260px);"><table style="width:100%;border-collapse:collapse;"><thead style="position:sticky;top:0;z-index:2;"><tr>'
+      + ['Sales Rep','Zone','Part','GP','Target','GP%','Eligible','Paid','Released','Held','Removed','Already paid','Mgmt fees','Final GP','Incentive'].map(function(h, i){ return '<th style="'+th+(i >= 3 ? 'text-align:right;' : 'text-align:left;')+'">'+h+'</th>'; }).join('') + '</tr></thead><tbody>'
+      + rows.map(function(r){
+          var key = r.x.rep + '|' + r.p, P = r.P, on = sel === key;
+          var line = '<tr class="dcell" data-k="'+esc(key)+'" onclick="incPickRep(this.getAttribute(\'data-k\'))" style="cursor:pointer;background:'+(on ? '#EEF3FC' : '#fff')+';">'
+            + '<td style="'+td+'font-weight:700;color:#1E3A66;">'+(on ? '▼ ' : '▶ ')+esc(r.x.rep)+'</td><td style="'+td+'color:#6B82A0;">'+esc(r.x.zone || '')+'</td><td style="'+td+'">'+(r.p === 'core' ? 'Core' : 'Cross')+'</td>'
+            + '<td style="'+td+num+'">'+cur(P.gp)+'</td><td style="'+td+num+'">'+(r.x.noTarget ? '–' : cur(P.tgt))+'</td><td style="'+td+num+'">'+(P.pct == null ? '–' : P.pct+'%')+'</td>'
+            + '<td style="'+td+num+'font-weight:800;color:'+(P.elig ? '#15875A' : '#DC2626')+';">'+(P.elig ? 'Yes' : 'No')+'</td>'
+            + '<td style="'+td+num+'color:#15875A;">'+cur(P.paid)+'</td><td style="'+td+num+'color:#15875A;">'+(P.released ? cur(P.released) : '–')+'</td>'
+            + '<td style="'+td+num+'color:#A8720E;">'+(P.held ? cur(P.held) : '–')+'</td><td style="'+td+num+'color:#DC2626;">'+(P.removed ? cur(P.removed) : '–')+'</td>'
+            + '<td style="'+td+num+'color:#64748B;">'+(P.already ? cur(P.already) : '–')+'</td><td style="'+td+num+'color:#946312;">'+cur(P.fee)+'</td>'
+            + '<td style="'+td+num+'font-weight:800;">'+cur(P.final)+'</td><td style="'+td+num+'color:#6B3FA0;">'+cur(P.incentive)+'</td></tr>';
+          if (on) line += '<tr><td colspan="15" style="padding:0 0 10px 24px;background:#F7F9FC;">'+_incRepShips(R.entries, r.x.rep, r.p, pill, th, td, num, cur)+'</td></tr>';
+          return line;
+        }).join('') + '</tbody></table></div>');
+  return html;
+}
+function _incRepShips(entries, rep, part, pill, th, td, num, cur){
+  var list = entries.filter(function(e){ return e.rep === rep && e.part === part; });
+  var counts = {}; list.forEach(function(e){ counts[e.status] = (counts[e.status] || 0) + 1; });
+  var f = state.incStatusF;
+  var shown = f ? list.filter(function(e){ return e.status === f; }) : list;
+  shown.sort(function(a, b){ return (a.status > b.status ? 1 : a.status < b.status ? -1 : 0) || (b.gp - a.gp); });
+  var chips = ['paid', 'held', 'removed', 'already'].filter(function(s){ return counts[s]; }).map(function(s){
+    var S = INC_STATUS[s], on = f === s;
+    return '<button onclick="event.stopPropagation();incSetStatusF(\''+s+'\')" class="btnq" style="border:1.5px solid '+(on ? S.c : '#D8E1F0')+';background:'+(on ? S.bg : '#fff')+';color:'+S.c+';border-radius:999px;padding:3px 10px;font-size:10.5px;font-weight:800;cursor:pointer;">'+S.l+' · '+counts[s]+'</button>';
+  }).join(' ');
+  return '<div style="padding:10px 10px 4px;display:flex;gap:6px;flex-wrap:wrap;">'+chips+'</div>'
+    + '<table style="width:100%;border-collapse:collapse;background:#fff;"><thead><tr>'
+    + ['Shipment No','Month','Customer','GP','Status','Reason / note'].map(function(h, i){ return '<th style="'+th+(i === 3 ? 'text-align:right;' : 'text-align:left;')+'">'+h+'</th>'; }).join('') + '</tr></thead><tbody>'
+    + shown.slice(0, 500).map(function(e){
+        return '<tr><td style="'+td+'font-family:\'DM Mono\',monospace;">'+esc(e.s || '(no Shipment No)')+'</td><td style="'+td+'">'+esc(e.month || '')+'</td><td style="'+td+'max-width:260px;overflow:hidden;text-overflow:ellipsis;">'+esc(e.customer || '')+'</td>'
+          + '<td style="'+td+num+'">'+cur(e.gp)+'</td><td style="'+td+'">'+pill(e.status)+'</td>'
+          + '<td style="'+td+'white-space:normal;color:#475569;">'+esc([e.why ? INC_WHY[e.why] || e.why : '', e.released ? 'Released from ' + e.fromLabel : '', e.prevRun ? 'See ' + e.prevRun.label : '', e.note || ''].filter(Boolean).join(' · '))+'</td></tr>';
+      }).join('')
+    + '</tbody></table>' + (shown.length > 500 ? '<div style="padding:6px 10px;font-size:11px;color:#6B82A0;">Showing 500 of '+shown.length+'. Export the run for the full list.</div>' : '');
 }
 
 /* ====================== ACCOUNTS RECEIVABLE ====================== */

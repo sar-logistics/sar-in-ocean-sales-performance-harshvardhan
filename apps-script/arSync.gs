@@ -25,6 +25,8 @@ const AR_SOURCE_ID = '1NQbaSffJzMZS6lNHjR6w7xQTCLQ_1X583b5PJ6bWcFI'; // Accounts
 const AR_TAB = 'Accounts Receivable';
 const AR_SUMMARY_TAB = 'Ageing Receivable - Summary';
 const AR_DEFAULT_API = 'https://sar-in-ocean-sales-performance.vercel.app/api/mongo-batch';
+// Shown in the execution log, so it's easy to tell which copy of this script ran
+const AR_SYNC_VERSION = '2026-11-17 (sends paid invoices for the Incentive page)';
 const AR_CHUNK = 1000; // every column goes up, so keep each request well under Vercel's 4.5 MB body limit
 
 // sheet header → pushed field
@@ -60,6 +62,7 @@ const AR_NUMERIC = ['billAmt', 'outstanding', 'overdueDays', 'ageingDays', 'cred
 
 function pushArToDashboard() {
   const t0 = Date.now();
+  Logger.log('AR sync version ' + AR_SYNC_VERSION);
   const src = SpreadsheetApp.openById(AR_SOURCE_ID);
   const sheet = src.getSheetByName(AR_TAB);
   if (!sheet) throw new Error('Tab "' + AR_TAB + '" not found');
