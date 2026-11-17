@@ -5798,6 +5798,12 @@ function financePage(){
 // Sales incentive page. Layout matches Accounts Receivable (title row, KPI cards, table card).
 // No incentive data source yet, so the cards show dashes and the table shows an empty state.
 var INC_MGMT_FEE_PCT = 0.15; // Management fees: 15% of GP
+// Incentive rate (% of Final GP after Deductions) by level and GP% tier (user, 17-Nov-2026):
+//   Sales (rep rows)  75%–99.99% → 3%,  100% and above → 7%
+//   ZM (zone rows)    75%–99.99% → 2%,  100% and above → 3%
+// The tier uses the level's own GP% for that period and part (Core / Cross). Below 75%: not eligible, no incentive.
+var INC_RATES = { sales:{ t1:3, t2:7 }, zm:{ t1:2, t2:3 } };
+function _incRate(level, gp, tgt){ var R = INC_RATES[level]; return R && tgt > 0 ? (gp / tgt >= 1 ? R.t2 : R.t1) : null; }
 var INC_MIN_ACHV = 75;        // Outstanding GP, fees and everything after them only apply from this ACHV % (GP ÷ GP Target)
 var INC_CORE_LOBS = ['SEA EXPORT', 'SEA IMPORT']; // Core; every other LOB is Cross
 // GP taken off before fees, once the target is met. A job counts under the first reason that fits, so the
@@ -6014,7 +6020,14 @@ function _incentivePageInner(foldQ){
         ships[r.k] = isCore ? R.shipCore : R.ship - R.shipCore; shipsAll += ships[r.k];
       });
       var net = minus(gp, all), N = sum(net);
+      // Rate per period (only where eligible), and the incentive on Final GP (nothing on a negative Final GP)
+      var level = e.isZone ? 'zm' : e.isGrand ? null : 'sales';
+      var rate = gp.map(function(g, i){ return okC[i] && level ? _incRate(level, g, e.tgt[i]) : null; });
+      var rateT = okT && level ? _incRate(level, sum(gp), sum(e.tgt)) : null;
+      function incOf(g, r){ return r === null ? null : Math.max(0, g - fee(g)) * r / 100; }
       return {
+        rate: rate, rateT: rateT,
+        inc: net.map(function(g, i){ return okC[i] ? incOf(g, rate[i]) : null; }), incT: okT ? incOf(N, rateT) : null,
         gp: gp, ach: ach, achT: achT, elig: ach.map(yn), eligT: yn(achT),
         rm: rm, rmT: rmT, ships: ships, all: gate(all), allT: gateT(all), shipsAll: shipsAll,
         net: gate(net), netT: gateT(net),
@@ -6045,11 +6058,14 @@ function _incentivePageInner(foldQ){
     }), [
       { label:'Management Fees (15%)', sub:true, ded:true, type:'cur', color:'#475569', vals:P.fee, total:P.feeT }
     ]);
-    rows.push({ label:'Total Incentive', type:'na', bold:true, shade:true, color:'#6B3FA0', vals:none, total:null });
+    rows.push({ label:'Total Incentive', type:'inc', bold:true, primary:true, shade:true, color:'#6B3FA0', vals:P.inc, total:P.incT, rates:P.rate, rateT:P.rateT,
+      note:ent.isZone ? 'ZM: '+INC_RATES.zm.t1+'% / '+INC_RATES.zm.t2+'%' : ent.isGrand ? '' : 'Sales: '+INC_RATES.sales.t1+'% / '+INC_RATES.sales.t2+'%' });
     return rows;
   }
-  function fmtVal(v, p){
+  function fmtVal(v, p, r){
     if (p.type === 'na' || v === null || v === undefined) return { t:'–', c:'#CBD3DF', dash:true };
+    // Total Incentive: the rate applied, then the amount
+    if (p.type === 'inc') return { t:(r != null ? '<span style="font-size:9.5px;font-weight:600;color:#9A86C0;">'+r+'% · </span>' : '')+fmtCur(v), c:'#6B3FA0' };
     if (p.type === 'yn') return v ? { t:'✓ Yes', c:'#15875A' } : { t:'✕ No', c:'#C2410C' };
     if (p.ded) return { t:v > 0 ? '−' + fmtCur(v) : v < 0 ? '+' + fmtCur(-v) : fmtCur(0), c:v < 0 ? '#15875A' : '#475569' };
     if (p.type === 'pct') return { t:v+'%', c: v >= 100 ? '#15875A' : v >= 75 ? '#A8720E' : '#DC2626' };
@@ -6130,11 +6146,11 @@ function _incentivePageInner(foldQ){
         var c = p.drill[ci];
         return ' class="dcell" onclick="incDrill(this)" data-entity="'+esc(c.entity)+'" data-col="'+esc(c.col)+'" data-val="'+esc(f.t)+'"'+(p.rm ? ' data-rm="'+p.rm+'"' : '')+(p.part ? ' data-part="'+p.part+'"' : '');
       }
-      var tot = fmtVal(p.total, p);
+      var tot = fmtVal(p.total, p, p.rateT);
       function wt(f){ return f.dash ? 400 : p.primary ? 800 : p.bold ? 700 : p.ded ? 500 : 600; }
       var fyCell = '<td'+drillAttrs(p.total, tot, 0)+' style="position:sticky;left:'+FY_LEFT+'px;z-index:2;'+cell+'background:'+(p.shade ? '#F5EDD3' : totBg)+';font-weight:'+wt(tot)+';color:'+tot.c+';box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">'+tot.t+'</td>';
       var mCells = p.vals.map(function(v, vi){
-        var f = fmtVal(v, p);
+        var f = fmtVal(v, p, p.rates ? p.rates[vi] : null);
         return '<td'+drillAttrs(v, f, vi + 1)+' style="'+cell+'background:'+bg+';border-right:1px solid '+BORDER+';font-weight:'+wt(f)+';color:'+f.c+';">'+f.t+'</td>';
       }).join('');
       return '<tr style="background:'+bg+';'+topBorder+'">'+nameCell+partCell+mCells+'</tr>';   // no Grand Total column
@@ -6374,7 +6390,7 @@ function _incBuildRun(q, held){
     action:'incentiveRunSave', quarter:q.key, label:q.label, months:q.months, mode:'trial',
     asOn:incOutMeta && incOutMeta.asOn, arPaidDocs:incOutMeta ? incOutMeta.paidDocs : 0,
     by:currentUser ? { name:currentUser.name || '', email:currentUser.email || '' } : null,
-    rules:{ lobs:INC_RUN_LOBS, minAchv:INC_MIN_ACHV, feePct:INC_MGMT_FEE_PCT, lateDays:(incOutMeta && incOutMeta.lateDays) || 30, ratePct:null, coreLobs:INC_CORE_LOBS },
+    rules:{ lobs:INC_RUN_LOBS, minAchv:INC_MIN_ACHV, feePct:INC_MGMT_FEE_PCT, lateDays:(incOutMeta && incOutMeta.lateDays) || 30, rates:INC_RATES, coreLobs:INC_CORE_LOBS },
     reps:repsOut, ships:Object.keys(ships).map(function(k){ var x = ships[k]; x.gp = Math.round(x.gp * 100) / 100; return x; }),
     recheck:recheck, checks:{ spGp:spGp, unassignedGp:unassignedGp, unassignedRows:unassignedRows }
   };
@@ -6465,7 +6481,7 @@ function _incRunDetail(id, card, head, pill, btn, th, td, num, cur){
       + (run.mode === 'trial' ? '<button onclick="incDeleteRun(\''+esc(run._id)+'\')" class="btnq" style="'+btn+'color:#B83A2B;">Delete trial</button>' : '')
       + '<span style="font-size:11px;color:#6B82A0;font-weight:600;">Run on '+esc(new Date(run.at).toLocaleString('en-GB'))+(run.by && run.by.name ? ' by '+esc(run.by.name) : '')+' · AR as on '+esc(run.asOn || '–')+' · '+esc((run.months || []).join(', '))+'</span>')
     + '<div style="padding:10px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">'
-      + [['Paid GP', t.paid, '#15875A'], ['of which released', t.released, '#15875A'], ['Held GP', t.held, '#A8720E'], ['Removed GP', t.removed, '#DC2626'], ['Already paid GP', t.already, '#64748B'], ['Management fees', t.fee, '#946312'], ['Final GP', t.final, '#0D2B5E']]
+      + [['Paid GP', t.paid, '#15875A'], ['of which released', t.released, '#15875A'], ['Held GP', t.held, '#A8720E'], ['Removed GP', t.removed, '#DC2626'], ['Already paid GP', t.already, '#64748B'], ['Management fees', t.fee, '#946312'], ['Final GP', t.final, '#0D2B5E'], ['Total incentive (sales reps)', t.incentive, '#6B3FA0']]
         .map(function(x){ return '<div style="background:#F7F9FC;border:1px solid #E3EAF3;border-radius:10px;padding:8px 12px;"><div style="font-size:10px;font-weight:700;color:#6B82A0;text-transform:uppercase;letter-spacing:0.04em;">'+x[0]+'</div><div style="font-size:15px;font-weight:800;color:'+x[2]+';font-family:\'DM Mono\',monospace;margin-top:2px;">'+cur(x[1])+'</div></div>'; }).join('')
     + '</div>'
     + '<div style="padding:4px 18px 12px;">'

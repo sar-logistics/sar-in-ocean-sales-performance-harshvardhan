@@ -237,7 +237,9 @@ async function incentiveRunSave(db, body) {
   const reps = Array.isArray(body.reps) ? body.reps : [], ships = Array.isArray(body.ships) ? body.ships : [];
   if (!reps.length) return { status: 400, json: { success: false, error: "No reps in the run" } };
   await ensureIndexes(db);
-  const rules = Object.assign({ minAchv: 75, feePct: 0.15, lateDays: LATE_DAYS, ratePct: null, coreLobs: ["SEA EXPORT", "SEA IMPORT"] }, body.rules || {});
+  const rules = Object.assign({ minAchv: 75, feePct: 0.15, lateDays: LATE_DAYS, rates: null, coreLobs: ["SEA EXPORT", "SEA IMPORT"] }, body.rules || {});
+  // Sales rep rate by GP% tier: 75%–99.99% → t1, 100% and above → t2 (per part, on that part's GP ÷ GP Target)
+  const salesRate = rules.rates && rules.rates.sales;
 
   // Rep eligibility per part: GP ÷ GP Target, rounded as the page shows it, at least minAchv
   const repInfo = {};
@@ -311,7 +313,8 @@ async function incentiveRunSave(db, body) {
       ["paid", "released", "held", "removed", "removedBelow", "removedLate", "already", "heldFl", "heldOs", "shipGp"].forEach((k) => { P[k] = r2(P[k]); });
       P.fee = r2(Math.max(0, P.paid) * rules.feePct);
       P.final = r2(P.paid - P.fee);
-      P.incentive = rules.ratePct == null ? null : r2(P.final * rules.ratePct / 100);
+      P.rate = salesRate && P.elig && P.tgt > 0 ? (P.gp / P.tgt >= 1 ? salesRate.t2 : salesRate.t1) : null;
+      P.incentive = P.rate == null ? null : r2(Math.max(0, P.final) * P.rate / 100);
       // Every rupee of the rep's GP this quarter is in exactly one bucket
       P.gap = r2(P.gp - P.shipGp);
     }
@@ -319,9 +322,9 @@ async function incentiveRunSave(db, body) {
   });
 
   // 4. Checks
-  const tot = { paid: 0, released: 0, held: 0, removed: 0, already: 0, fee: 0, final: 0, gp: 0 };
+  const tot = { paid: 0, released: 0, held: 0, removed: 0, already: 0, fee: 0, final: 0, gp: 0, incentive: 0 };
   const count = { paid: 0, held: 0, removed: 0, already: 0, released: 0 };
-  repsOut.forEach((x) => PARTS.forEach((p) => { const P = x[p]; if (!P) return; ["paid", "released", "held", "removed", "already", "fee", "final", "gp"].forEach((k) => { tot[k] += P[k]; }); }));
+  repsOut.forEach((x) => PARTS.forEach((p) => { const P = x[p]; if (!P) return; ["paid", "released", "held", "removed", "already", "fee", "final", "gp", "incentive"].forEach((k) => { tot[k] += P[k] || 0; }); }));
   Object.keys(tot).forEach((k) => { tot[k] = r2(tot[k]); });
   out.forEach((e) => { count[e.status]++; if (e.released) count.released++; });
   const c = body.checks || {};
@@ -331,7 +334,7 @@ async function incentiveRunSave(db, body) {
     unassignedGp: r2(c.unassignedGp), unassignedRows: c.unassignedRows || 0,
     repGaps: repGaps.slice(0, 50), repGapCount: repGaps.length,
     paidDataMissing: !(Number(body.arPaidDocs) > 0),
-    rateMissing: rules.ratePct == null,
+    rateMissing: !salesRate,
   };
   checks.gpMatches = Math.abs(checks.spGp - checks.repGp) <= 1 && repGaps.length === 0;
   checks.ok = checks.gpMatches && !checks.paidDataMissing && !checks.rateMissing;
