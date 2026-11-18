@@ -2818,6 +2818,14 @@ function navItem(label, active, svg, actType, actVal, disabled){
   var act = actType ? ' data-act="'+actType+'" data-val="'+actVal+'"' : '';
   return '<a href="#" class="navlink"'+act+' style="display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;font-size:12px;'+st+'">'+svg+label+'</a>';
 }
+// SAR Field CRM: plain external link (no data-act, so the delegated
+// [data-act] click handler never sees it). Only sso + email in the URL.
+function crmNavItem(){
+  var em = (currentUser && currentUser.email ? String(currentUser.email) : '').toLowerCase().trim();
+  var href = 'https://connect.sarlogisolutions.com/login?sso=1' + (em ? '&email=' + encodeURIComponent(em) : '');
+  var ic = '<svg aria-hidden="true" width="18" height="18" style="flex-shrink:0;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#0f172a"/><text x="16" y="23" font-family="Arial, sans-serif" font-size="19" font-weight="800" fill="white" text-anchor="middle">S</text></svg>';
+  return '<a href="'+href+'" target="_blank" rel="noopener noreferrer" aria-label="SAR Field CRM (opens in a new tab)" class="navlink" style="display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;font-size:12px;color:rgba(255,255,255,0.6);font-weight:500;">'+ic+'SAR Field CRM</a>';
+}
 var IC = {
   bar:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="13" width="4" height="7" rx="1"/><rect x="10" y="8" width="4" height="12" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>',
   route:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M8.4 6H15a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h6.6"/></svg>',
@@ -2847,6 +2855,8 @@ function sidebarNav(){
       +navItem('Finance Pendency',state.page==='finance',IC.dollar,'page','finance')
       +navItem('Accounts Receivable',state.page==='ar',IC.clip,'page','ar')
       +navItem('Incentive',state.page==='incentive',IC.award,'page','incentive')
+      +'<div style="height:1px;background:rgba(255,255,255,0.07);margin:7px 6px;"></div>'
+      +crmNavItem()
     +'</div>'
     +(canSeeAdmin ? ('<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:12px 8px 5px;text-transform:uppercase;">Admin</div>'
     +'<div style="display:flex;flex-direction:column;gap:1px;">'
