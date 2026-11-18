@@ -63,6 +63,8 @@
   @keyframes spin{to{transform:rotate(360deg);}}
 
   .navlink:hover{background:rgba(255,255,255,0.08) !important;}
+  .crm-go-ic{margin-left:auto;display:flex;opacity:0;transform:translateX(-4px);transition:opacity .18s,transform .18s;}
+  .crm-go:hover .crm-go-ic,.crm-go:focus-visible .crm-go-ic{opacity:.6;transform:none;}
   .btnq:hover{box-shadow:0 3px 8px rgba(13,43,94,0.14),0 1px 2px rgba(13,43,94,0.08) !important;transform:translateY(-1px);}
   .sumrow{cursor:pointer;}
   .sumrow:hover td{filter:brightness(0.985);}
@@ -2819,13 +2821,14 @@ function navItem(label, active, svg, actType, actVal, disabled){
   var act = actType ? ' data-act="'+actType+'" data-val="'+actVal+'"' : '';
   return '<a href="#" class="navlink"'+act+' style="display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;font-size:12px;'+st+'">'+svg+label+'</a>';
 }
-// SAR Field CRM: plain external link (no data-act, so the delegated
+// SAR CRM: plain external link (no data-act, so the delegated
 // [data-act] click handler never sees it). Only sso + email in the URL.
 function crmNavItem(){
   var em = (currentUser && currentUser.email ? String(currentUser.email) : '').toLowerCase().trim();
   var href = 'https://connecttrn.sarlogisolutions.com/login?sso=1' + (em ? '&email=' + encodeURIComponent(em) : '');
-  var ic = '<svg aria-hidden="true" width="18" height="18" style="flex-shrink:0;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#0f172a"/><text x="16" y="23" font-family="Arial, sans-serif" font-size="19" font-weight="800" fill="white" text-anchor="middle">S</text></svg>';
-  return '<a href="'+href+'" target="_blank" rel="noopener noreferrer" aria-label="SAR Field CRM (opens in a new tab)" class="navlink" style="display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;font-size:12px;color:rgba(255,255,255,0.6);font-weight:500;">'+ic+'SAR Field CRM</a>';
+  var slot = '<span aria-hidden="true" style="width:18px;height:18px;flex-shrink:0;"></span>';
+  var go = '<span class="crm-go-ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></span>';
+  return '<a href="'+href+'" target="_blank" rel="noopener noreferrer" aria-label="SAR CRM (opens in a new tab)" class="navlink crm-go" style="display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;font-size:12px;color:rgba(255,255,255,0.6);font-weight:500;">'+slot+'SAR CRM'+go+'</a>';
 }
 var IC = {
   bar:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="13" width="4" height="7" rx="1"/><rect x="10" y="8" width="4" height="12" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>',
