@@ -25,5 +25,11 @@
         }
       ]
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/mongo-batch?action=incentiveLockCheck",
+      "schedule": "35 18 * * *"
+    }
   ]
 }

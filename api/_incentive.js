@@ -171,7 +171,7 @@ async function incentiveOutstanding(db, force) {
 // ─────────────────────────────────────────────────────────────────
 const RUNS = "incentive_runs";
 const LEDGER = "incentive_ledger";
-const FINAL_ENABLED = false; // Incentive % and the paid-late data aren't in yet
+const FINAL_ENABLED = true;  // final runs come only from a locked quarter's frozen data, and only on production
 let indexesReady = false;
 
 async function ensureIndexes(db) {
@@ -230,8 +230,24 @@ async function incentiveHeld(db, q) {
 //    recheck:{ key: { why } | { missing:true } },              // shipments held earlier, as they stand now
 //    checks:{ spGp, unassignedGp, unassignedRows } }
 async function incentiveRunSave(db, body) {
-  const quarter = String(body.quarter || ""), mode = body.mode === "final" ? "final" : "trial";
+  const quarter = String(body.quarter || "");
+  let mode = body.mode === "final" ? "final" : "trial";
   if (!qOk(quarter)) return { status: 400, json: { success: false, error: "quarter like FY27-Q2 required" } };
+  // Quarter lock: nothing before the first quarter; once a quarter is locked only the one run worked out from its
+  // frozen data is accepted (final on production, a trial copy anywhere else), and only once
+  if (qIdx(quarter) < qIdx(INC_LOCK.firstQuarter))
+    return { status: 403, json: { success: false, error: "The incentive calculator starts with " + INC_LOCK.firstQuarter + "; earlier quarters can't be run" } };
+  const lk = await incentiveLockState(db, quarter);
+  if (lk.locked) {
+    if (!lk.frozen) return { status: 423, json: { success: false, error: quarter + " is locked; waiting for the server to freeze its data" } };
+    if (!body.snapshotId || body.snapshotId !== lk.frozen.snapId)
+      return { status: 423, json: { success: false, error: quarter + " is locked (frozen " + new Date(lk.frozen.frozenAt).toISOString() + "); its numbers can no longer be changed" } };
+    if (await db.collection(RUNS).findOne({ snapshotId: body.snapshotId }, { projection: { _id: 1 } }))
+      return { status: 409, json: { success: false, error: "The run for this frozen quarter is already saved" } };
+    mode = lockEnv() === "production" ? "final" : "trial";
+  } else if (body.snapshotId) {
+    return { status: 400, json: { success: false, error: quarter + " isn't locked yet" } };
+  }
   if (mode === "final" && (!FINAL_ENABLED || process.env.VERCEL_ENV !== "production"))
     return { status: 403, json: { success: false, error: "Final payout runs are switched off until the Incentive % and the paid-late data are in. Trial runs only." } };
   const reps = Array.isArray(body.reps) ? body.reps : [], ships = Array.isArray(body.ships) ? body.ships : [];
@@ -343,7 +359,7 @@ async function incentiveRunSave(db, body) {
   const run = {
     _id: runId, quarter, label, mode, final: mode === "final", months: body.months || [], at: now,
     by: body.by || null, env: process.env.VERCEL_ENV || "local", asOn: body.asOn || null, rules, checks, totals: tot, counts: count,
-    reps: repsOut,
+    reps: repsOut, snapshotId: body.snapshotId || null, locked: !!lk.locked,
   };
   // A trial run for the same quarter replaces the earlier one
   if (mode === "trial") {
@@ -399,6 +415,110 @@ async function incentiveRunDelete(db, body) {
   return { status: 200, json: { success: true } };
 }
 
+// ── Quarter lock ──────────────────────────────────────────────────
+// A quarter's incentive is paid two quarters later (Q1 in Q3). It locks at the end of the quarter after it
+// (Q1 FY27 → 30 Sep 2026, 23:59:59 IST). At that point the server freezes everything the Incentive pages are
+// worked out from: the Sales Performance data (rep GP, targets, joining / exit dates, zones), every shipment row of
+// the quarter (plus shipments still held from an earlier run) and the ar_outstanding O/S and paid-late lists.
+// The pages then show that frozen copy with the same calculation, so the locked quarter never changes again.
+// The lock moment is set here and nowhere else.
+const INC_LOCK = {
+  firstQuarter: "FY27-Q1",   // the calculator starts here: earlier quarters are never shown, run or frozen
+  quartersAfterEnd: 1,       // locks at the end of this many quarters after the quarter itself ends
+  tzMinutes: 330,            // IST
+  overrides: {},             // one-off lock moments, e.g. { "FY27-Q2": "2027-01-05T23:59:59+05:30" }
+};
+const SNAPS = "incentive_snapshots", SNAP_PARTS = "incentive_snapshot_parts", SNAP_ROWS_PER_PART = 1000;
+const QMON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function qIdx(k) { const m = /^FY(\d{2})-Q([1-4])$/.exec(String(k || "")); return m ? (2000 + +m[1]) * 4 + (+m[2] - 1) : -1; }
+function qKey(n) { return "FY" + String(Math.floor(n / 4)).slice(-2) + "-Q" + (n % 4 + 1); }
+// First moment of a quarter (FY27 Q1 starts 1 Apr 2026, 00:00 IST), as a UTC time
+function qStart(n) { const fy = Math.floor(n / 4), mi = 3 + (n % 4) * 3; return Date.UTC(fy - 1 + Math.floor(mi / 12), mi % 12, 1) - INC_LOCK.tzMinutes * 60000; }
+function qMonths(k) { const n = qIdx(k), fy = Math.floor(n / 4), out = []; for (let i = 0; i < 3; i++) { const mi = 3 + (n % 4) * 3 + i, y = fy - 1 + Math.floor(mi / 12); out.push(QMON[mi % 12] + "-" + String(y).slice(-2)); } return out; }
+function qLabel(k) { const n = qIdx(k); return "Q" + (n % 4 + 1) + " FY" + String(Math.floor(n / 4)).slice(-2); }
+function lockAt(k) {
+  if (INC_LOCK.overrides[k]) return new Date(INC_LOCK.overrides[k]);
+  return new Date(qStart(qIdx(k) + 1 + INC_LOCK.quartersAfterEnd) - 1000);
+}
+// Production keeps the real locks; previews (staging) keep their own test copies in the same collections
+function lockEnv() { return process.env.VERCEL_ENV === "production" ? "production" : "preview"; }
+async function incentiveLockState(db, quarter) {
+  const at = lockAt(quarter), env = lockEnv();
+  const meta = await db.collection(SNAPS).findOne({ _id: env + "|" + quarter });
+  return { quarter, label: qLabel(quarter), months: qMonths(quarter), lockAt: at, locked: Date.now() >= at.getTime(), env,
+           firstQuarter: INC_LOCK.firstQuarter, frozen: meta || null };
+}
+// GET action=incentiveLock&quarter=FY27-Q1
+async function incentiveLock(db, quarter) {
+  quarter = String(quarter || "");
+  if (!qOk(quarter)) return { status: 400, json: { success: false, error: "quarter like FY27-Q2 required" } };
+  return { status: 200, json: Object.assign({ success: true }, await incentiveLockState(db, quarter)) };
+}
+// Quarters (from the first one) whose lock moment has passed
+function incentiveDueQuarters(now) {
+  const out = [], t = now || Date.now();
+  for (let n = qIdx(INC_LOCK.firstQuarter); qStart(n) <= t; n++) { const k = qKey(n); if (lockAt(k).getTime() <= t) out.push(k); }
+  return out;
+}
+// Shipment Nos still held by an earlier run (their rows are frozen too, so the next run can look at them again)
+async function incentiveHeldShips(db, quarter) {
+  const { byKey } = await priorEntries(db, quarter, lockEnv() === "production" ? "final" : "trial");
+  const out = {};
+  Object.values(byKey).forEach((e) => { if (e.status === "held" && e.s) out[e.s] = true; });
+  return out;
+}
+// Store one quarter's frozen data. Parts first, the record last (its _id is env|quarter, so a second freeze for
+// the same quarter fails and its parts are removed).
+async function incentiveSnapshotFreeze(db, quarter, d) {
+  const env = lockEnv(), id = env + "|" + quarter, snapId = id + "|" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+  const sales = d.sales, rows = d.rows || [], ar = d.ar;
+  const problems = [];
+  if (!sales || !Array.isArray(sales.repsRaw) || !sales.repsRaw.length) problems.push("no Sales Performance data");
+  if (!rows.length) problems.push("no shipment rows for the quarter");
+  if (!ar || !ar.success || !Array.isArray(ar.refs)) problems.push("ar_outstanding didn't load");
+  if (problems.length) return { status: 503, json: { success: false, quarter, error: "Not frozen: " + problems.join(", ") } };
+  if (await db.collection(SNAPS).findOne({ _id: id })) return { status: 409, json: { success: false, quarter, error: "Already frozen" } };
+  const P = db.collection(SNAP_PARTS);
+  await P.createIndex({ snapId: 1, kind: 1, i: 1 });
+  const parts = [{ _id: snapId + ":sales", snapId, kind: "sales", i: 0, data: sales }, { _id: snapId + ":ar", snapId, kind: "ar", i: 0, data: ar }];
+  for (let i = 0, n = 0; i < rows.length; i += SNAP_ROWS_PER_PART, n++) parts.push({ _id: snapId + ":rows:" + n, snapId, kind: "rows", i: n, data: rows.slice(i, i + SNAP_ROWS_PER_PART) });
+  try { for (const p of parts) await P.insertOne(p); }
+  catch (e) { await P.deleteMany({ snapId }); throw e; }
+  const months = qMonths(quarter);
+  const meta = { _id: id, env, quarter, label: qLabel(quarter), months, snapId, lockAt: lockAt(quarter), frozenAt: new Date(),
+    rowParts: parts.filter((p) => p.kind === "rows").length,
+    counts: { reps: sales.repsRaw.length, rows: rows.length, quarterRows: rows.filter((r) => months.indexOf(r._ml) > -1).length,
+              outRefs: ar.refs.length, lateRefs: Object.keys(ar.lateRefs || {}).length, paidInvoices: ar.paidInvoices || 0 },
+    arAsOn: ar.asOn || null, arPushedAt: ar.pushedAt || null, salesPushedAt: sales.pushedAt || null };
+  try { await db.collection(SNAPS).insertOne(meta); }
+  catch (e) { await P.deleteMany({ snapId }); if (e && e.code === 11000) return { status: 409, json: { success: false, quarter, error: "Already frozen" } }; throw e; }
+  return { status: 200, json: { success: true, quarter, snapshot: meta } };
+}
+// GET action=incentiveSnapshot&quarter=FY27-Q1&part=sales|ar|rows&i=0 → one piece of the frozen data
+async function incentiveSnapshotPart(db, q) {
+  const quarter = String(q.quarter || ""), kind = String(q.part || ""), i = parseInt(q.i, 10) || 0;
+  if (!qOk(quarter) || ["sales", "ar", "rows"].indexOf(kind) < 0) return { status: 400, json: { success: false, error: "quarter and part=sales|ar|rows required" } };
+  const meta = await db.collection(SNAPS).findOne({ _id: lockEnv() + "|" + quarter });
+  if (!meta) return { status: 404, json: { success: false, error: quarter + " isn't frozen" } };
+  const doc = await db.collection(SNAP_PARTS).findOne({ snapId: meta.snapId, kind, i });
+  if (!doc) return { status: 404, json: { success: false, error: "Missing frozen part " + kind + " " + i } };
+  return { status: 200, json: { success: true, snapId: meta.snapId, data: doc.data } };
+}
+// POST action=incentiveSnapshotDelete { quarter, by } → staging only, Admin only: throw away a test freeze so it
+// can be taken again. Never on production.
+async function incentiveSnapshotDelete(db, body) {
+  if (lockEnv() === "production") return { status: 403, json: { success: false, error: "A real lock can't be undone" } };
+  if (!(await _isAdmin(db, _em(body && body.by)))) return { status: 403, json: { success: false, error: "Admins only" } };
+  const quarter = String(body.quarter || "");
+  const meta = await db.collection(SNAPS).findOne({ _id: "preview|" + quarter });
+  if (!meta) return { status: 404, json: { success: false, error: "No test freeze for " + quarter } };
+  await db.collection(SNAP_PARTS).deleteMany({ snapId: meta.snapId });
+  await db.collection(SNAPS).deleteOne({ _id: meta._id });
+  const runs = await db.collection(RUNS).find({ snapshotId: meta.snapId }, { projection: { _id: 1 } }).toArray();
+  if (runs.length) { await db.collection(LEDGER).deleteMany({ runId: { $in: runs.map((r) => r._id) } }); await db.collection(RUNS).deleteMany({ _id: { $in: runs.map((r) => r._id) } }); }
+  return { status: 200, json: { success: true } };
+}
+
 // ── Who can see the Incentive Summary tab ─────────────────────────
 // One settings document holds the e-mails that were granted access. Admins always have access and are the
 // only ones who can change the list (checked against ocean_users, not what the browser says the role is).
@@ -426,4 +546,5 @@ async function incentiveAccessSave(db, body) {
   return { status: 200, json: { success: true, emails: emails, updatedBy: by, updatedAt: updatedAt } };
 }
 
-module.exports = { incentiveOutstanding, incentiveHeld, incentiveRunSave, incentiveRuns, incentiveRun, incentiveShipment, incentiveRunDelete, incentiveAccess, incentiveAccessSave };
+module.exports = { incentiveOutstanding, incentiveHeld, incentiveRunSave, incentiveRuns, incentiveRun, incentiveShipment, incentiveRunDelete, incentiveAccess, incentiveAccessSave,
+  incentiveLock, incentiveLockState, incentiveDueQuarters, incentiveHeldShips, incentiveSnapshotFreeze, incentiveSnapshotPart, incentiveSnapshotDelete, INC_LOCK };

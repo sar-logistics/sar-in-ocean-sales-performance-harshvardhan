@@ -5867,6 +5867,13 @@ function incToggleGp(k){ state.incGpOpen = state.incGpOpen || {}; state.incGpOpe
 // Click on a GP / GP removed number: the same shipment drill-through as Sales Performance.
 // data-rm = 'all' (every removed job) or one INC_RM reason: only those jobs are listed.
 function incDrill(el){
+  var F = _incFrozenFor(_incPayQuarter().key);
+  if (!F) return _incDrillOne(el);
+  var R = window.render; window.render = function(){};   // draw once, after today's data is back
+  try { _incWithData(F, function(){ _incDrillOne(el); }); } finally { window.render = R; }
+  render();
+}
+function _incDrillOne(el){
   var entity = el.getAttribute('data-entity'), col = el.getAttribute('data-col'), val = el.getAttribute('data-val');
   var rm = el.getAttribute('data-rm') || '', part = el.getAttribute('data-part') || '';
   openDrill(entity, 'GP', col, val);
@@ -5930,14 +5937,18 @@ function _incPayQuarter(now){
 }
 function incentivePage(){
   if (state.incTab === 'history') return _incTabs() + incHistoryPage();
-  if (state.incTab === 'summary' && _incCanSummary()) return _incTabs() + incSummaryPage();
-  // Work out the page for the quarter being paid now, whatever period is picked in the top bar (put back after)
-  var pq = _incPayQuarter();
-  var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo };
-  state.reportView = 'Monthly'; state.dateFrom = pq.months[0]; state.dateTo = pq.months[2];
-  window._incPay = pq;
-  try { return _incTabs() + _incentivePageInner(true); }
-  finally { state.reportView = keep.reportView; state.dateFrom = keep.dateFrom; state.dateTo = keep.dateTo; }
+  // A locked quarter is shown from the data frozen on its lock date (same calculation, frozen inputs)
+  var pq = _incPayQuarter(), gate = _incLockGate(pq.key);
+  if (gate) return _incTabs() + gate;
+  return _incWithData(_incFrozenFor(pq.key), function(){
+    if (state.incTab === 'summary' && _incCanSummary()) return _incTabs() + incSummaryPage();
+    // Work out the page for the quarter being paid now, whatever period is picked in the top bar (put back after)
+    var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo };
+    state.reportView = 'Monthly'; state.dateFrom = pq.months[0]; state.dateTo = pq.months[2];
+    window._incPay = pq;
+    try { return _incTabs() + _incentivePageInner(true); }
+    finally { state.reportView = keep.reportView; state.dateFrom = keep.dateFrom; state.dateTo = keep.dateTo; }
+  });
 }
 function _incentivePageInner(foldQ){
   var idxs = filteredMonthIndices();
@@ -6239,6 +6250,7 @@ function _incentivePageInner(foldQ){
         +(window._incPay
           ? '<span style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 10px;border:1px solid #D3DFF3;" title="A quarter\'s incentive is paid two quarters later">Paid in '+esc(window._incPay.payLabel)+' · for '+esc(window._incPay.label)+' ('+esc(window._incPay.months[0])+' – '+esc(window._incPay.months[2])+') · '+state.currency+'</span>'
           : '<span style="font-size:11px;color:#9AAFC8;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+(foldQ ? 'Quarterly' : state.reportView)+' · '+state.currency+'</span>')
+        +(window._incPay ? _incLockBadge(window._incPay.key) : '')
         +(function(){
           var cur = state.incPart === 'cross' ? 'cross' : 'core';
           function seg(k, label, hint){
@@ -6264,6 +6276,170 @@ function _incentivePageInner(foldQ){
       +'</div>'
     +'</div>'
   +'</div>';
+}
+
+/* ---------------------- Incentive: quarter lock ----------------------
+   A quarter locks at the end of the quarter after it (rule and dates live in api/_incentive.js, INC_LOCK). On that
+   date the server freezes the data the Incentive pages are worked out from. From then on the Calculation and
+   Summary tabs (and their drill-throughs and export) run the same calculation on that frozen copy instead of
+   today's data, so a locked quarter never changes. The one payout run for it is worked out from the frozen copy
+   too, automatically, and the server refuses any other run for that quarter. */
+var incLock = {}, incLockBusy = {}, incLockErr = {};
+var incFrozen = {}, incFrozenBusy = {}, incFrozenErr = {}, incAutoRun = {};
+function _incLockLoad(q, force){
+  if (incLockBusy[q] || (incLock[q] && !force)) return;
+  incLockBusy[q] = true;
+  fetch('/api/mongo-batch?action=incentiveLock&quarter=' + encodeURIComponent(q) + '&t=' + Date.now())
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Lock status failed to load'); incLock[q] = d; incLockErr[q] = ''; })
+    .catch(function(e){ incLockErr[q] = e.message || String(e); })
+    .finally(function(){ incLockBusy[q] = false; if (state.page === 'incentive') render(); });
+}
+function _incFrozenLoad(q){
+  var L = incLock[q], meta = L && L.frozen;
+  if (!meta || incFrozenBusy[q] || incFrozen[q]) return;
+  incFrozenBusy[q] = true; incFrozenErr[q] = '';
+  function part(kind, i){
+    return fetch('/api/mongo-batch?action=incentiveSnapshot&quarter=' + encodeURIComponent(q) + '&part=' + kind + '&i=' + (i || 0))
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Frozen data failed to load'); if (d.snapId !== meta.snapId) throw new Error('The frozen data changed while loading; reload the page'); return d.data; });
+  }
+  var jobs = [part('sales'), part('ar')];
+  for (var i = 0; i < (meta.rowParts || 0); i++) jobs.push(part('rows', i));
+  Promise.all(jobs)
+    .then(function(res){
+      var sales = res[0], ar = res[1], rows = [].concat.apply([], res.slice(2));
+      var order = function(m){ var b = String(m).split('-'); return (2000 + parseInt(b[1], 10)) * 12 + MONTH_NAME_TO_IDX[b[0]]; };
+      var refs = {}; (ar.refs || []).forEach(function(k){ refs[k] = true; });
+      incFrozen[q] = {
+        meta: meta, rawRows: rows, allDrillRows: null,
+        repsRawOriginal: sales.repsRaw || [], zonesRaw: sales.zones || [],
+        months26: (sales.months || []).slice().sort(function(a, b){ return order(a) - order(b); }),
+        incOutRefs: refs, incLateRefs: ar.lateRefs || {},
+        incOutMeta: { asOn:ar.asOn, docsWithRef:ar.docsWithRef || 0, fields:ar.fields || null, paidDocs:ar.paidDocs || 0, lateDays:ar.lateDays || 30, pushedAt:ar.pushedAt || null }
+      };
+    })
+    .catch(function(e){ incFrozenErr[q] = e.message || String(e); })
+    .finally(function(){ incFrozenBusy[q] = false; if (state.page === 'incentive') render(); });
+}
+// The frozen copy for a quarter, once loaded (null while the quarter isn't frozen)
+function _incFrozenFor(q){ return incLock[q] && incLock[q].frozen ? incFrozen[q] || null : null; }
+// Run fn with the frozen copy in place of today's data, then put today's data back. Re-entrant.
+function _incWithData(F, fn){
+  if (!F || _incWithData.active) return fn();
+  var keep = { ro:repsRawOriginal, rr:repsRaw, z:zonesRaw, m:months26, d:allDrillRows, o:incOutRefs, l:incLateRefs, om:incOutMeta,
+               zr:window._zoneRegionMap, dm:_drillMapping, dc:_drillResultCache, lf:_lobDataFetched };
+  _incWithData.active = F;
+  try {
+    repsRawOriginal = F.repsRawOriginal; zonesRaw = F.zonesRaw; months26 = F.months26;
+    incOutRefs = F.incOutRefs; incLateRefs = F.incLateRefs; incOutMeta = F.incOutMeta;
+    _drillMapping = null; _drillResultCache = {}; _lobDataFetched = true;
+    rebuildZoneRegionMap(); computeFilteredRepsRaw();
+    if (!F.allDrillRows) { F.allDrillRows = dedupDrillRows(F.rawRows); _patchTgOnDrillRows(F.allDrillRows); F.rawRows = null; }
+    allDrillRows = F.allDrillRows;
+    return fn();
+  } finally {
+    repsRawOriginal = keep.ro; zonesRaw = keep.z; months26 = keep.m; allDrillRows = keep.d;
+    incOutRefs = keep.o; incLateRefs = keep.l; incOutMeta = keep.om;
+    window._zoneRegionMap = keep.zr; _drillMapping = keep.dm; _drillResultCache = keep.dc; _lobDataFetched = keep.lf;
+    computeFilteredRepsRaw();
+    _incWithData.active = null;
+  }
+}
+// Before the Calculation / Summary tabs draw: know whether the quarter is locked, and load its frozen copy if so.
+// Returns what to show meanwhile, or '' when ready.
+function _incLockGate(q){
+  function wait(msg){ return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div><div style="font-size:13px;color:#9AAFC8;font-weight:500;">'+msg+'</div></div>'; }
+  function fail(msg){ return '<div style="padding:40px 24px;text-align:center;color:#B83A2B;font-size:12px;font-weight:600;">'+esc(msg)
+    + '<div style="margin-top:12px;"><button onclick="incLockRetry(\''+q+'\')" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:6px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">Try again</button></div></div>'; }
+  if (!incLock[q]) { if (incLockErr[q]) return fail('Couldn’t check whether ' + q + ' is locked: ' + incLockErr[q]); _incLockLoad(q); return wait('Checking the quarter lock…'); }
+  if (incLock[q].frozen && !incFrozen[q]) {
+    if (incFrozenErr[q]) return fail('Couldn’t load the frozen data for ' + incLock[q].label + ': ' + incFrozenErr[q]);
+    _incFrozenLoad(q); return wait('Loading the frozen ' + esc(incLock[q].label) + ' data…');
+  }
+  if (incLock[q].frozen) _incAutoRunCheck(q);
+  return '';
+}
+function incLockRetry(q){ incLockErr[q] = ''; incFrozenErr[q] = ''; delete incLock[q]; render(); }
+function _incDate(d){ var t = new Date(d); return isNaN(t) ? '' : t.toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
+// One small badge for the tab headers
+function _incLockBadge(q){
+  var L = incLock[q]; if (!L) return '';
+  var st = L.frozen ? { t:'🔒 Locked · data frozen ' + _incDate(L.frozen.frozenAt), c:'#7A4E00', bg:'#FCF3DA', b:'#EED9A4',
+                        tip:'Locked at ' + _incDate(L.lockAt) + ' IST. These are the numbers as they stood then; nothing changes any more.' }
+    : L.locked ? { t:'Lock due ' + _incDate(L.lockAt) + ' · freezing' + (L.env === 'production' ? ' tonight' : ' (staging: not frozen yet)'), c:'#9A3412', bg:'#FDECE3', b:'#F5C9B0',
+                   tip:'The server freezes this quarter on its nightly run. Until then the numbers are today\'s.' }
+    : { t:'Open · locks ' + _incDate(L.lockAt), c:'#2C4E82', bg:'#EEF3FC', b:'#D3DFF3', tip:'Numbers follow today\'s data until the lock date.' };
+  return '<span title="'+esc(st.tip)+'" style="font-size:11px;font-weight:700;color:'+st.c+';background:'+st.bg+';border:1px solid '+st.b+';border-radius:999px;padding:3px 10px;white-space:nowrap;">'+esc(st.t)+'</span>';
+}
+// The one run for a frozen quarter: worked out from the frozen copy and saved once (final on production, a trial
+// copy on staging). Whoever opens the page first with a full view triggers it; the result is the same whoever does.
+function _incAutoRunCheck(q){
+  var L = incLock[q], F = incFrozen[q];
+  if (!L || !L.frozen || !F || incAutoRun[q] || _getRLSReps().length) return;
+  if (!incRuns) { if (!incRunsLoading && !incRunsError) incLoadRuns(); return; }
+  if (incRuns.some(function(r){ return r.snapshotId === L.frozen.snapId; })) { incAutoRun[q] = { done:true }; return; }
+  incAutoRun[q] = { busy:true };
+  var mode = L.env === 'production' ? 'final' : 'trial';
+  fetch('/api/mongo-batch?action=incentiveHeld&mode=' + mode + '&quarter=' + encodeURIComponent(q) + '&t=' + Date.now())
+    .then(function(r){ return r.json(); })
+    .then(function(h){
+      if (!h || !h.success) throw new Error((h && h.error) || 'Held shipments failed to load');
+      var body = _incWithData(F, function(){ return _incBuildRun({ key:q, label:L.label, months:L.months }, h.held || []); });
+      body.mode = mode; body.snapshotId = L.frozen.snapId; body.asOn = F.incOutMeta.asOn; body.arPaidDocs = F.incOutMeta.paidDocs;
+      return fetch('/api/mongo-batch?action=incentiveRunSave', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d || !d.success) throw new Error((d && d.error) || 'The run for the frozen quarter wasn\'t saved');
+      incAutoRun[q] = { done:true, runId:d.runId }; incLoadRuns(true);
+    })
+    .catch(function(e){ incAutoRun[q] = { err:e.message || String(e) }; if (state.page === 'incentive') render(); });
+}
+// Staging only (Admins): freeze now / throw the test freeze away, to try the lock before it goes live
+function incLockFreezeNow(q){
+  if (!confirm('Freeze ' + q + ' now with today\'s data (staging test)?')) return;
+  incLockErr[q] = 'Freezing… this takes up to a minute'; render();
+  fetch('/api/mongo-batch?action=incentiveLockCheck&t=' + Date.now())
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var r = d && d.results && d.results.filter(function(x){ return x.quarter === q; })[0];
+      if (!r || (!r.success && !r.already)) throw new Error((r && r.error) || (d && d.error) || 'Not frozen');
+      incLockErr[q] = ''; delete incLock[q]; delete incFrozen[q]; delete incAutoRun[q]; render();
+    })
+    .catch(function(e){ incLockErr[q] = ''; alert(e.message || String(e)); render(); });
+}
+function incLockUndoTest(q){
+  if (!confirm('Throw away the staging test freeze of ' + q + ' (and its run)? Production is never affected.')) return;
+  fetch('/api/mongo-batch?action=incentiveSnapshotDelete', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ action:'incentiveSnapshotDelete', quarter:q, by:_incMyEmail() }) })
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Failed'); delete incLock[q]; delete incFrozen[q]; delete incAutoRun[q]; incLoadRuns(true); render(); })
+    .catch(function(e){ alert(e.message || String(e)); });
+}
+// Lock card for the Payout History tab
+function _incLockCard(){
+  var pq = _incPayQuarter(), q = pq.key, L = incLock[q];
+  if (!L) { _incLockLoad(q); return ''; }
+  var a = incAutoRun[q] || {}, run = incRuns && L.frozen && incRuns.filter(function(r){ return r.snapshotId === L.frozen.snapId; })[0];
+  var lines = [];
+  lines.push(_incLockBadge(q));
+  if (L.frozen) {
+    var c = L.frozen.counts || {};
+    lines.push('<span style="font-size:11.5px;color:#5B6678;">Frozen: '+(c.reps || 0)+' reps · '+(c.quarterRows || 0)+' shipment rows'+(c.rows > c.quarterRows ? ' (+'+(c.rows - c.quarterRows)+' held from earlier)' : '')+' · AR as on '+esc(L.frozen.arAsOn || '–')+'</span>');
+    lines.push(run ? '<span style="font-size:11.5px;color:#15875A;font-weight:700;">'+(run.final ? 'Final' : 'Trial (staging)')+' run saved from the frozen data</span>'
+      : a.err ? '<span style="font-size:11.5px;color:#B83A2B;font-weight:700;">Run from the frozen data not saved: '+esc(a.err)+'</span>'
+      : '<span style="font-size:11.5px;color:#2C4E82;">The run is worked out from the frozen data the next time the Calculation tab is opened by someone who sees every rep.</span>');
+  }
+  var staging = L.env !== 'production' && _incIsAdmin();
+  var tools = staging ? '<span style="flex:1;"></span>'
+      + (L.frozen ? '<button onclick="incLockUndoTest(\''+q+'\')" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#B83A2B;cursor:pointer;">Undo test freeze (staging)</button>'
+        : L.locked ? '<button onclick="incLockFreezeNow(\''+q+'\')" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">Freeze now (staging test)</button>' : '')
+      + (incLockErr[q] ? '<span style="font-size:11px;color:#2C4E82;">'+esc(incLockErr[q])+'</span>' : '')
+    : '';
+  return '<div style="background:#FFFFFF;border:1px solid #D5DCE6;border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);margin-bottom:16px;">'
+    + '<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid #D5DCE6;flex-wrap:wrap;"><span style="font-size:13px;font-weight:800;color:#0D2B5E;">'+esc(L.label)+' lock</span>'
+      + '<span style="font-size:11px;color:#6B82A0;font-weight:600;">Locks at the end of the quarter after it ('+esc(_incDate(L.lockAt))+' IST); paid in '+esc(pq.payLabel)+'.</span>'+tools+'</div>'
+    + '<div style="padding:12px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">'+lines.join('')+'</div></div>';
 }
 
 /* ---------------------- Incentive: payout runs (history) ----------------------
@@ -6454,6 +6630,7 @@ function incSummaryPage(){
     + '<span style="font-size:15px;font-weight:800;color:'+NAVY+';letter-spacing:-0.01em;">Incentive payout summary</span>'
     + '<span style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 10px;border:1px solid #D3DFF3;">'
       + (isPayQ ? 'Paid in '+esc(pq.payLabel)+' · ' : '') + 'for '+esc(period.label)+' ('+esc(period.months[0])+' – '+esc(period.months[period.months.length - 1])+') · '+cur+'</span>'
+    + _incLockBadge(pq.key)
     + '<div role="radiogroup" aria-label="Core or Cross" style="display:inline-flex;gap:2px;padding:2px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;">'
       + ['all','core','cross'].map(function(k){ return '<button onclick="incSumSet(\'part\',\''+k+'\')" class="btnq" role="radio" aria-checked="'+(S.part === k)+'" style="'+btn(S.part === k)+'">'+partLabel(k)+'</button>'; }).join('')
     + '</div>'
@@ -6690,7 +6867,8 @@ function incSummaryPage(){
 }
 
 // The Summary as a CSV file: the same figures as the screen (current Core / Cross choice and quarter)
-function incSumExport(){
+function incSumExport(){ _incWithData(_incFrozenFor(_incPayQuarter().key), _incSumExportOne); }
+function _incSumExportOne(){
   var S = _incSum(), pq = _incPayQuarter(), period = pq;
   var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo };
   state.reportView = 'Monthly'; state.dateFrom = period.months[0]; state.dateTo = period.months[period.months.length - 1];
@@ -6707,6 +6885,7 @@ function incSumExport(){
   row(['Incentive payout summary']);
   row(['Quarter', period.label + ' (' + period.months[0] + ' – ' + period.months[period.months.length - 1] + ')']);
   if (period.key === pq.key) row(['Paid in', pq.payLabel]);
+  var LK = incLock[pq.key]; if (LK) row(['Status', LK.frozen ? 'Locked - data frozen ' + _incDate(LK.frozen.frozenAt) : LK.locked ? 'Lock due ' + _incDate(LK.lockAt) + ' (not frozen yet)' : 'Open - locks ' + _incDate(LK.lockAt)]);
   row(['Part', part]); row(['Currency', cur + (cur === 'USD' ? ' (1 USD = ' + state.rate + ' INR)' : '')]);
   row(['Generated', new Date().toLocaleString('en-GB')]);
   row([]);
@@ -6823,6 +7002,7 @@ function _incCaptureQuarter(months){
 function incGenerateRun(){
   var q = _incQuarters().filter(function(x){ return x.key === state.incGenQ; })[0];
   if (!q || incGenBusy) return;
+  if (incLock[q.key] && incLock[q.key].locked) { incGenMsg = { err:q.label + ' is locked; its run comes from the frozen data.' }; render(); return; }
   if (_getRLSReps().length) { incGenMsg = { err:'Only users who can see every sales rep can generate a run.' }; render(); return; }
   incGenBusy = true; incGenMsg = { info:'Loading the latest outstanding and paid-invoice data…' }; render();
   function fail(e){ incGenBusy = false; incGenMsg = { err:e.message || String(e) }; render(); }
@@ -6917,12 +7097,15 @@ function incHistoryPage(){
   var qs = _incQuarters().filter(function(x){ return x.key === _incPayQuarter().key; });
   state.incGenQ = qs.length ? qs[0].key : null;
   var canGen = !_getRLSReps().length;
+  var genLock = state.incGenQ && incLock[state.incGenQ] && incLock[state.incGenQ].locked;
+  out += _incLockCard();
   out += card(head('Generate a payout run',
       '<span style="font-size:11px;color:#6B82A0;font-weight:600;">Trial only: shows exactly what a real run would pay, hold and remove, without counting anything as paid.</span>')
     + '<div style="padding:12px 18px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
       + '<select onchange="incSetGenQ(this.value)" style="border:1.5px solid #D8E1F0;border-radius:8px;padding:5px 8px;font-size:12px;font-weight:600;color:#1E3A66;">'
         + qs.map(function(x){ return '<option value="'+x.key+'"'+(x.key === state.incGenQ ? ' selected' : '')+'>'+x.label+' ('+x.months[0]+' – '+x.months[x.months.length - 1]+')</option>'; }).join('') + '</select>'
-      + (canGen ? '<button onclick="incGenerateRun()" class="btnq" '+(incGenBusy ? 'disabled ' : '')+'style="border:none;border-radius:999px;padding:6px 16px;font-size:11.5px;font-weight:800;color:#fff;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');cursor:pointer;opacity:'+(incGenBusy ? 0.6 : 1)+';">'+(incGenBusy ? 'Working…' : 'Generate trial run')+'</button>'
+      + (genLock ? '<span style="font-size:11px;color:#7A4E00;font-weight:700;">🔒 This quarter is locked: its one run is worked out from the frozen data automatically. No manual runs.</span>'
+        : canGen ? '<button onclick="incGenerateRun()" class="btnq" '+(incGenBusy ? 'disabled ' : '')+'style="border:none;border-radius:999px;padding:6px 16px;font-size:11.5px;font-weight:800;color:#fff;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');cursor:pointer;opacity:'+(incGenBusy ? 0.6 : 1)+';">'+(incGenBusy ? 'Working…' : 'Generate trial run')+'</button>'
                 : '<span style="font-size:11px;color:#A8720E;font-weight:700;">Only users who can see every sales rep can generate a run.</span>')
       + (incGenMsg ? '<span style="font-size:11.5px;font-weight:700;color:'+(incGenMsg.err ? '#B83A2B' : incGenMsg.ok ? '#15875A' : '#2C4E82')+';">'+esc(incGenMsg.err || incGenMsg.ok || incGenMsg.info)+'</span>' : '')
     + '</div>'

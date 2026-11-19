@@ -5,7 +5,8 @@
 
 const { MongoClient } = require("mongodb");
 const { arPush, arGet, arBucketsGet, arBucketsSave, arDetail } = require("./_ar");
-const { incentiveOutstanding, incentiveHeld, incentiveRunSave, incentiveRuns, incentiveRun, incentiveShipment, incentiveRunDelete, incentiveAccess, incentiveAccessSave } = require("./_incentive");
+const { incentiveOutstanding, incentiveHeld, incentiveRunSave, incentiveRuns, incentiveRun, incentiveShipment, incentiveRunDelete, incentiveAccess, incentiveAccessSave,
+  incentiveLock, incentiveLockState, incentiveDueQuarters, incentiveHeldShips, incentiveSnapshotFreeze, incentiveSnapshotPart, incentiveSnapshotDelete } = require("./_incentive");
 
 const MONGO_URI = process.env.MONGO_URI;
 const DB_NAME   = "sar-in-air-sales";  // Option B: same DB as Air, Ocean dashboard filters differently
@@ -2923,7 +2924,7 @@ module.exports = async function handler(req, res) {
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "tradelaneDrill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug", "ar", "arDetail", "incentiveOutstanding", "incentiveRuns", "incentiveRun", "incentiveShipment", "incentiveHeld", "incentiveAccess"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "tradelaneDrill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug", "ar", "arDetail", "incentiveOutstanding", "incentiveRuns", "incentiveRun", "incentiveShipment", "incentiveHeld", "incentiveAccess", "incentiveLock", "incentiveSnapshot", "incentiveLockCheck"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -2956,6 +2957,33 @@ module.exports = async function handler(req, res) {
     if (action === "incentiveShipment") { const r = await incentiveShipment(db, req.query?.s); return res.status(r.status).json(r.json); }
     if (action === "incentiveHeld") { const r = await incentiveHeld(db, req.query || {}); return res.status(r.status).json(r.json); }
     if (action === "incentiveRunSave") { const r = await incentiveRunSave(db, req.body || {}); return res.status(r.status).json(r.json); }
+    // Quarter lock: status, the frozen data, and the daily job that freezes a quarter once its lock moment passes
+    if (action === "incentiveLock") { const r = await incentiveLock(db, req.query?.quarter); return res.status(r.status).json(r.json); }
+    if (action === "incentiveSnapshot") { const r = await incentiveSnapshotPart(db, req.query || {}); return res.status(r.status).json(r.json); }
+    if (action === "incentiveSnapshotDelete") { const r = await incentiveSnapshotDelete(db, req.body || {}); return res.status(r.status).json(r.json); }
+    if (action === "incentiveLockCheck") {
+      // Run by the Vercel cron (vercel.json) every night, and safe to call any time: it only freezes quarters whose
+      // lock moment has passed and that aren't frozen yet, with the data exactly as it is right now.
+      const results = [];
+      for (const quarter of incentiveDueQuarters()) {
+        const st = await incentiveLockState(db, quarter);
+        if (st.frozen) { results.push({ quarter, already: true, frozenAt: st.frozen.frozenAt }); continue; }
+        try {
+          const sales = await getSalesAggregate(db, true);   // fresh, not the cache
+          const salesData = { months: sales.months, zones: sales.zones, pushedAt: sales.pushedAt || null,
+            repsRaw: (sales.repsRaw || []).map((r) => { const c = { ...r }; delete c.weekData; return c; }) };
+          drillRowsCache = null; drillRowsCacheTime = 0;   // fresh shipment rows
+          await getDrillRows(db, "Grand Total", "Shipments", "FY Total");
+          const held = await incentiveHeldShips(db, quarter);
+          const keyOf = (v) => String(v == null ? "" : v).trim().toUpperCase();
+          const rows = ((drillRowsCache && drillRowsCache.allRows) || []).filter((r) => st.months.indexOf(r._ml) > -1 || (r.shipmentNo && held[keyOf(r.shipmentNo)]));
+          const ar = await incentiveOutstanding(db, true);
+          const r = await incentiveSnapshotFreeze(db, quarter, { sales: salesData, rows, ar });
+          results.push(Object.assign({ quarter }, r.json));
+        } catch (e) { results.push({ quarter, success: false, error: e.message || String(e) }); }
+      }
+      return res.status(200).json({ success: true, env: process.env.VERCEL_ENV || "local", checkedAt: new Date(), results });
+    }
     if (action === "incentiveAccess") { const r = await incentiveAccess(db); return res.status(r.status).json(r.json); }
     if (action === "incentiveAccessSave") { const r = await incentiveAccessSave(db, req.body || {}); return res.status(r.status).json(r.json); }
     if (action === "incentiveRunDelete") { const r = await incentiveRunDelete(db, req.body || {}); return res.status(r.status).json(r.json); }
