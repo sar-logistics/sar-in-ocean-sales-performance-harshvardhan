@@ -5906,6 +5906,10 @@ function _incKeepScroll(name){
     function put(){
       if (state.page !== 'incentive') return;
       var sc2 = document.getElementById('incScroll'), ms2 = document.getElementById('main-slot');
+      // render() clears main-slot's overflow (style.overflow = '' also wipes the overflow-y:auto it is declared
+      // with), so the page area stops being a scroll box: it grows to the page's full height inside the
+      // overflow:hidden shell and can't be scrolled. Give it back its scrolling on the Incentive page.
+      if (ms2) ms2.style.overflowY = 'auto';
       if (sc2) { sc2.scrollTop = pos.t; sc2.scrollLeft = pos.l; }
       if (ms2) ms2.scrollTop = pos.m;
     }
