@@ -6276,9 +6276,9 @@ function _incentivePageInner(foldQ, pre){
   var thBase = 'padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';white-space:nowrap;';
   var head = '<tr>'
     + '<th style="position:sticky;left:0;z-index:3;background:#F0F4FA;text-align:left;color:#475569;'+thBase+'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';width:'+NAME_W+'px;min-width:'+NAME_W+'px;">Sales Rep</th>'
-    + '<th style="position:sticky;left:'+NAME_W+'px;z-index:3;background:#F0F4FA;text-align:left;color:#475569;'+thBase+'width:'+PART_W+'px;min-width:'+PART_W+'px;box-shadow:inset -2px 0 0 '+BORDER_STRONG+';">Particulars</th>'
+    + '<th style="position:sticky;left:'+NAME_W+'px;z-index:3;background:#F0F4FA;text-align:left;color:#475569;'+thBase+'box-shadow:inset -2px 0 0 '+BORDER_STRONG+';">Particulars</th>'
     + heads.map(function(h){
-        return '<th style="text-align:right;background:'+(groups ? '#FCF3DA' : '#F0F4FA')+';color:#475569;'+thBase+'border-right:1px solid '+BORDER+';width:190px;min-width:190px;">'
+        return '<th style="text-align:right;background:'+(groups ? '#FCF3DA' : '#F0F4FA')+';color:#475569;'+thBase+'border-right:1px solid '+BORDER+';">'
           +'<div style="font-size:11px;font-weight:800;color:'+(groups ? '#A8720E' : '#0D2B5E')+';">'+esc(h.top)+'</div>'
           +(h.sub ? '<div style="font-size:9px;font-weight:500;color:#8B97A8;margin-top:1px;text-transform:none;letter-spacing:0;">'+esc(h.sub)+'</div>' : '')
           +(h.note ? '<div style="font-size:9px;font-weight:600;color:#A8720E;margin-top:1px;text-transform:none;letter-spacing:0;">'+esc(h.note)+'</div>' : '')
@@ -6338,7 +6338,7 @@ function _incentivePageInner(foldQ, pre){
       var bg = p.shade ? shadeBg : rowBg;
       var partAttrs = p.toggle ? ' data-gk="'+esc(p.toggle)+'" onclick="incToggleGp(this.getAttribute(\'data-gk\'))"' : '';
       // Group rows: bold, upright, coloured; their sub rows: smaller grey labels indented under them
-      var partCell = '<td'+partAttrs+' style="'+(p.toggle ? 'cursor:pointer;' : '')+'position:sticky;left:'+NAME_W+'px;z-index:2;background:'+bg+';padding:'+(p.bold ? '7px' : '5px')+' 10px '+(p.bold ? '7px' : '5px')+' '+(p.sub ? 30 : 10)+'px;width:'+PART_W+'px;min-width:'+PART_W+'px;max-width:'+PART_W+'px;box-sizing:border-box;white-space:normal;line-height:1.35;font-size:'+(p.bold ? 12 : 11)+'px;font-weight:'+(p.bold ? 700 : 500)+';color:'+(p.bold ? (p.color || '#14213D') : p.ded ? '#64748B' : '#3F4B5E')+';'+(p.sub ? 'box-shadow:inset 18px 0 0 '+bg+', inset 19.5px 0 0 #D5DCE6, inset -2px 0 0 '+BORDER_STRONG+';' : 'box-shadow:inset -2px 0 0 '+BORDER_STRONG+';')+'">'+(p.toggle ? '<span style="display:inline-block;width:14px;font-size:9px;color:'+(p.color || '#374151')+';">'+(p.open ? '▼' : '▶')+'</span>' : '')
+      var partCell = '<td'+partAttrs+' style="'+(p.toggle ? 'cursor:pointer;' : '')+'position:sticky;left:'+NAME_W+'px;z-index:2;background:'+bg+';padding:'+(p.bold ? '7px' : '5px')+' 10px '+(p.bold ? '7px' : '5px')+' '+(p.sub ? 30 : 10)+'px;box-sizing:border-box;white-space:normal;line-height:1.35;font-size:'+(p.bold ? 12 : 11)+'px;font-weight:'+(p.bold ? 700 : 500)+';color:'+(p.bold ? (p.color || '#14213D') : p.ded ? '#64748B' : '#3F4B5E')+';'+(p.sub ? 'box-shadow:inset 18px 0 0 '+bg+', inset 19.5px 0 0 #D5DCE6, inset -2px 0 0 '+BORDER_STRONG+';' : 'box-shadow:inset -2px 0 0 '+BORDER_STRONG+';')+'">'+(p.toggle ? '<span style="display:inline-block;width:14px;font-size:9px;color:'+(p.color || '#374151')+';">'+(p.open ? '▼' : '▶')+'</span>' : '')
         +esc(p.label)+(p.note ? ' <span style="font-size:9.5px;font-weight:600;color:#94A3B8;">· '+esc(p.note)+'</span>' : '')+'</td>';
       var cell = 'text-align:right;padding:'+(p.bold ? '7px' : '5px')+' 10px;font-family:\'DM Mono\',monospace;font-size:'+(p.primary ? 12 : 11)+'px;white-space:nowrap;';
       function drillAttrs(v, f, ci){
@@ -6377,7 +6377,7 @@ function _incentivePageInner(foldQ, pre){
   window._incModel = { reps:reps, zones:zEnts, calc:calc, heads:heads };
   var allOpen = zones.length > 0 && zones.every(function(z){ return state.incZoneOpen && state.incZoneOpen[z.name]; });
   return '<div style="padding:20px 24px 32px;">'
-    +'<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);width:fit-content;max-width:100%;">'
+    +'<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);width:100%;box-sizing:border-box;">'
       +'<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid '+BORDER+';flex-wrap:wrap;border-radius:12px 12px 0 0;">'
         +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Incentive</span>'
         +(window._incYearSel || '')
@@ -6404,7 +6404,9 @@ function _incentivePageInner(foldQ, pre){
         +(incOutMeta && !incOutMeta.docsWithRef ? '<span style="font-size:11px;color:#B83A2B;font-weight:700;">· No Ref No (refNo) found in ar_outstanding'+(incOutMeta.fields ? ' (fields: '+esc(incOutMeta.fields.join(', '))+')' : '')+'</span>' : '')
       +'</div>'
       +'<div id="incScroll" style="position:relative;overflow:auto;max-height:calc(100vh - 190px);">'
-        +'<table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;">'
+        // Sales rep keeps its width; Particulars and the quarter columns share the rest equally (one quarter or four),
+        // and the table scrolls sideways only when they would get narrower than 240px each
+        +'<table style="width:100%;table-layout:fixed;min-width:'+(NAME_W + (heads.length + 1) * 240)+'px;border-collapse:collapse;font-variant-numeric:tabular-nums;">'
           +'<thead style="position:sticky;top:0;z-index:4;">'+head+'</thead>'
           +'<tbody>'+body+'</tbody>'
         +'</table>'
