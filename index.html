@@ -5867,7 +5867,7 @@ function incToggleGp(k){ state.incGpOpen = state.incGpOpen || {}; state.incGpOpe
 // Click on a GP / GP removed number: the same shipment drill-through as Sales Performance.
 // data-rm = 'all' (every removed job) or one INC_RM reason: only those jobs are listed.
 function incDrill(el){
-  var F = _incFrozenFor(_incPayQuarter().key);
+  var F = _incFrozenFor(el.getAttribute('data-q') || _incPayQuarter().key);
   if (!F) return _incDrillOne(el);
   var R = window.render; window.render = function(){};   // draw once, after today's data is back
   try { _incWithData(F, function(){ _incDrillOne(el); }); } finally { window.render = R; }
@@ -5939,22 +5939,130 @@ function _incPayQuarter(now){
   return { key:'FY' + String(pfy).slice(-2) + '-Q' + pq, label:'Q' + pq + ' FY' + String(pfy).slice(-2), months:months,
            payLabel:'Q' + q + ' FY' + String(fy).slice(-2) };
 }
+// One FY quarter by key ('FY27-Q2'): its months and the quarter it is paid in (two quarters later)
+function _incQuarterOf(key){
+  var fy = 2000 + parseInt(key.slice(2, 4), 10), q = parseInt(key.slice(-1), 10);
+  var n = fy * 4 + (q - 1) + 2, payFy = Math.floor(n / 4), payQ = n % 4 + 1;
+  var months = [0, 1, 2].map(function(k){
+    var mm = (q - 1) * 3 + 3 + k, yy = fy - 1;
+    if (mm >= 12) { mm -= 12; yy += 1; }
+    return MONTH_IDX_TO_NAME[mm] + '-' + String(yy).slice(-2);
+  });
+  return { key:key, label:'Q' + q + ' FY' + String(fy).slice(-2), months:months, payLabel:'Q' + payQ + ' FY' + String(payFy).slice(-2), fy:fy, q:q };
+}
+// Calculation tab quarters (user, 19-Nov-2026): this year = every quarter of the pay quarter's FY up to the one
+// being paid now (Q4 FY27 → Q1, Q2 FY27); last year = Q1–Q4 of the FY before, offered only from the first locked
+// FY (never before INC_LOCK.firstQuarter). The Summary stays on the quarter being paid now.
+function _incCalcYears(){
+  var pq = _incPayQuarter(), cur = _incQuarterOf(pq.key), L = incLock[pq.key];
+  var first = (L && L.firstQuarter) || 'FY27-Q1', firstFy = 2000 + parseInt(first.slice(2, 4), 10);
+  function key(fy, q){ return 'FY' + String(fy).slice(-2) + '-Q' + q; }
+  function ok(k){ return k >= first; }   // 'FY27-Q1' style keys sort in time order
+  var thisY = [1, 2, 3, 4].filter(function(q){ return q <= cur.q; }).map(function(q){ return key(cur.fy, q); }).filter(ok);
+  var lastY = cur.fy - 1 >= firstFy ? [1, 2, 3, 4].map(function(q){ return key(cur.fy - 1, q); }).filter(ok) : [];
+  return { pq:pq, fy:cur.fy, thisY:thisY, lastY:lastY };
+}
+function incSetYear(v){ state.incYear = v === 'last' ? 'last' : 'this'; render(); }
+function _incYearPicker(Y, last){
+  if (!Y.lastY.length) return '';
+  function fy(n){ return 'FY' + String(n).slice(-2); }
+  return '<select onchange="incSetYear(this.value)" aria-label="Financial year" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'
+    + '<option value="this"'+(last ? '' : ' selected')+'>'+fy(Y.fy)+' · this year</option>'
+    + '<option value="last"'+(last ? ' selected' : '')+'>'+fy(Y.fy - 1)+' · last year</option></select>';
+}
+// Several quarters, each worked out on its own (frozen) data, put side by side as the table's columns
+function _incMergeQuarters(ms, qs){
+  var offs = [], nTot = 0;
+  ms.forEach(function(m){ offs.push(nTot); nTot += m.nCols; });
+  function blank(){ return new Array(nTot).fill(0); }
+  function blankRm(){ var rm = {}; INC_RM.forEach(function(r){ rm[r.k] = { all:blank(), core:blank(), ship:0, shipCore:0 }; }); return rm; }
+  function addRm(dst, src, off){
+    INC_RM.forEach(function(r){
+      var a = src && src[r.k]; if (!a) return;
+      var d = dst[r.k];
+      a.all.forEach(function(v, i){ d.all[off + i] = v; }); a.core.forEach(function(v, i){ d.core[off + i] = v; });
+      d.ship += a.ship || 0; d.shipCore += a.shipCore || 0;
+    });
+  }
+  // The latest quarter decides the order, zone and name details; earlier-only names follow
+  function ents(list, isRep){
+    var by = {}, out = [];
+    for (var qi = list.length - 1; qi >= 0; qi--) list[qi].forEach(function(e){
+      if (by[e.name]) return;
+      var o = Object.assign({}, e, { gp:blank(), tgt:blank(), coreGp:blank(), rm:blankRm(), noTarget:true,
+                                     drillCells:[e.drillCells ? e.drillCells[0] : null].concat(new Array(nTot).fill(null)) });
+      delete o._calc; by[e.name] = o; out.push(o);
+    });
+    list.forEach(function(arr, qi){
+      var off = offs[qi];
+      arr.forEach(function(e){
+        var o = by[e.name];
+        e.gp.forEach(function(v, i){ o.gp[off + i] = v; });
+        e.tgt.forEach(function(v, i){ o.tgt[off + i] = v; });
+        if (e.coreGp) e.coreGp.forEach(function(v, i){ o.coreGp[off + i] = v; });
+        if (isRep) addRm(o.rm, e.rm, off);
+        if (isRep || e.isZone) o.noTarget = o.noTarget && !!e.noTarget;
+        (e.drillCells || []).slice(1).forEach(function(c, i){ if (c) o.drillCells[off + i + 1] = Object.assign({}, c, { q:qs[qi].key }); });
+      });
+    });
+    return out;
+  }
+  var byZone = {};
+  ms.forEach(function(m, qi){
+    Object.keys(m.byZone).forEach(function(z){
+      var A = byZone[z] || (byZone[z] = { core:blank(), rm:blankRm() }), a = m.byZone[z];
+      a.core.forEach(function(v, i){ A.core[offs[qi] + i] = v; });
+      addRm(A.rm, a.rm, offs[qi]);
+    });
+  });
+  var heads = [];
+  ms.forEach(function(m, qi){
+    var Q = qs[qi], L = incLock[Q.key], F = _incFrozenFor(Q.key);
+    m.heads.forEach(function(h){
+      heads.push({ top:h.top, sub:h.sub, note:'Paid ' + Q.payLabel + (F && F.incOutMeta && F.incOutMeta.asOn ? ' · O/S ' + F.incOutMeta.asOn : L && !L.frozen ? ' · not frozen' : '') });
+    });
+  });
+  return { reps:ents(ms.map(function(m){ return m.reps; }), true), zones:ents(ms.map(function(m){ return m.zones; }), false),
+           byZone:byZone, heads:heads, groups:null, nCols:nTot, multi:ms.length > 1 };
+}
 function incentivePage(){
   if (state.incTab === 'history') return _incTabs() + incHistoryPage();
   // A locked quarter is shown from the data frozen on its lock date (same calculation, frozen inputs)
   var pq = _incPayQuarter(), gate = _incLockGate(pq.key);
   if (gate) return _incTabs() + gate;
-  return _incWithData(_incFrozenFor(pq.key), function(){
-    if (state.incTab === 'summary' && _incCanSummary()) return _incTabs() + incSummaryPage();
-    // Work out the page for the quarter being paid now, whatever period is picked in the top bar (put back after)
-    var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo };
-    state.reportView = 'Monthly'; state.dateFrom = pq.months[0]; state.dateTo = pq.months[2];
-    window._incPay = pq;
-    try { return _incTabs() + _incentivePageInner(true); }
-    finally { state.reportView = keep.reportView; state.dateFrom = keep.dateFrom; state.dateTo = keep.dateTo; }
-  });
+  if (state.incTab === 'summary' && _incCanSummary()) {
+    return _incWithData(_incFrozenFor(pq.key), function(){ window._incYearSel = ''; return _incTabs() + incSummaryPage(); });
+  }
+  // Calculation: one column per quarter of the year picked, each from its own frozen data
+  var Y = _incCalcYears(), last = state.incYear === 'last' && Y.lastY.length > 0;
+  var qs = (last ? Y.lastY : Y.thisY).map(_incQuarterOf);
+  if (!qs.length) qs = [_incQuarterOf(pq.key)];
+  for (var i = 0; i < qs.length; i++) { var g = qs[i].key === pq.key ? '' : _incLockGate(qs[i].key, true); if (g) return _incTabs() + g; }
+  var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo };
+  var ms = [];
+  try {
+    for (var j = 0; j < qs.length; j++) {
+      var Q = qs[j];
+      var m = _incWithData(_incFrozenFor(Q.key), function(){
+        state.reportView = 'Monthly'; state.dateFrom = Q.months[0]; state.dateTo = Q.months[2];
+        window._incCollect = true;
+        try { return _incentivePageInner(true); } finally { window._incCollect = false; }
+      });
+      if (typeof m === 'string') return _incTabs() + m;   // still loading, or nothing for this quarter
+      ms.push(m);
+    }
+  } finally { state.reportView = keep.reportView; state.dateFrom = keep.dateFrom; state.dateTo = keep.dateTo; }
+  var only = qs.length === 1 && qs[0].key === pq.key, lastQ = qs[qs.length - 1];
+  window._incPay = only ? pq
+    : { key:lastQ.key, label:lastQ.label, months:lastQ.months, payLabel:lastQ.payLabel,
+        text:(last ? 'Last year · ' : '') + qs[0].label + (qs.length > 1 ? ' – ' + lastQ.label : '') + (last ? '' : ' · paying ' + pq.label + ' now, in ' + pq.payLabel) };
+  window._incYearSel = _incYearPicker(Y, last);
+  try {
+    // Drawn on the latest quarter's data (zone regions, outstanding notes); the numbers are already worked out
+    return _incTabs() + _incWithData(_incFrozenFor(lastQ.key), function(){ return _incentivePageInner(true, _incMergeQuarters(ms, qs)); });
+  } finally { window._incYearSel = ''; }
 }
-function _incentivePageInner(foldQ){
+function _incentivePageInner(foldQ, pre){
   var idxs = filteredMonthIndices();
   function spinner(msg){
     return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div><div style="font-size:13px;color:#9AAFC8;font-weight:500;">'+msg+'</div></div>';
@@ -5964,6 +6072,21 @@ function _incentivePageInner(foldQ){
       +'<div style="font-size:14px;font-weight:700;color:#3C5275;">'+title+'</div>'
       +'<div style="font-size:12px;color:#9AAFC8;margin-top:8px;">'+msg+'</div></div>';
   }
+  var nCols = 0;
+  function zeros(){ return new Array(nCols).fill(0); }
+  function newAgg(){
+    var rm = {};
+    INC_RM.forEach(function(r){ rm[r.k] = { all:zeros(), core:zeros(), ship:0, shipCore:0 }; });
+    return { core:zeros(), rm:rm };
+  }
+  function withAgg(ent, A){
+    A = A || newAgg();
+    ent.coreGp = A.core; ent.rm = A.rm;
+    return ent;
+  }
+  // Step 1 (one quarter, on whatever data is in place): GP, Target, Core GP and GP removed per rep and zone.
+  // pre = the same thing already worked out (several quarters put side by side by incentivePage).
+  var B = pre || (function(){
   if (state.reportView === 'Weekly' && !weekDataLoaded()) {
     if (!_weekDataLoading && !_weekDataFetched) fetchWeekDataIfNeeded(function(){ if(state.reportView==='Weekly') render(); });
     else if (_weekDataFetched && !_weekDataLoading) { _weekDataFetched = false; fetchWeekDataIfNeeded(function(){ if(state.reportView==='Weekly') render(); }); }
@@ -6014,7 +6137,7 @@ function _incentivePageInner(foldQ){
   var heads = qCols ? qCols.map(function(g){ var a = g.months[0], z = g.months[g.months.length - 1]; return { top:g.label, sub: a === z ? a : a + ' – ' + z }; })
     : groups ? groups.map(function(g){ return { top:g.label, sub:g.range || '' }; })
     : filteredMonths().map(colDisplayLabel).map(function(l){ var p = String(l).split('||'); return { top:p[0], sub:p[1] || '' }; });
-  var nCols = reps[0].gp.length;
+  nCols = reps[0].gp.length;
 
   // One pass over the shipment rows: Core GP (SEA EXPORT / SEA IMPORT) and GP removed for each INC_RM reason,
   // per rep (display name), per zone and for the Grand Total. Cross = total − Core.
@@ -6027,12 +6150,6 @@ function _incentivePageInner(foldQ){
   var fz = state.filterZones && state.filterZones.length ? state.filterZones : null;
   var fr = state.filterReps && state.filterReps.length ? state.filterReps.map(function(x){ return normalizeName(x); }) : null;
   var rls = _getRLSReps().map(function(n){ return normalizeName(n); });
-  function zeros(){ return new Array(nCols).fill(0); }
-  function newAgg(){
-    var rm = {};
-    INC_RM.forEach(function(r){ rm[r.k] = { all:zeros(), core:zeros(), ship:0, shipCore:0 }; });
-    return { core:zeros(), rm:rm };
-  }
   function bump(A, ci, g, isCore, why){
     if (isCore) A.core[ci] += g;
     if (why) { var R = A.rm[why]; R.all[ci] += g; R.ship++; if (isCore) { R.core[ci] += g; R.shipCore++; } }
@@ -6052,18 +6169,12 @@ function _incentivePageInner(foldQ){
     var zk = row._zone || 'Cross Sales';
     bump(byZone[zk] || (byZone[zk] = newAgg()), ci, g, isCore, why);
   });
-  function withAgg(ent, A){
-    A = A || newAgg();
-    ent.coreGp = A.core; ent.rm = A.rm;
-    return ent;
-  }
   reps.forEach(function(r){ withAgg(r, byRep[r.name]); });
-
-  function colSum(key){ var out = []; for (var i = 0; i < nCols; i++) out.push(sum(reps.map(function(r){ return r[key][i] || 0; }))); return out; }
-  var spGrand = cap.filter(function(c){ return c.isGrand; })[0]; // Sales Performance Grand Total (zone targets)
-  var grand = spGrand
-    ? withAgg({ name:'Grand Total', initials:'GT', isGrand:true, gp:spGrand.gp.slice(), tgt:spGrand.tgt.slice(), drillCells:spGrand.drillCells, members:reps }, gAgg)
-    : withAgg({ name:'Grand Total', initials:'GT', isGrand:true, gp:colSum('gp'), tgt:colSum('tgt'), members:reps }, gAgg);
+  return { reps:reps, zones:cap.filter(function(c){ return c.isZone; }), byZone:byZone, heads:heads, groups:groups, nCols:nCols };
+  })();
+  if (typeof B === 'string' || window._incCollect) return B;
+  // Step 2: the calculation and the table
+  var reps = B.reps, byZone = B.byZone, heads = B.heads, groups = B.groups; nCols = B.nCols;
 
   function pct(gp, tgt){ return tgt > 0 ? Math.round(gp / tgt * 100) : null; }
   function fee(gp){ return Math.max(0, gp) * INC_MGMT_FEE_PCT; }
@@ -6153,6 +6264,7 @@ function _incentivePageInner(foldQ){
         return '<th style="text-align:right;background:'+(groups ? '#FCF3DA' : '#F0F4FA')+';color:#475569;'+thBase+'border-right:1px solid '+BORDER+';width:190px;min-width:190px;">'
           +'<div style="font-size:11px;font-weight:800;color:'+(groups ? '#A8720E' : '#0D2B5E')+';">'+esc(h.top)+'</div>'
           +(h.sub ? '<div style="font-size:9px;font-weight:500;color:#8B97A8;margin-top:1px;text-transform:none;letter-spacing:0;">'+esc(h.sub)+'</div>' : '')
+          +(h.note ? '<div style="font-size:9px;font-weight:600;color:#A8720E;margin-top:1px;text-transform:none;letter-spacing:0;">'+esc(h.note)+'</div>' : '')
         +'</th>';
       }).join('')
     + '</tr>';
@@ -6215,7 +6327,7 @@ function _incentivePageInner(foldQ){
       function drillAttrs(v, f, ci){
         if (!p.drill || !p.drill[ci] || !v || f.t === '–') return '';
         var c = p.drill[ci];
-        return ' class="dcell" onclick="incDrill(this)" data-entity="'+esc(c.entity)+'" data-col="'+esc(c.col)+'" data-val="'+esc(f.t)+'"'+(p.rm ? ' data-rm="'+p.rm+'"' : '')+(p.part ? ' data-part="'+p.part+'"' : '');
+        return ' class="dcell" onclick="incDrill(this)" data-entity="'+esc(c.entity)+'" data-col="'+esc(c.col)+'" data-val="'+esc(f.t)+'"'+(c.q ? ' data-q="'+esc(c.q)+'"' : '')+(p.rm ? ' data-rm="'+p.rm+'"' : '')+(p.part ? ' data-part="'+p.part+'"' : '');
       }
       var tot = fmtVal(p.total, p, p.rateT);
       function wt(f){ return f.dash ? 400 : p.primary ? 800 : p.bold ? 700 : p.ded ? 500 : 600; }
@@ -6228,7 +6340,7 @@ function _incentivePageInner(foldQ){
     }).join('');
   }
 
-  var zones = cap.filter(function(c){ return c.isZone; });
+  var zones = B.zones;
   window._incZoneNames = zones.map(function(z){ return z.name; });
   var body = '';   // no Grand Total block; zones (or reps) only
   var zEnts = [];
@@ -6251,7 +6363,10 @@ function _incentivePageInner(foldQ){
     +'<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);width:fit-content;max-width:100%;">'
       +'<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid '+BORDER+';flex-wrap:wrap;border-radius:12px 12px 0 0;">'
         +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Incentive</span>'
-        +(window._incPay
+        +(window._incYearSel || '')
+        +(window._incPay && window._incPay.text
+          ? '<span style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 10px;border:1px solid #D3DFF3;" title="A quarter\'s incentive is paid two quarters later">'+esc(window._incPay.text)+' · '+state.currency+'</span>'
+          : window._incPay
           ? '<span style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 10px;border:1px solid #D3DFF3;" title="A quarter\'s incentive is paid two quarters later">Paid in '+esc(window._incPay.payLabel)+' · for '+esc(window._incPay.label)+' ('+esc(window._incPay.months[0])+' – '+esc(window._incPay.months[2])+') · '+state.currency+'</span>'
           : '<span style="font-size:11px;color:#9AAFC8;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+(foldQ ? 'Quarterly' : state.reportView)+' · '+state.currency+'</span>')
         +(window._incPay ? _incLockBadge(window._incPay.key) : '')
@@ -6268,7 +6383,8 @@ function _incentivePageInner(foldQ){
         })()
         +(zones.length ? '<button onclick="incToggleAllZones('+(allOpen ? 'false' : 'true')+')" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+(allOpen ? 'Collapse All' : 'Expand All')+'</button>' : '')
         +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+zones.length+' zones · '+reps.length+' sales reps</span>'
-        +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">· Outstanding from ar_outstanding'+(incOutMeta && incOutMeta.asOn ? ' as on <span style="color:#2C4E82;font-weight:700;">'+esc(incOutMeta.asOn)+'</span>' : '')+'</span>'
+        +(pre && pre.multi ? '<span style="font-size:11px;color:#6B82A0;font-weight:600;">· Each quarter is worked out from its own frozen data (outstanding as on its lock date, shown under the quarter)</span>'
+          : '<span style="font-size:11px;color:#6B82A0;font-weight:600;">· Outstanding from ar_outstanding'+(incOutMeta && incOutMeta.asOn ? ' as on <span style="color:#2C4E82;font-weight:700;">'+esc(incOutMeta.asOn)+'</span>' : '')+'</span>')
         +(incOutMeta && !incOutMeta.paidDocs ? '<span style="font-size:11px;color:#A8720E;font-weight:700;">· Paid 30+ days overdue: no paid invoices in ar_outstanding yet. The AR sync that ran'+(incOutMeta.pushedAt ? ' (last push '+esc(new Date(incOutMeta.pushedAt).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }))+')' : '')+' is an old copy: paste apps-script/arSync.gs into the Apps Script project and run it</span>' : '')
         +(incOutMeta && !incOutMeta.docsWithRef ? '<span style="font-size:11px;color:#B83A2B;font-weight:700;">· No Ref No (refNo) found in ar_outstanding'+(incOutMeta.fields ? ' (fields: '+esc(incOutMeta.fields.join(', '))+')' : '')+'</span>' : '')
       +'</div>'
@@ -6352,7 +6468,7 @@ function _incWithData(F, fn){
 }
 // Before the Calculation / Summary tabs draw: know whether the quarter is locked, and load its frozen copy if so.
 // Returns what to show meanwhile, or '' when ready.
-function _incLockGate(q){
+function _incLockGate(q, noRun){
   function wait(msg){ return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div><div style="font-size:13px;color:#9AAFC8;font-weight:500;">'+msg+'</div></div>'; }
   function fail(msg){ return '<div style="padding:40px 24px;text-align:center;color:#B83A2B;font-size:12px;font-weight:600;">'+esc(msg)
     + '<div style="margin-top:12px;"><button onclick="incLockRetry(\''+q+'\')" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:6px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">Try again</button></div></div>'; }
@@ -6361,7 +6477,7 @@ function _incLockGate(q){
     if (incFrozenErr[q]) return fail('Couldn’t load the frozen data for ' + incLock[q].label + ': ' + incFrozenErr[q]);
     _incFrozenLoad(q); return wait('Loading the frozen ' + esc(incLock[q].label) + ' data…');
   }
-  if (incLock[q].frozen) _incAutoRunCheck(q);
+  if (incLock[q].frozen && !noRun) _incAutoRunCheck(q);
   return '';
 }
 function incLockRetry(q){ incLockErr[q] = ''; incFrozenErr[q] = ''; delete incLock[q]; render(); }
