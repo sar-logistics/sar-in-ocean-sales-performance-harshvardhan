@@ -5,7 +5,7 @@
 
 const { MongoClient } = require("mongodb");
 const { arPush, arGet, arBucketsGet, arBucketsSave, arDetail } = require("./_ar");
-const { incentiveOutstanding, incentiveHeld, incentiveRunSave, incentiveRuns, incentiveRun, incentiveShipment, incentiveRunDelete } = require("./_incentive");
+const { incentiveOutstanding, incentiveHeld, incentiveRunSave, incentiveRuns, incentiveRun, incentiveShipment, incentiveRunDelete, incentiveAccess, incentiveAccessSave } = require("./_incentive");
 
 const MONGO_URI = process.env.MONGO_URI;
 const DB_NAME   = "sar-in-air-sales";  // Option B: same DB as Air, Ocean dashboard filters differently
@@ -2923,7 +2923,7 @@ module.exports = async function handler(req, res) {
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "tradelaneDrill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug", "ar", "arDetail", "incentiveOutstanding", "incentiveRuns", "incentiveRun", "incentiveShipment", "incentiveHeld"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "tradelaneDrill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug", "ar", "arDetail", "incentiveOutstanding", "incentiveRuns", "incentiveRun", "incentiveShipment", "incentiveHeld", "incentiveAccess"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -2956,6 +2956,8 @@ module.exports = async function handler(req, res) {
     if (action === "incentiveShipment") { const r = await incentiveShipment(db, req.query?.s); return res.status(r.status).json(r.json); }
     if (action === "incentiveHeld") { const r = await incentiveHeld(db, req.query || {}); return res.status(r.status).json(r.json); }
     if (action === "incentiveRunSave") { const r = await incentiveRunSave(db, req.body || {}); return res.status(r.status).json(r.json); }
+    if (action === "incentiveAccess") { const r = await incentiveAccess(db); return res.status(r.status).json(r.json); }
+    if (action === "incentiveAccessSave") { const r = await incentiveAccessSave(db, req.body || {}); return res.status(r.status).json(r.json); }
     if (action === "incentiveRunDelete") { const r = await incentiveRunDelete(db, req.body || {}); return res.status(r.status).json(r.json); }
     if (action === "arPush") {
       const r = await arPush(db, req.body || {});

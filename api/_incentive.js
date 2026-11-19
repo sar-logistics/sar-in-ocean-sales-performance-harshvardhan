@@ -399,4 +399,31 @@ async function incentiveRunDelete(db, body) {
   return { status: 200, json: { success: true } };
 }
 
-module.exports = { incentiveOutstanding, incentiveHeld, incentiveRunSave, incentiveRuns, incentiveRun, incentiveShipment, incentiveRunDelete };
+// ── Who can see the Incentive Summary tab ─────────────────────────
+// One settings document holds the e-mails that were granted access. Admins always have access and are the
+// only ones who can change the list (checked against ocean_users, not what the browser says the role is).
+const SETTINGS = "incentive_settings", ACCESS_ID = "summaryAccess";
+function _em(v) { return String(v || "").toLowerCase().trim(); }
+async function _isAdmin(db, email) {
+  if (!email) return false;
+  const u = await db.collection("ocean_users").findOne({ email: email, isActive: { $ne: false } }, { projection: { role: 1 } });
+  return !!u && String(u.role || "").toLowerCase().trim() === "admin";
+}
+async function incentiveAccess(db) {
+  const d = await db.collection(SETTINGS).findOne({ _id: ACCESS_ID });
+  return { status: 200, json: { success: true, emails: (d && d.emails) || [], updatedBy: (d && d.updatedBy) || null, updatedAt: (d && d.updatedAt) || null } };
+}
+async function incentiveAccessSave(db, body) {
+  const by = _em(body && body.by);
+  if (!(await _isAdmin(db, by))) return { status: 403, json: { success: false, error: "Only an Admin can change who sees the Incentive Summary" } };
+  const seen = {}, emails = [];
+  (Array.isArray(body.emails) ? body.emails : []).forEach(function (e) {
+    e = _em(e);
+    if (e && /^[^@\s]+@[^@\s]+$/.test(e) && !seen[e]) { seen[e] = 1; emails.push(e); }
+  });
+  const updatedAt = new Date();
+  await db.collection(SETTINGS).updateOne({ _id: ACCESS_ID }, { $set: { emails: emails, updatedBy: by, updatedAt: updatedAt } }, { upsert: true });
+  return { status: 200, json: { success: true, emails: emails, updatedBy: by, updatedAt: updatedAt } };
+}
+
+module.exports = { incentiveOutstanding, incentiveHeld, incentiveRunSave, incentiveRuns, incentiveRun, incentiveShipment, incentiveRunDelete, incentiveAccess, incentiveAccessSave };

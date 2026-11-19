@@ -5930,6 +5930,7 @@ function _incPayQuarter(now){
 }
 function incentivePage(){
   if (state.incTab === 'history') return _incTabs() + incHistoryPage();
+  if (state.incTab === 'summary' && _incCanSummary()) return _incTabs() + incSummaryPage();
   // Work out the page for the quarter being paid now, whatever period is picked in the top bar (put back after)
   var pq = _incPayQuarter();
   var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo };
@@ -6215,16 +6216,21 @@ function _incentivePageInner(foldQ){
   var zones = cap.filter(function(c){ return c.isZone; });
   window._incZoneNames = zones.map(function(z){ return z.name; });
   var body = '';   // no Grand Total block; zones (or reps) only
+  var zEnts = [];
   if (zones.length) {
     zones.forEach(function(z){
       var zReps = reps.filter(function(r){ return (r.zone || 'Cross Sales') === z.name; });
-      body += block(withAgg({ name:z.name, initials:z.initials, avatarBg:z.avatarBg, isZone:true, gp:z.gp, tgt:z.tgt, drillCells:z.drillCells,
-                      repCount:zReps.length, members:zReps }, byZone[z.name]));
+      var zEnt = withAgg({ name:z.name, initials:z.initials, avatarBg:z.avatarBg, isZone:true, gp:z.gp, tgt:z.tgt, drillCells:z.drillCells,
+                      repCount:zReps.length, members:zReps }, byZone[z.name]);
+      zEnts.push(zEnt);
+      body += block(zEnt);
       if (state.incZoneOpen && state.incZoneOpen[z.name]) body += zReps.map(block).join('');
     });
   } else {
     body += reps.map(block).join('');
   }
+  // The Summary tab reads these results; it never works the numbers out again
+  window._incModel = { reps:reps, zones:zEnts, calc:calc, heads:heads };
   var allOpen = zones.length > 0 && zones.every(function(z){ return state.incZoneOpen && state.incZoneOpen[z.name]; });
   return '<div style="padding:20px 24px 32px;">'
     +'<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);width:fit-content;max-width:100%;">'
@@ -6276,14 +6282,413 @@ var INC_STATUS = {
   already: { l:'Already paid', c:'#64748B', bg:'#EEF1F6' }
 };
 var INC_WHY = { fl:'FL not done', unpaid:'O/S amount', late:'Paid 30+ days overdue', below:'Rep below 75% GP%', already:'Paid / removed in an earlier run' };
-function incSetTab(t){ state.incTab = t === 'history' ? 'history' : 'calc'; render(); }
+function incSetTab(t){ state.incTab = t === 'history' ? 'history' : t === 'summary' && _incCanSummary() ? 'summary' : 'calc'; render(); }
 function _incTabs(){
-  var cur = state.incTab === 'history' ? 'history' : 'calc';
+  _incAccessLoad();
+  var cur = state.incTab === 'history' ? 'history' : state.incTab === 'summary' && _incCanSummary() ? 'summary' : 'calc';
   function tab(k, label){
     var on = cur === k;
     return '<button onclick="incSetTab(\''+k+'\')" class="btnq" style="border:none;background:transparent;padding:8px 2px;margin-right:18px;font-size:12.5px;font-weight:'+(on ? 800 : 600)+';color:'+(on ? '#0D2B5E' : '#6B82A0')+';border-bottom:2.5px solid '+(on ? BRAND_A2 : 'transparent')+';cursor:pointer;">'+label+'</button>';
   }
-  return '<div style="padding:14px 24px 0;display:flex;align-items:flex-end;border-bottom:1px solid #E3EAF3;">'+tab('calc','Calculation')+tab('history','Payout History')+'</div>';
+  return '<div style="padding:14px 24px 0;display:flex;align-items:flex-end;border-bottom:1px solid #E3EAF3;">'+tab('calc','Calculation')+(_incCanSummary() ? tab('summary','Summary') : '')+tab('history','Payout History')+'</div>';
+}
+/* ---------------------- Incentive: Summary tab (management) ----------------------
+   A payout overview for management. Every number comes from the Calculation tab's own engine
+   (window._incModel, filled by _incentivePageInner): nothing is worked out again here, it is only added up.
+   Only Admins and the people an Admin grants access to see this tab (list kept on the server). */
+var incAccess = null, incAccessLoading = false, incAccessErr = '';
+function _incIsAdmin(){ return !!currentUser && String(currentUser.role || '').toLowerCase().trim() === 'admin'; }
+function _incMyEmail(){ return currentUser && currentUser.email ? String(currentUser.email).toLowerCase().trim() : ''; }
+function _incCanSummary(){
+  if (_incIsAdmin()) return true;
+  var me = _incMyEmail();
+  return !!me && !!incAccess && incAccess.emails.indexOf(me) > -1;
+}
+function _incAccessLoad(force){
+  if (incAccessLoading || (incAccess && !force)) return;
+  incAccessLoading = true;
+  fetch('/api/mongo-batch?action=incentiveAccess')
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Could not load access'); incAccess = { emails:d.emails || [], updatedBy:d.updatedBy, updatedAt:d.updatedAt }; incAccessErr = ''; })
+    .catch(function(e){ incAccessErr = e.message || String(e); if (!incAccess) incAccess = { emails:[] }; })
+    .finally(function(){ incAccessLoading = false; if (state.page === 'incentive') render(); });
+}
+function _incAccessSave(emails){
+  fetch('/api/mongo-batch?action=incentiveAccessSave', { method:'POST', headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify({ action:'incentiveAccessSave', emails:emails, by:_incMyEmail() }) })
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Save failed'); incAccess = { emails:d.emails, updatedBy:d.updatedBy, updatedAt:d.updatedAt }; incAccessErr = ''; })
+    .catch(function(e){ incAccessErr = e.message || String(e); })
+    .finally(function(){ render(); });
+}
+// Everyone in the org list, for the "grant access" picker
+function _incPeople(){
+  var out = [], seen = {};
+  if (orgData) ['support','hierarchy','directReports'].forEach(function(k){
+    (orgData[k] || []).forEach(function(p){ var e = String(p.email || '').toLowerCase().trim(); if (e && !seen[e]) { seen[e] = 1; out.push({ email:e, name:p.name || e, role:p.role || '' }); } });
+  });
+  return out.sort(function(a, b){ return a.name.localeCompare(b.name); });
+}
+function incAccessToggle(){ state.incAccessOpen = !state.incAccessOpen; if (state.incAccessOpen && !orgData) fetchOrgData(function(){ render(); }); render(); }
+function incAccessAdd(){
+  var el = document.getElementById('incAccessInput'); if (!el) return;
+  var v = String(el.value || '').trim(), m = /([^\s<>()]+@[^\s<>()]+)/.exec(v);
+  if (!m) { incAccessErr = 'Pick a person from the list, or type their e-mail.'; render(); return; }
+  var e = m[1].toLowerCase(), list = (incAccess ? incAccess.emails : []).slice();
+  if (list.indexOf(e) === -1) list.push(e);
+  _incAccessSave(list);
+}
+function incAccessRemove(e){
+  if (!confirm('Remove Summary access for ' + e + '?')) return;
+  _incAccessSave((incAccess ? incAccess.emails : []).filter(function(x){ return x !== e; }));
+}
+
+function _incSum(){ return state.incSum || (state.incSum = { part:'all', zone:'', elig:'elig', sort:'inc', dir:-1, q:'', quarter:'', open:{} }); }
+function incSumSet(k, v){ var S = _incSum(); if (k === 'sort') { if (S.sort === v) S.dir = -S.dir; else { S.sort = v; S.dir = v === 'name' || v === 'zone' ? 1 : -1; } } else S[k] = v; render(); }
+function incSumOpen(name){ var S = _incSum(); S.open[name] = !S.open[name]; render(); }
+function incSumZone(z){ var S = _incSum(); S.zone = S.zone === z ? '' : z; S.elig = 'elig'; render(); setTimeout(function(){ var t = document.getElementById('incSumReps'); if (t) t.scrollIntoView({ behavior:'smooth', block:'start' }); }, 30); }
+// Search filters the rows in place, so typing never loses focus
+function incSumSearch(v){
+  _incSum().q = v;
+  var q = String(v || '').toLowerCase().trim(), shown = 0;
+  document.querySelectorAll('#incSumReps tr[data-rep]').forEach(function(tr){
+    var hit = !q || tr.getAttribute('data-rep').indexOf(q) > -1;
+    tr.style.display = hit ? '' : 'none';
+    var d = tr.nextElementSibling; if (d && d.hasAttribute('data-detail')) d.style.display = hit ? '' : 'none';
+    if (hit) shown++;
+  });
+  var c = document.getElementById('incSumCount'); if (c) c.textContent = shown;
+}
+// Jump to a rep (or a zone) in the Calculation tab, with its groups open
+function incSumGoCalc(zone, rep, part){
+  state.incTab = 'calc';
+  if (part === 'core' || part === 'cross') state.incPart = part;
+  if (zone) { state.incZoneOpen = state.incZoneOpen || {}; state.incZoneOpen[zone] = true; }
+  if (rep) { state.incGpOpen = state.incGpOpen || {}; state.incGpOpen['E:R:' + rep] = true; state.incGpOpen['A:R:' + rep] = true; }
+  render();
+  setTimeout(function(){
+    var sc = document.getElementById('incScroll'); if (!sc) return;
+    var hit = null;
+    if (rep) sc.querySelectorAll('[title]').forEach(function(el){ if (!hit && el.getAttribute('title') === rep) hit = el; });
+    if (!hit && zone) hit = sc.querySelector('[data-zone="' + String(zone).replace(/"/g, '\\"') + '"]');
+    var td = hit && hit.closest('td'); if (!td) return;
+    sc.scrollTop = Math.max(0, td.offsetTop - 48);
+    var ms = document.getElementById('main-slot'); if (ms) ms.scrollTop = 0;
+    td.style.transition = 'background 0.6s'; var bg = td.style.background; td.style.background = '#FFF3C4';
+    setTimeout(function(){ td.style.background = bg; }, 1400);
+  }, 60);
+}
+
+// Rep and zone figures for the Summary, read off the engine. part: 'core' | 'cross' | 'all' (Core + Cross)
+function _incSumData(M, part){
+  function T(a){ return sum(a || []); }
+  function pick(ent){
+    var c = M.calc(ent), parts = part === 'all' ? ['core','cross'] : [part];
+    var o = { name:ent.name, zone:ent.isZone ? ent.name : (ent.zone || 'Cross Sales'), noTarget:!!ent.noTarget, tgt:T(ent.tgt), parts:{} };
+    var inc = 0, any = false, elig = false, gp = 0, fin = 0, finAny = false;
+    parts.forEach(function(k){
+      var P = c[k];
+      o.parts[k] = { gp:T(P.gp), ach:P.achT, elig:P.eligT === true, rate:P.rateT, inc:P.incT, fin:P.amtT, fee:P.feeT, ded:P.allT,
+                     rm:P.rmT, ships:P.ships };
+      gp += T(P.gp);
+      if (P.eligT === true) elig = true;
+      if (P.amtT != null) { fin += P.amtT; finAny = true; }
+      if (P.incT != null) { inc += P.incT; any = true; }
+    });
+    o.gp = gp; o.elig = elig; o.fin = finAny ? fin : null; o.inc = any ? inc : null;
+    o.pay = o.elig && o.inc != null && o.inc > 0 ? o.inc : 0;   // what is actually payable
+    if (parts.length === 1) { var P1 = o.parts[parts[0]]; o.ach = P1.ach; o.rate = P1.rate; }
+    return o;
+  }
+  var reps = M.reps.map(pick), zones = M.zones.map(pick);
+  var byZ = {};
+  zones.forEach(function(z){ byZ[z.name] = { name:z.name, zm:z.pay, zmElig:z.elig, reps:0, elig:0, pay:0 }; });
+  reps.forEach(function(r){
+    var Z = byZ[r.zone] || (byZ[r.zone] = { name:r.zone, zm:0, zmElig:false, reps:0, elig:0, pay:0 });
+    Z.reps++; if (r.elig) Z.elig++; Z.pay += r.pay;
+  });
+  var zl = Object.keys(byZ).map(function(k){ return byZ[k]; });
+  var repPay = sum(reps.map(function(r){ return r.pay; })), zmPay = sum(zl.map(function(z){ return z.zm; }));
+  return { reps:reps, zones:zl, repPay:repPay, zmPay:zmPay, total:repPay + zmPay,
+           nElig:reps.filter(function(r){ return r.elig; }).length,
+           nPaid:reps.filter(function(r){ return r.pay > 0; }).length };
+}
+
+function incSummaryPage(){
+  var S = _incSum();
+  var qs = _incQuarters(), pq = _incPayQuarter();
+  var sel = qs.filter(function(q){ return q.key === S.quarter; })[0] || null;
+  var period = sel ? { key:sel.key, label:sel.label, months:sel.months } : pq;
+  var isPayQ = period.key === pq.key;
+  // Same period handling as the Calculation tab (put back after)
+  var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo };
+  state.reportView = 'Monthly'; state.dateFrom = period.months[0]; state.dateTo = period.months[period.months.length - 1];
+  window._incPay = isPayQ ? pq : null; window._incModel = null;
+  var html;
+  try { html = _incentivePageInner(true); }
+  finally { state.reportView = keep.reportView; state.dateFrom = keep.dateFrom; state.dateTo = keep.dateTo; }
+  var M = window._incModel; window._incModel = null;
+  if (!M) return html;   // still loading, or nothing for this quarter: show what the Calculation tab shows
+
+  var D = _incSumData(M, S.part);
+  var cur = state.currency, nReps = D.reps.length;
+  var INK = '#14213D', SUB = '#5B6678', MUTED = '#8A9AB5', LINE = '#E3E9F2', PURPLE = '#6B3FA0', NAVY = '#0D2B5E';
+  function pct(a, b){ return b > 0 ? Math.round(a / b * 100) : 0; }
+  function zoneParts(z){ if (z === 'Cross Sales') return ['Cross Sales', '']; var m = /^(\S+)\s*(.*)$/.exec(z || ''); return m ? [m[1], m[2]] : [z, '']; }
+  function partLabel(k){ return k === 'core' ? 'Core' : k === 'cross' ? 'Cross' : 'Core + Cross'; }
+  function btn(on){ return 'border:none;border-radius:999px;padding:5px 13px;font-size:11px;font-weight:700;cursor:pointer;'+(on ? 'background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');color:#FFFFFF;' : 'background:transparent;color:#1E3A66;'); }
+  var pill = 'background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;';
+  var card = 'background:#FFFFFF;border:1px solid #D5DCE6;border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.06);';
+
+  // ── Header: period, Core / Cross, quarter, export, access ──
+  var head = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">'
+    + '<span style="font-size:15px;font-weight:800;color:'+NAVY+';letter-spacing:-0.01em;">Incentive payout summary</span>'
+    + '<span style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 10px;border:1px solid #D3DFF3;">'
+      + (isPayQ ? 'Paid in '+esc(pq.payLabel)+' · ' : '') + 'for '+esc(period.label)+' ('+esc(period.months[0])+' – '+esc(period.months[period.months.length - 1])+') · '+cur+'</span>'
+    + '<div role="radiogroup" aria-label="Core or Cross" style="display:inline-flex;gap:2px;padding:2px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;">'
+      + ['all','core','cross'].map(function(k){ return '<button onclick="incSumSet(\'part\',\''+k+'\')" class="btnq" role="radio" aria-checked="'+(S.part === k)+'" style="'+btn(S.part === k)+'">'+partLabel(k)+'</button>'; }).join('')
+    + '</div>'
+    + '<select onchange="incSumSet(\'quarter\', this.value)" title="Quarter" style="'+pill+'">'
+      + qs.slice().reverse().map(function(q){ var on = q.key === period.key; return '<option value="'+esc(q.key === pq.key ? '' : q.key)+'"'+(on ? ' selected' : '')+'>'+esc(q.label)+(q.key === pq.key ? ' (paid now)' : '')+'</option>'; }).join('')
+    + '</select>'
+    + '<span style="flex:1;"></span>'
+    + '<button onclick="incSumExport()" class="btnq" style="'+pill+'">Export CSV</button>'
+    + (_incIsAdmin() ? '<button onclick="incAccessToggle()" class="btnq" style="'+pill+(state.incAccessOpen ? 'background:#E6EDF9;' : '')+'">Who can see this ('+(incAccess ? incAccess.emails.length : 0)+')</button>' : '')
+  + '</div>';
+
+  // ── Access panel (Admins only) ──
+  var access = '';
+  if (_incIsAdmin() && state.incAccessOpen) {
+    var people = _incPeople(), byE = {}; people.forEach(function(p){ byE[p.email] = p; });
+    var list = incAccess ? incAccess.emails : [];
+    access = '<div style="'+card+'padding:14px 18px;margin-bottom:14px;">'
+      + '<div style="font-size:12.5px;font-weight:800;color:'+NAVY+';">Who can see the Summary tab</div>'
+      + '<div style="font-size:11px;color:'+SUB+';margin-top:3px;">Admins always can. Everyone else needs to be added here (e.g. Management and Strategy). Changes apply the next time they open the page.</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">'
+        + (list.length ? list.map(function(e){
+            var p = byE[e];
+            return '<span style="display:inline-flex;align-items:center;gap:6px;background:#F4F7FC;border:1px solid #D8E1F0;border-radius:999px;padding:4px 6px 4px 11px;font-size:11.5px;color:'+INK+';">'
+              + '<b style="font-weight:700;">'+esc(p ? p.name : e)+'</b>'+(p ? '<span style="color:'+MUTED+';">'+esc(e)+'</span>' : '')
+              + '<button data-e="'+esc(e)+'" onclick="incAccessRemove(this.dataset.e)" class="btnq" title="Remove access" aria-label="Remove access for '+esc(e)+'" style="border:none;background:#E3E9F2;color:#475569;border-radius:50%;width:18px;height:18px;font-size:11px;line-height:1;cursor:pointer;">×</button></span>';
+          }).join('') : '<span style="font-size:11.5px;color:'+MUTED+';">Nobody added yet. Only Admins see the Summary.</span>')
+      + '</div>'
+      + '<div style="display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap;">'
+        + '<input id="incAccessInput" list="incAccessPeople" placeholder="Type a name or e-mail" onkeydown="if(event.key===\'Enter\')incAccessAdd()" style="flex:1;min-width:220px;max-width:420px;border:1.5px solid #D8E1F0;border-radius:8px;padding:7px 10px;font-size:12px;color:'+INK+';">'
+        + '<datalist id="incAccessPeople">'+people.filter(function(p){ return list.indexOf(p.email) === -1; }).map(function(p){ return '<option value="'+esc(p.name+' <'+p.email+'>')+'">'+esc(p.role)+'</option>'; }).join('')+'</datalist>'
+        + '<button onclick="incAccessAdd()" class="btnq" style="border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');cursor:pointer;">Give access</button>'
+        + (!orgData ? '<span style="font-size:11px;color:'+MUTED+';">Loading people…</span>' : '')
+      + '</div>'
+      + (incAccessErr ? '<div style="font-size:11.5px;color:#B83A2B;font-weight:600;margin-top:8px;">'+esc(incAccessErr)+'</div>' : '')
+      + (incAccess && incAccess.updatedBy ? '<div style="font-size:10.5px;color:'+MUTED+';margin-top:8px;">Last changed by '+esc(incAccess.updatedBy)+(incAccess.updatedAt ? ' on '+esc(new Date(incAccess.updatedAt).toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })) : '')+'</div>' : '')
+    + '</div>';
+  }
+
+  // ── Headline figures ──
+  var avg = D.nElig ? D.repPay / D.nElig : 0;
+  function stat(label, value, note, big){
+    return '<div style="padding:16px 22px;min-width:170px;flex:'+(big ? '1.6' : '1')+';">'
+      + '<div style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:'+SUB+';">'+label+'</div>'
+      + '<div style="font-family:\'DM Mono\',monospace;font-variant-numeric:tabular-nums;font-size:'+(big ? 30 : 22)+'px;font-weight:800;color:'+(big ? PURPLE : INK)+';margin-top:6px;letter-spacing:-0.02em;">'+value+'</div>'
+      + '<div style="font-size:11px;color:'+MUTED+';margin-top:4px;">'+note+'</div></div>';
+  }
+  var sep = '<div style="width:1px;background:'+LINE+';margin:14px 0;"></div>';
+  var kpis = '<div style="'+card+'display:flex;flex-wrap:wrap;margin-bottom:14px;">'
+    + stat('Total incentive payable', fmtCur(D.total), 'Sales reps '+fmtCur(D.repPay)+' · Zone managers '+fmtCur(D.zmPay), true) + sep
+    + stat('Eligible sales reps', D.nElig + '<span style="font-size:14px;color:'+MUTED+';font-weight:600;"> / '+nReps+'</span>', pct(D.nElig, nReps)+'% of reps reached 75% GP%') + sep
+    + stat('Not eligible', String(nReps - D.nElig), 'Below 75% GP% or no target') + sep
+    + stat('Average per eligible rep', D.nElig ? fmtCur(avg) : '–', D.nElig ? 'Sales reps\' incentive spread over '+D.nElig+' eligible rep'+(D.nElig === 1 ? '' : 's') : 'Nobody is eligible')
+  + '</div>';
+
+  // ── Insights (worked out from the figures above) ──
+  var paid = D.reps.filter(function(r){ return r.pay > 0; }).sort(function(a, b){ return b.pay - a.pay; });
+  var zSorted = D.zones.slice().sort(function(a, b){ return (b.pay + b.zm) - (a.pay + a.zm); });
+  var topZ = zSorted[0] && (zSorted[0].pay + zSorted[0].zm) > 0 ? zSorted[0] : null;
+  function fact(label, main, note){
+    return '<div style="flex:1;min-width:200px;padding:12px 18px;border-left:3px solid #D3DFF3;">'
+      + '<div style="font-size:10.5px;font-weight:700;color:'+SUB+';text-transform:uppercase;letter-spacing:0.05em;">'+label+'</div>'
+      + '<div style="font-size:13px;font-weight:800;color:'+INK+';margin-top:4px;">'+main+'</div>'
+      + '<div style="font-size:11px;color:'+MUTED+';margin-top:2px;">'+note+'</div></div>';
+  }
+  var insights = '<div style="'+card+'display:flex;flex-wrap:wrap;gap:4px;padding:6px 4px;margin-bottom:14px;">'
+    + fact('Highest incentive', paid[0] ? esc(paid[0].name) : '–', paid[0] ? fmtCur(paid[0].pay)+' · '+esc(zoneParts(paid[0].zone)[0]) : 'Nobody is being paid')
+    + fact('Lowest incentive', paid.length > 1 ? esc(paid[paid.length - 1].name) : '–', paid.length > 1 ? fmtCur(paid[paid.length - 1].pay)+' · '+esc(zoneParts(paid[paid.length - 1].zone)[0]) : 'Fewer than two reps paid')
+    + fact('Top zone', topZ ? esc(zoneParts(topZ.name)[0]) : '–', topZ ? fmtCur(topZ.pay + topZ.zm)+' · '+pct(topZ.pay + topZ.zm, D.total)+'% of the total payout' : 'No payout yet')
+    + fact('Eligibility', pct(D.nElig, nReps)+'% of reps', D.nElig+' of '+nReps+' reps reached 75% GP%')
+  + '</div>';
+
+  // ── Reps table ──
+  var zoneOpts = D.zones.map(function(z){ return z.name; }).sort();
+  var rows = D.reps.filter(function(r){
+    if (S.zone && r.zone !== S.zone) return false;
+    if (S.elig === 'elig' && !r.elig) return false;
+    if (S.elig === 'not' && r.elig) return false;
+    return true;
+  });
+  var key = { name:function(r){ return r.name.toLowerCase(); }, zone:function(r){ return r.zone.toLowerCase(); }, gp:function(r){ return r.gp; },
+              tgt:function(r){ return r.tgt; }, ach:function(r){ return r.ach == null ? -1e9 : r.ach; }, fin:function(r){ return r.fin == null ? -1e18 : r.fin; },
+              inc:function(r){ return r.pay; } }[S.sort] || function(r){ return r.pay; };
+  rows.sort(function(a, b){
+    if (a.elig !== b.elig) return a.elig ? -1 : 1;   // eligible reps first
+    var x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * S.dir || a.name.localeCompare(b.name);
+  });
+  var single = S.part !== 'all';
+  var th = 'position:sticky;top:0;z-index:2;background:#F0F4FA;padding:9px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#475569;border-bottom:2px solid #B0BAC8;white-space:nowrap;';
+  function sortTh(k, label, right, extra){
+    var on = S.sort === k, arrow = on ? (S.dir > 0 ? ' ▲' : ' ▼') : '';
+    return '<th onclick="incSumSet(\'sort\',\''+k+'\')" aria-sort="'+(on ? (S.dir > 0 ? 'ascending' : 'descending') : 'none')+'" style="'+th+'cursor:pointer;text-align:'+(right ? 'right' : 'left')+';'+(extra || '')+'">'+label+'<span style="color:'+PURPLE+';">'+arrow+'</span></th>';
+  }
+  var cols = single
+    ? sortTh('name','Sales rep') + sortTh('zone','Zone') + sortTh('gp','GP achieved',1) + sortTh('tgt','Target GP',1) + sortTh('ach','GP%',1) + sortTh('fin','Final GP',1) + '<th style="'+th+'text-align:right;">Rate</th>' + sortTh('inc','Total incentive',1,'background:#F1EBF8;color:'+PURPLE+';')
+    : sortTh('name','Sales rep') + sortTh('zone','Zone') + sortTh('tgt','Target GP',1) + '<th style="'+th+'text-align:right;">Core</th><th style="'+th+'text-align:right;">Cross</th>' + sortTh('fin','Final GP',1) + sortTh('inc','Total incentive',1,'background:#F1EBF8;color:'+PURPLE+';');
+  var nCol = single ? 8 : 7;
+  var td = 'padding:9px 12px;border-top:1px solid #EEF2F7;font-size:12px;white-space:nowrap;';
+  var num = td + 'text-align:right;font-family:\'DM Mono\',monospace;font-variant-numeric:tabular-nums;';
+  function achC(a){ return a == null ? MUTED : a >= 100 ? '#15875A' : a >= 75 ? '#A8720E' : '#C2410C'; }
+  function partCell(P){
+    if (!P) return '<td style="'+num+'color:#CBD3DF;">–</td>';
+    return '<td style="'+num+'">'
+      + '<span style="color:'+achC(P.ach)+';font-weight:700;">'+(P.ach == null ? '–' : P.ach+'%')+'</span>'
+      + (P.elig && P.inc != null ? '<span style="color:'+MUTED+';font-size:10.5px;"> · '+P.rate+'% · </span><span style="color:'+INK+';font-weight:600;">'+fmtCur(P.inc)+'</span>' : '<span style="color:'+MUTED+';font-size:10.5px;"> · not eligible</span>')
+    + '</td>';
+  }
+  function detail(r){
+    var ks = Object.keys(r.parts);
+    return '<tr data-detail="1"><td colspan="'+nCol+'" style="padding:4px 12px 14px 40px;background:#FAFBFD;border-top:1px dashed #E3E9F2;">'
+      + '<div style="display:flex;gap:28px;flex-wrap:wrap;">'
+      + ks.map(function(k){
+          var P = r.parts[k];
+          function ln(l, v, c, b){ return '<tr><td style="padding:3px 18px 3px 0;font-size:11.5px;color:'+(b ? INK : SUB)+';font-weight:'+(b ? 700 : 500)+';">'+l+'</td><td style="padding:3px 0;text-align:right;font-family:\'DM Mono\',monospace;font-size:11.5px;font-weight:'+(b ? 800 : 600)+';color:'+(c || INK)+';">'+v+'</td></tr>'; }
+          function money(v, neg){ return v == null ? '–' : (neg && v > 0 ? '−' : '') + fmtCur(neg ? Math.abs(v) : v); }
+          return '<div style="min-width:260px;"><div style="font-size:11px;font-weight:800;color:'+NAVY+';margin:8px 0 4px;text-transform:uppercase;letter-spacing:0.05em;">'+partLabel(k)+'</div><table style="border-collapse:collapse;">'
+            + ln('GP achieved', fmtCur(P.gp)) + ln('Target GP', r.noTarget ? '–' : fmtCur(r.tgt)) + ln('GP%', P.ach == null ? '–' : P.ach+'%', achC(P.ach))
+            + ln('Eligible', P.elig ? '✓ Yes' : '✕ No', P.elig ? '#15875A' : '#C2410C', true)
+            + (P.elig ? INC_RM.map(function(x){ return ln(esc(x.label)+(P.ships && P.ships[x.k] ? ' <span style="color:'+MUTED+';">· '+P.ships[x.k]+' job'+(P.ships[x.k] === 1 ? '' : 's')+'</span>' : ''), money(P.rm && P.rm[x.k], true), '#475569'); }).join('')
+                + ln('Management fees (15%)', money(P.fee, true), '#475569') + ln('Final GP after deductions', money(P.fin), '#0B7A4B', true)
+                + ln('Rate', P.rate == null ? '–' : P.rate+'%') + ln('Incentive', money(P.inc), PURPLE, true) : '')
+            + '</table>'
+            + (isPayQ ? '<button data-z="'+esc(r.zone)+'" data-r="'+esc(r.name)+'" data-p="'+k+'" onclick="incSumGoCalc(this.dataset.z, this.dataset.r, this.dataset.p)" class="btnq" style="margin-top:8px;border:none;background:transparent;color:#2C4E82;font-size:11px;font-weight:700;cursor:pointer;padding:0;text-decoration:underline;">Open in Calculation →</button>' : '')
+          + '</div>';
+        }).join('')
+      + '</div>'
+      + (!isPayQ ? '<div style="font-size:10.5px;color:'+MUTED+';margin-top:8px;">The Calculation tab shows the quarter being paid now ('+esc(pq.label)+'), so this quarter can\'t be opened there.</div>' : '')
+    + '</td></tr>';
+  }
+  var q = String(S.q || '').toLowerCase().trim(), shown = 0;
+  var body = rows.map(function(r){
+    var zp = zoneParts(r.zone), open = !!S.open[r.name], hide = q && r.name.toLowerCase().indexOf(q) === -1;
+    if (!hide) shown++;
+    var dim = r.elig ? '' : 'color:'+MUTED+';';
+    var incTd = '<td style="'+num+'background:#FAF6FD;font-size:13px;font-weight:800;color:'+(r.pay > 0 ? PURPLE : MUTED)+';">'+(r.pay > 0 ? fmtCur(r.pay) : r.elig ? fmtCur(0) : '<span style="font-size:11px;font-weight:600;font-family:inherit;">Not eligible</span>')+'</td>';
+    var name = '<td style="'+td+'"><span style="display:inline-block;width:14px;font-size:9px;color:'+MUTED+';">'+(open ? '▼' : '▶')+'</span><span style="font-weight:700;color:'+(r.elig ? INK : SUB)+';">'+esc(r.name)+'</span></td>';
+    var zone = '<td style="'+td+'"><span style="font-weight:700;color:'+NAVY+';">'+esc(zp[0])+'</span>'+(zp[1] ? ' <span style="color:'+MUTED+';font-size:11px;">'+esc(zp[1])+'</span>' : '')+'</td>';
+    var mid = single
+      ? '<td style="'+num+dim+'">'+fmtCur(r.gp)+'</td><td style="'+num+dim+'">'+(r.noTarget ? '–' : fmtCur(r.tgt))+'</td>'
+        + '<td style="'+num+'font-weight:700;color:'+achC(r.ach)+';">'+(r.ach == null ? '–' : r.ach+'%')+'</td>'
+        + '<td style="'+num+'color:'+(r.fin == null ? '#CBD3DF' : '#0B7A4B')+';font-weight:600;">'+(r.fin == null ? '–' : fmtCur(r.fin))+'</td>'
+        + '<td style="'+num+'color:'+SUB+';">'+(r.elig && r.rate != null ? r.rate+'%' : '–')+'</td>'
+      : '<td style="'+num+dim+'">'+(r.noTarget ? '–' : fmtCur(r.tgt))+'</td>' + partCell(r.parts.core) + partCell(r.parts.cross)
+        + '<td style="'+num+'color:'+(r.fin == null ? '#CBD3DF' : '#0B7A4B')+';font-weight:600;">'+(r.fin == null ? '–' : fmtCur(r.fin))+'</td>';
+    return '<tr data-rep="'+esc(r.name.toLowerCase())+'" onclick="incSumOpen(this.getAttribute(\'data-name\'))" data-name="'+esc(r.name)+'" style="cursor:pointer;'+(hide ? 'display:none;' : '')+'" title="Show how this was worked out">'+name+zone+mid+incTd+'</tr>'
+      + (open ? detail(r).replace('<tr data-detail="1">', '<tr data-detail="1"'+(hide ? ' style="display:none;"' : '')+'>') : '');
+  }).join('');
+  var shownPay = rows.filter(function(r){ return r.pay > 0; }).map(function(r){ return r.pay; });
+  var tools = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid #D5DCE6;">'
+    + '<span style="font-size:13px;font-weight:800;color:'+NAVY+';margin-right:4px;">Sales reps</span>'
+    + '<input type="search" value="'+esc(S.q || '')+'" oninput="incSumSearch(this.value)" placeholder="Search sales rep" aria-label="Search sales rep" style="border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11.5px;width:190px;color:'+INK+';">'
+    + '<select onchange="incSumSet(\'zone\', this.value)" aria-label="Zone" style="'+pill+'"><option value="">All zones</option>'+zoneOpts.map(function(z){ return '<option value="'+esc(z)+'"'+(S.zone === z ? ' selected' : '')+'>'+esc(z)+'</option>'; }).join('')+'</select>'
+    + '<select onchange="incSumSet(\'elig\', this.value)" aria-label="Eligibility" style="'+pill+'">'
+      + [['elig','Eligible only'],['all','All reps'],['not','Not eligible']].map(function(o){ return '<option value="'+o[0]+'"'+(S.elig === o[0] ? ' selected' : '')+'>'+o[1]+'</option>'; }).join('')+'</select>'
+    + '<span style="font-size:11px;color:'+SUB+';font-weight:600;"><span id="incSumCount">'+shown+'</span> shown</span>'
+    + '<span style="flex:1;"></span>'
+    + (shownPay.length ? '<span style="font-size:11px;color:'+SUB+';">Highest <b style="color:'+PURPLE+';">'+fmtCur(Math.max.apply(null, shownPay))+'</b> · Lowest <b style="color:'+PURPLE+';">'+fmtCur(Math.min.apply(null, shownPay))+'</b></span>' : '')
+  + '</div>';
+  var repsCard = '<div id="incSumReps" style="'+card+'margin-bottom:14px;overflow:hidden;">' + tools
+    + '<div style="overflow:auto;max-height:560px;"><table style="width:100%;border-collapse:collapse;">'
+      + '<thead><tr>'+cols+'</tr></thead><tbody>'
+      + (body || '<tr><td colspan="'+nCol+'" style="padding:28px;text-align:center;color:'+MUTED+';font-size:12px;">No reps match these filters.</td></tr>')
+    + '</tbody></table></div></div>';
+
+  // ── Zones: table + bar chart of each zone's payout ──
+  var zMax = Math.max.apply(null, zSorted.map(function(z){ return z.pay + z.zm; }).concat([0]));
+  var zth = 'padding:8px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#475569;border-bottom:2px solid #B0BAC8;white-space:nowrap;background:#F0F4FA;';
+  var zTable = '<table style="width:100%;border-collapse:collapse;"><thead><tr>'
+      + ['Zone','Reps','Eligible','Not eligible','Sales reps\' incentive','Avg per eligible rep','ZM incentive','Zone total','Share'].map(function(h, i){ return '<th style="'+zth+'text-align:'+(i ? 'right' : 'left')+';">'+h+'</th>'; }).join('')
+    + '</tr></thead><tbody>'
+    + zSorted.map(function(z){
+        var zp = zoneParts(z.name), on = S.zone === z.name;
+        return '<tr onclick="incSumZone(this.getAttribute(\'data-z\'))" data-z="'+esc(z.name)+'" title="Show this zone\'s reps" style="cursor:pointer;'+(on ? 'background:#F1EBF8;' : '')+'">'
+          + '<td style="'+td+'"><span style="font-weight:800;color:'+NAVY+';">'+esc(zp[0])+'</span>'+(zp[1] ? ' <span style="color:'+MUTED+';font-size:11px;">'+esc(zp[1])+'</span>' : '')+'</td>'
+          + '<td style="'+num+'">'+z.reps+'</td><td style="'+num+'color:#15875A;font-weight:700;">'+z.elig+'</td><td style="'+num+'color:'+SUB+';">'+(z.reps - z.elig)+'</td>'
+          + '<td style="'+num+'">'+fmtCur(z.pay)+'</td><td style="'+num+'color:'+SUB+';">'+(z.elig ? fmtCur(z.pay / z.elig) : '–')+'</td>'
+          + '<td style="'+num+'">'+(z.zm > 0 ? fmtCur(z.zm) : '<span style="color:#CBD3DF;">–</span>')+'</td>'
+          + '<td style="'+num+'font-weight:800;color:'+PURPLE+';">'+fmtCur(z.pay + z.zm)+'</td>'
+          + '<td style="'+num+'color:'+SUB+';">'+pct(z.pay + z.zm, D.total)+'%</td></tr>';
+      }).join('')
+    + '<tr style="background:#F6F8FB;"><td style="'+td+'font-weight:800;color:'+INK+';border-top:2px solid #B0BAC8;">Total</td>'
+      + '<td style="'+num+'font-weight:800;border-top:2px solid #B0BAC8;">'+nReps+'</td><td style="'+num+'font-weight:800;border-top:2px solid #B0BAC8;">'+D.nElig+'</td><td style="'+num+'font-weight:800;border-top:2px solid #B0BAC8;">'+(nReps - D.nElig)+'</td>'
+      + '<td style="'+num+'font-weight:800;border-top:2px solid #B0BAC8;">'+fmtCur(D.repPay)+'</td><td style="'+num+'border-top:2px solid #B0BAC8;color:'+SUB+';">'+(D.nElig ? fmtCur(avg) : '–')+'</td>'
+      + '<td style="'+num+'font-weight:800;border-top:2px solid #B0BAC8;">'+fmtCur(D.zmPay)+'</td><td style="'+num+'font-weight:800;color:'+PURPLE+';border-top:2px solid #B0BAC8;">'+fmtCur(D.total)+'</td><td style="'+num+'border-top:2px solid #B0BAC8;color:'+SUB+';">100%</td></tr>'
+    + '</tbody></table>';
+  var bars = zSorted.map(function(z){
+    var v = z.pay + z.zm, w = zMax > 0 ? Math.max(v > 0 ? 1 : 0, v / zMax * 100) : 0;
+    return '<div onclick="incSumZone(this.getAttribute(\'data-z\'))" data-z="'+esc(z.name)+'" title="'+esc(z.name)+': '+esc(fmtCur(v))+' ('+pct(v, D.total)+'%) · sales reps '+esc(fmtCur(z.pay))+' · ZM '+esc(fmtCur(z.zm))+'" style="display:grid;grid-template-columns:110px 1fr 130px;align-items:center;gap:10px;padding:5px 0;cursor:pointer;">'
+      + '<span style="font-size:11.5px;font-weight:700;color:'+NAVY+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(zoneParts(z.name)[0])+'</span>'
+      + '<div style="height:14px;background:#F2F4F8;border-radius:0 4px 4px 0;"><div style="height:100%;width:'+w.toFixed(1)+'%;background:'+PURPLE+';border-radius:0 4px 4px 0;"></div></div>'
+      + '<span style="font-size:11.5px;font-family:\'DM Mono\',monospace;color:'+INK+';text-align:right;white-space:nowrap;">'+fmtCur(v)+' <span style="color:'+MUTED+';">'+pct(v, D.total)+'%</span></span></div>';
+  }).join('');
+  var zonesCard = '<div style="'+card+'overflow:hidden;">'
+    + '<div style="padding:12px 16px;border-bottom:1px solid #D5DCE6;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:800;color:'+NAVY+';">Zones</span><span style="font-size:11px;color:'+MUTED+';">Click a zone to see its reps. ZM incentive is the zone manager\'s own incentive (2% / 3%), kept apart from the reps\'.</span></div>'
+    + '<div>'
+      + '<div style="overflow:auto;">'+zTable+'</div>'
+      + '<div style="max-width:820px;padding:14px 18px 16px;border-top:1px solid '+LINE+';"><div style="font-size:10.5px;font-weight:700;color:'+SUB+';text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Payout by zone</div>'+(bars || '<div style="font-size:11.5px;color:'+MUTED+';">No zones.</div>')+'</div>'
+    + '</div></div>';
+
+  var note = '<div style="font-size:10.5px;color:'+MUTED+';margin-top:12px;">Figures come straight from the Calculation tab (same GP, targets, deductions, fees and rates) for '+partLabel(S.part)+'. Only eligible reps with an incentive above zero count towards the total. The top-bar filters apply here too.</div>';
+  return '<div style="padding:18px 24px 32px;">' + head + access + kpis + insights + repsCard + zonesCard + note + '</div>';
+}
+
+// The Summary as a CSV file: the same figures as the screen (current Core / Cross choice and quarter)
+function incSumExport(){
+  var S = _incSum(), qs = _incQuarters(), pq = _incPayQuarter();
+  var sel = qs.filter(function(q){ return q.key === S.quarter; })[0], period = sel || pq;
+  var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo };
+  state.reportView = 'Monthly'; state.dateFrom = period.months[0]; state.dateTo = period.months[period.months.length - 1];
+  window._incModel = null;
+  try { _incentivePageInner(true); } finally { state.reportView = keep.reportView; state.dateFrom = keep.dateFrom; state.dateTo = keep.dateTo; }
+  var M = window._incModel; window._incModel = null;
+  if (!M) { alert('The figures are still loading. Try again in a moment.'); return; }
+  var D = _incSumData(M, S.part), cur = state.currency;
+  function amt(v){ return v == null ? '' : (cur === 'USD' ? v / state.rate : v).toFixed(2); }
+  function q(v){ v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  var part = S.part === 'core' ? 'Core' : S.part === 'cross' ? 'Cross' : 'Core + Cross';
+  var L = [];
+  function row(a){ L.push(a.map(q).join(',')); }
+  row(['Incentive payout summary']);
+  row(['Quarter', period.label + ' (' + period.months[0] + ' – ' + period.months[period.months.length - 1] + ')']);
+  if (period.key === pq.key) row(['Paid in', pq.payLabel]);
+  row(['Part', part]); row(['Currency', cur + (cur === 'USD' ? ' (1 USD = ' + state.rate + ' INR)' : '')]);
+  row(['Generated', new Date().toLocaleString('en-GB')]);
+  row([]);
+  row(['Total incentive payable', amt(D.total)]); row(['Sales reps', amt(D.repPay)]); row(['Zone managers', amt(D.zmPay)]);
+  row(['Eligible sales reps', D.nElig]); row(['Not eligible', D.reps.length - D.nElig]); row(['Reps being paid', D.nPaid]);
+  row(['Average per eligible rep', D.nElig ? amt(D.repPay / D.nElig) : '']);
+  row([]);
+  row(['Zone', 'Reps', 'Eligible', 'Not eligible', 'Sales reps incentive', 'ZM incentive', 'Zone total', 'Share %']);
+  D.zones.slice().sort(function(a, b){ return (b.pay + b.zm) - (a.pay + a.zm); }).forEach(function(z){
+    row([z.name, z.reps, z.elig, z.reps - z.elig, amt(z.pay), amt(z.zm), amt(z.pay + z.zm), D.total > 0 ? ((z.pay + z.zm) / D.total * 100).toFixed(1) : '0.0']);
+  });
+  row([]);
+  var single = S.part !== 'all';
+  row(['Sales rep', 'Zone', 'Eligible', 'GP achieved', 'Target GP'].concat(single ? ['GP%', 'Rate %'] : ['Core GP%', 'Core rate %', 'Core incentive', 'Cross GP%', 'Cross rate %', 'Cross incentive']).concat(['Final GP', 'Total incentive']));
+  D.reps.slice().sort(function(a, b){ return a.elig !== b.elig ? (a.elig ? -1 : 1) : b.pay - a.pay || a.name.localeCompare(b.name); }).forEach(function(r){
+    var mid = single ? [r.ach == null ? '' : r.ach, r.elig && r.rate != null ? r.rate : '']
+      : ['core', 'cross'].reduce(function(o, k){ var P = r.parts[k]; return o.concat([P.ach == null ? '' : P.ach, P.elig && P.rate != null ? P.rate : '', P.elig ? amt(P.inc) : '']); }, []);
+    row([r.name, r.zone, r.elig ? 'Yes' : 'No', amt(r.gp), r.noTarget ? '' : amt(r.tgt)].concat(mid).concat([amt(r.fin), amt(r.pay)]));
+  });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + L.join('\n')], { type:'text/csv' }));
+  a.download = 'Incentive Summary ' + period.label + ' ' + part + ' ' + cur + '.csv';
+  document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 // FY quarters that have Sales Performance months: [{ key:'FY27-Q2', label:'Q2 FY27', months:['Jul-26','Aug-26','Sep-26'] }]
 function _incQuarters(){
