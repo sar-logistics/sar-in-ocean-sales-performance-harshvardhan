@@ -6072,7 +6072,7 @@ function incentivePage(){
   var only = !yearly && qs.length === 1 && qs[0].key === pq.key, lastQ = qs[qs.length - 1];
   window._incPay = only ? pq
     : { key:lastQ.key, label:lastQ.label, months:lastQ.months, payLabel:lastQ.payLabel,
-        text:(last ? 'Last year · ' : '') + (yearly ? all4[0].label + ' – ' + all4[3].label : qs[0].label + (qs.length > 1 ? ' – ' + lastQ.label : '')) + (last ? '' : ' · paying ' + pq.label + ' now, in ' + pq.payLabel) };
+        text:'for ' + (yearly ? all4[0].label + ' – ' + all4[3].label : qs[0].label + (qs.length > 1 ? ' – ' + lastQ.label : '')) };
   window._incYearSel = _incYearPicker(Y, last);
   try {
     // Drawn on the latest quarter's data (zone regions, outstanding notes); the numbers are already worked out
@@ -6382,9 +6382,9 @@ function _incentivePageInner(foldQ, pre){
         +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Incentive</span>'
         +(window._incYearSel || '')
         +(window._incPay && window._incPay.text
-          ? '<span style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 10px;border:1px solid #D3DFF3;" title="A quarter\'s incentive is paid two quarters later">'+esc(window._incPay.text)+' · '+state.currency+'</span>'
+          ? '<span style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 10px;border:1px solid #D3DFF3;" title="A quarter\'s incentive is paid two quarters later">'+esc(window._incPay.text)+'</span>'
           : window._incPay
-          ? '<span style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 10px;border:1px solid #D3DFF3;" title="A quarter\'s incentive is paid two quarters later">Paid in '+esc(window._incPay.payLabel)+' · for '+esc(window._incPay.label)+' ('+esc(window._incPay.months[0])+' – '+esc(window._incPay.months[2])+') · '+state.currency+'</span>'
+          ? '<span style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 10px;border:1px solid #D3DFF3;" title="Paid in '+esc(window._incPay.payLabel)+' · '+esc(window._incPay.months[0])+' – '+esc(window._incPay.months[2])+'">for '+esc(window._incPay.label)+'</span>'
           : '<span style="font-size:11px;color:#9AAFC8;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+(foldQ ? 'Quarterly' : state.reportView)+' · '+state.currency+'</span>')
         +(window._incPay ? _incLockBadge(window._incPay.key) : '')
         +(function(){
@@ -6400,8 +6400,6 @@ function _incentivePageInner(foldQ, pre){
         })()
         +(zones.length ? '<button onclick="incToggleAllZones('+(allOpen ? 'false' : 'true')+')" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+(allOpen ? 'Collapse All' : 'Expand All')+'</button>' : '')
         +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+zones.length+' zones · '+reps.length+' sales reps</span>'
-        +(pre && pre.multi ? '<span style="font-size:11px;color:#6B82A0;font-weight:600;">· Each quarter is worked out from its own frozen data (outstanding as on its lock date, shown under the quarter)</span>'
-          : '<span style="font-size:11px;color:#6B82A0;font-weight:600;">· Outstanding from ar_outstanding'+(incOutMeta && incOutMeta.asOn ? ' as on <span style="color:#2C4E82;font-weight:700;">'+esc(incOutMeta.asOn)+'</span>' : '')+'</span>')
         +(incOutMeta && !incOutMeta.paidDocs ? '<span style="font-size:11px;color:#A8720E;font-weight:700;">· Paid 30+ days overdue: no paid invoices in ar_outstanding yet. The AR sync that ran'+(incOutMeta.pushedAt ? ' (last push '+esc(new Date(incOutMeta.pushedAt).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }))+')' : '')+' is an old copy: paste apps-script/arSync.gs into the Apps Script project and run it</span>' : '')
         +(incOutMeta && !incOutMeta.docsWithRef ? '<span style="font-size:11px;color:#B83A2B;font-weight:700;">· No Ref No (refNo) found in ar_outstanding'+(incOutMeta.fields ? ' (fields: '+esc(incOutMeta.fields.join(', '))+')' : '')+'</span>' : '')
       +'</div>'
