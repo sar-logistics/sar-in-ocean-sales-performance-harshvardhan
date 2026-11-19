@@ -2922,14 +2922,14 @@ function topbar(){
       +(['usage','teams','admin','org','ar'].indexOf(state.page) >= 0 ? '' : '<div style="position:relative;display:inline-block;flex-shrink:0;">'
         +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;transition:box-shadow 0.15s;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';'+(state.viewDropOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+pillShadow+';':'')+'">'
           +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="'+(state.viewDropOpen?'#1D5FCC':'#7C93B8')+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>'
-          +state.reportView+' View'
+          +(state.page==='incentive' ? (state.incView==='Yearly' ? 'Yearly' : 'Quarterly') : state.reportView)+' View'
           +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;transition:transform 0.2s;'+(state.viewDropOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
         +'</div>'
         +(state.viewDropOpen
           ? '<div id="view-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;overflow:hidden;padding:4px;">'
-            +((state.page==='customers'||state.page==='agents'||state.page==='tradelane') ? ['Monthly','Yearly'] : state.page==='incentive' ? ['Monthly','Quarterly','Yearly'] : ['Monthly','Weekly','Quarterly','Yearly']).map(function(v){
-              var active = state.reportView===v;
-              var desc = v==='Monthly'?'Month by month':v==='Weekly'?'Week by week':v==='Quarterly'?'Quarter view':v==='Yearly'?'Full year':'Custom range';
+            +((state.page==='customers'||state.page==='agents'||state.page==='tradelane') ? ['Monthly','Yearly'] : state.page==='incentive' ? ['Quarterly','Yearly'] : ['Monthly','Weekly','Quarterly','Yearly']).map(function(v){
+              var active = state.page==='incentive' ? (state.incView==='Yearly' ? 'Yearly' : 'Quarterly')===v : state.reportView===v;
+              var desc = state.page==='incentive' ? (v==='Yearly' ? 'Q1–Q4 of the year' : 'Paid quarters') : v==='Monthly'?'Month by month':v==='Weekly'?'Week by week':v==='Quarterly'?'Quarter view':v==='Yearly'?'Full year':'Custom range';
               return '<div data-act="setView" data-val="'+v+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;transition:background 0.1s;">'
                 +'<div style="font-size:12px;font-weight:'+(active?'700':'600')+';color:'+(active?'#1D5FCC':'#0D2B5E')+';">'+v+' View</div>'
                 +'<div style="font-size:10px;color:#9AAFC8;margin-top:1px;">'+desc+'</div>'
@@ -2939,7 +2939,7 @@ function topbar(){
           : '')
       +'</div>')
       // ── View-specific date selector ──────────────────────────────────────
-      +(['usage','teams','admin','org','ar'].indexOf(state.page) >= 0 ? '' : (function(){
+      +(['usage','teams','admin','org','ar','incentive'].indexOf(state.page) >= 0 ? '' : (function(){
         var v = (state.page === 'incentive' && state.reportView === 'Quarterly') ? 'Monthly' : state.reportView; // Incentive Quarterly: FY quarters of the picked months
         var ps = pillShadow;
 
@@ -6028,11 +6028,13 @@ function _incMergeQuarters(ms, qs){
   ms.forEach(function(m, qi){
     var Q = qs[qi], L = incLock[Q.key], F = _incFrozenFor(Q.key);
     m.heads.forEach(function(h){
+      if (m.blank) { heads.push({ top:h.top, sub:h.sub, note:'Not paid yet' }); return; }
       heads.push({ top:h.top, sub:h.sub, note:'Paid ' + Q.payLabel + (F && F.incOutMeta && F.incOutMeta.asOn ? ' · O/S ' + F.incOutMeta.asOn : L && !L.frozen ? ' · not frozen' : '') });
     });
   });
+  var blankCols = []; ms.forEach(function(m){ for (var i = 0; i < m.nCols; i++) blankCols.push(!!m.blank); });
   return { reps:ents(ms.map(function(m){ return m.reps; }), true), zones:ents(ms.map(function(m){ return m.zones; }), false),
-           byZone:byZone, heads:heads, groups:null, nCols:nTot, multi:ms.length > 1 };
+           byZone:byZone, heads:heads, groups:null, nCols:nTot, multi:ms.length > 1, blank:blankCols };
 }
 function incentivePage(){
   // A locked quarter is shown from the data frozen on its lock date (same calculation, frozen inputs)
@@ -6047,12 +6049,17 @@ function incentivePage(){
   var Y = _incCalcYears(), last = state.incYear === 'last' && Y.lastY.length > 0;
   var qs = (last ? Y.lastY : Y.thisY).map(_incQuarterOf);
   if (!qs.length) qs = [_incQuarterOf(pq.key)];
+  // Yearly view: all four quarters of the year; the ones not paid yet stay empty
+  var yearly = state.incView === 'Yearly', fyQ = 'FY' + String(last ? Y.fy - 1 : Y.fy).slice(-2) + '-Q';
+  var all4 = yearly ? [1, 2, 3, 4].map(function(n){ return _incQuarterOf(fyQ + n); }) : qs;
   for (var i = 0; i < qs.length; i++) { var g = qs[i].key === pq.key ? '' : _incLockGate(qs[i].key, true); if (g) return _incTabs() + g; }
   var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo };
-  var ms = [];
+  var ms = [], paidK = {};
+  qs.forEach(function(x){ paidK[x.key] = true; });
   try {
-    for (var j = 0; j < qs.length; j++) {
-      var Q = qs[j];
+    for (var j = 0; j < all4.length; j++) {
+      var Q = all4[j];
+      if (!paidK[Q.key]) { ms.push({ blank:true, reps:[], zones:[], byZone:{}, nCols:1, heads:[{ top:Q.label, sub:Q.months[0] + ' – ' + Q.months[2] }] }); continue; }
       var m = _incWithData(_incFrozenFor(Q.key), function(){
         state.reportView = 'Monthly'; state.dateFrom = Q.months[0]; state.dateTo = Q.months[2];
         window._incCollect = true;
@@ -6062,14 +6069,14 @@ function incentivePage(){
       ms.push(m);
     }
   } finally { state.reportView = keep.reportView; state.dateFrom = keep.dateFrom; state.dateTo = keep.dateTo; }
-  var only = qs.length === 1 && qs[0].key === pq.key, lastQ = qs[qs.length - 1];
+  var only = !yearly && qs.length === 1 && qs[0].key === pq.key, lastQ = qs[qs.length - 1];
   window._incPay = only ? pq
     : { key:lastQ.key, label:lastQ.label, months:lastQ.months, payLabel:lastQ.payLabel,
-        text:(last ? 'Last year · ' : '') + qs[0].label + (qs.length > 1 ? ' – ' + lastQ.label : '') + (last ? '' : ' · paying ' + pq.label + ' now, in ' + pq.payLabel) };
+        text:(last ? 'Last year · ' : '') + (yearly ? all4[0].label + ' – ' + all4[3].label : qs[0].label + (qs.length > 1 ? ' – ' + lastQ.label : '')) + (last ? '' : ' · paying ' + pq.label + ' now, in ' + pq.payLabel) };
   window._incYearSel = _incYearPicker(Y, last);
   try {
     // Drawn on the latest quarter's data (zone regions, outstanding notes); the numbers are already worked out
-    return _incTabs() + _incWithData(_incFrozenFor(lastQ.key), function(){ return _incentivePageInner(true, _incMergeQuarters(ms, qs)); });
+    return _incTabs() + _incWithData(_incFrozenFor(lastQ.key), function(){ return _incentivePageInner(true, _incMergeQuarters(ms, all4)); });
   } finally { window._incYearSel = ''; }
 }
 function _incentivePageInner(foldQ, pre){
@@ -6343,7 +6350,7 @@ function _incentivePageInner(foldQ, pre){
       function wt(f){ return f.dash ? 400 : p.primary ? 800 : p.bold ? 700 : p.ded ? 500 : 600; }
       var fyCell = '<td'+drillAttrs(p.total, tot, 0)+' style="position:sticky;left:'+FY_LEFT+'px;z-index:2;'+cell+'background:'+(p.shade ? '#F5EDD3' : totBg)+';font-weight:'+wt(tot)+';color:'+tot.c+';box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">'+tot.t+'</td>';
       var mCells = p.vals.map(function(v, vi){
-        var f = fmtVal(v, p, p.rates ? p.rates[vi] : null);
+        var f = B.blank && B.blank[vi] ? { t:'–', c:'#CBD3DF', dash:true } : fmtVal(v, p, p.rates ? p.rates[vi] : null);   // quarter not paid yet
         return '<td'+drillAttrs(v, f, vi + 1)+' style="'+cell+'background:'+bg+';border-right:1px solid '+BORDER+';font-weight:'+wt(f)+';color:'+f.c+';">'+f.t+'</td>';
       }).join('');
       return '<tr style="background:'+bg+';'+topBorder+'">'+nameCell+partCell+mCells+'</tr>';   // no Grand Total column
@@ -6490,15 +6497,16 @@ function _incLockGate(q){
   return '';
 }
 function incLockRetry(q){ incLockErr[q] = ''; incFrozenErr[q] = ''; delete incLock[q]; render(); }
+function _incDay(d){ var t = new Date(d); return isNaN(t) ? '' : t.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }); }
 function _incDate(d){ var t = new Date(d); return isNaN(t) ? '' : t.toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
 // One small badge for the tab headers
 function _incLockBadge(q){
   var L = incLock[q]; if (!L) return '';
-  var st = L.frozen ? { t:'🔒 Locked · data frozen ' + _incDate(L.frozen.frozenAt), c:'#7A4E00', bg:'#FCF3DA', b:'#EED9A4',
+  var st = L.frozen ? { t:'🔒 Locked: ' + _incDay(L.frozen.frozenAt), c:'#7A4E00', bg:'#FCF3DA', b:'#EED9A4',
                         tip:'Locked at ' + _incDate(L.lockAt) + ' IST. These are the numbers as they stood then; nothing changes any more.' }
-    : L.locked ? { t:'Lock due ' + _incDate(L.lockAt) + ' · freezing' + (L.env === 'production' ? ' tonight' : ' (staging: not frozen yet)'), c:'#9A3412', bg:'#FDECE3', b:'#F5C9B0',
+    : L.locked ? { t:'Locking tonight', c:'#9A3412', bg:'#FDECE3', b:'#F5C9B0',
                    tip:'The server freezes this quarter on its nightly run. Until then the numbers are today\'s.' }
-    : { t:'Open · locks ' + _incDate(L.lockAt), c:'#2C4E82', bg:'#EEF3FC', b:'#D3DFF3', tip:'Numbers follow today\'s data until the lock date.' };
+    : { t:'Locks: ' + _incDay(L.lockAt), c:'#2C4E82', bg:'#EEF3FC', b:'#D3DFF3', tip:'Numbers follow today\'s data until the lock date.' };
   return '<span title="'+esc(st.tip)+'" style="font-size:11px;font-weight:700;color:'+st.c+';background:'+st.bg+';border:1px solid '+st.b+';border-radius:999px;padding:3px 10px;white-space:nowrap;">'+esc(st.t)+'</span>';
 }
 
@@ -6695,7 +6703,7 @@ function incSummaryPage(){
     + '<span style="font-size:15px;font-weight:800;color:'+NAVY+';letter-spacing:-0.01em;">Incentive payout summary</span>'
     + '<select onchange="incSumSetQ(this.value)" aria-label="Quarter" class="btnq" title="A quarter\'s incentive is paid two quarters later" style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 8px;border:1px solid #D3DFF3;cursor:pointer;">'
       + SQ.keys.map(function(k){ var Q = _incQuarterOf(k);
-          return '<option value="'+esc(k)+'"'+(k === pq.key ? ' selected' : '')+'>Paid in '+esc(Q.payLabel)+' · for '+esc(Q.label)+' ('+esc(Q.months[0])+' – '+esc(Q.months[2])+')'+(k === SQ.pq.key ? ' · paying now' : Q.fy < SQ.fy ? ' · last year' : '')+' · '+cur+'</option>'; }).join('')
+          return '<option value="'+esc(k)+'"'+(k === pq.key ? ' selected' : '')+'>for '+esc(Q.label)+'</option>'; }).join('')
       + '</select>'
     + _incLockBadge(pq.key)
     + '<div role="radiogroup" aria-label="Core or Cross" style="display:inline-flex;gap:2px;padding:2px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;">'
@@ -6789,7 +6797,6 @@ function incSummaryPage(){
       + '<div style="display:flex;flex-wrap:wrap;gap:20px 40px;padding-left:28px;border-left:1px solid '+LINE+';">'
         + sec('Eligible sales reps', D.nElig + '<span style="font-size:13px;color:'+MUTED+';font-weight:500;"> of '+nReps+'</span>', pct(D.nElig, nReps)+'% reached 75% GP%')
         + sec('Not eligible', String(nReps - D.nElig), 'Below 75% GP% or no target')
-        + sec('Average per eligible rep', D.nElig ? fmtCur(avg) : '–', 'Sales reps\' incentive only')
       + '</div>'
     + '</div>'
     // ── Insights: one quiet strip under the headline ──
@@ -10446,7 +10453,7 @@ function topbarHash(){
     state.weeklyDropOpen+'|'+state.quarterDropOpen+'|'+state.qyrDropOpen+'|'+state.yearTypeDropOpen+'|'+
     state.filtersOpen+'|'+state.filterLobDropOpen+'|'+state.filterRepDropOpen+'|'+state.filterZoneDropOpen+'|'+
     state.rateEditing+'|'+JSON.stringify(state.filterLobs)+'|'+JSON.stringify(state.filterReps)+'|'+JSON.stringify(state.filterZones||[])+'|'+
-    state.selectedQuarter;
+    state.selectedQuarter+(state.page==='incentive' ? '|inc:'+state.incView : '');
 }
 
 var _renderScheduled = false;
@@ -12587,6 +12594,13 @@ document.addEventListener('click', function(ev){
     render();
   }
   else if(act==='toggleViewDrop'){ ev.stopPropagation(); state.viewDropOpen=!state.viewDropOpen; render(); positionViewDrop(); }
+  else if(act==='setView' && state.page==='incentive'){
+    // Incentive has its own Quarterly / Yearly choice; the other pages' view and months stay as they were
+    ev.stopPropagation();
+    state.incView = el.getAttribute('data-val') === 'Yearly' ? 'Yearly' : 'Quarterly';
+    state.viewDropOpen = false;
+    render();
+  }
   else if(act==='setView'){
     ev.stopPropagation();
     var v = el.getAttribute('data-val');
