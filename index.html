@@ -6526,6 +6526,8 @@ function incAccessRemove(e){
 function _incSum(){ return state.incSum || (state.incSum = { part:'all', zone:'', elig:'elig', sort:'inc', dir:-1, q:'', quarter:'', open:{} }); }
 function incSumSet(k, v){ var S = _incSum(); if (k === 'sort') { if (S.sort === v) S.dir = -S.dir; else { S.sort = v; S.dir = v === 'name' || v === 'zone' ? 1 : -1; } } else S[k] = v; render(); }
 function incSumOpen(name){ var S = _incSum(); S.open[name] = !S.open[name]; render(); }
+function incSumZOpen(z){ var S = _incSum(); S.zopen = S.zopen || {}; S.zopen[z] = !S.zopen[z]; render(); }
+function incSumZSort(k){ var S = _incSum(); if ((S.zsort || 'inc') === k) S.zdir = -(S.zdir || -1); else { S.zsort = k; S.zdir = k === 'name' || k === 'zone' ? 1 : -1; } render(); }
 function incSumZone(z){
   var S = _incSum(); S.zone = S.zone === z ? '' : z; S.elig = 'elig'; render();
   // Scroll the page's own scroller (#main-slot) to the reps list. Not scrollIntoView: that also scrolls the
@@ -6593,7 +6595,7 @@ function _incSumData(M, part){
   }
   var reps = M.reps.map(pick), zones = M.zones.map(pick);
   var byZ = {};
-  zones.forEach(function(z){ byZ[z.name] = { name:z.name, zm:z.pay, zmElig:z.elig, reps:0, elig:0, pay:0 }; });
+  zones.forEach(function(z){ byZ[z.name] = { name:z.name, zm:z.pay, zmElig:z.elig, reps:0, elig:0, pay:0, ent:z }; });
   reps.forEach(function(r){
     var Z = byZ[r.zone] || (byZ[r.zone] = { name:r.zone, zm:0, zmElig:false, reps:0, elig:0, pay:0 });
     Z.reps++; if (r.elig) Z.elig++; Z.pay += r.pay;
@@ -6762,8 +6764,9 @@ function incSummaryPage(){
     + sortTh('tgt','Target GP',1,'12%') + sortTh('fin','Final GP',1,'12%') + sortTh('inc','Total incentive',1,'14%','color:'+PURPLE+';');
   var NCOL = 6;
 
-  // ── 3. The working for one rep, in three groups ──
-  function detail(r){
+  // ── 3. The working for one rep (or one zonal manager: Z = that zone's team totals), in groups ──
+  function detail(r, Z){
+    var RT = Z ? INC_RATES.zm : INC_RATES.sales;
     var ks = Object.keys(r.parts), two = ks.length > 1;
     function kv(l, v, c, b){ return '<div class="incs-kv"><span'+(b ? ' style="color:'+INK+';font-weight:600;"' : '')+'>'+l+'</span><span style="'+(c ? 'color:'+c+';' : '')+(b ? 'font-weight:700;' : '')+'">'+v+'</span></div>'; }
     function why(k){ var P = r.parts[k]; return r.noTarget ? 'no target set' : P.ach == null ? 'no GP%' : 'GP% '+P.ach+'% is below 75%'; }
@@ -6773,7 +6776,7 @@ function incSummaryPage(){
       var P = r.parts[k];
       if (!P.elig) return kv(partLabel(k), '<span style="font-family:\'DM Sans\',sans-serif;color:'+MUTED+';white-space:normal;">Not eligible: '+why(k)+'</span>');
       return kv(partLabel(k)+' rate', P.rate == null ? '–' : P.rate+'%') + kv(partLabel(k)+' incentive', money(P.inc), PURPLE);
-    }).join('') + '<div style="font-size:10.5px;color:'+MUTED+';margin-top:6px;">Rates: '+INC_RATES.sales.t1+'% at 75–99.99% GP%, '+INC_RATES.sales.t2+'% at 100% or more</div>';
+    }).join('') + '<div style="font-size:10.5px;color:'+MUTED+';margin-top:6px;">'+(Z ? 'ZM rates' : 'Rates')+': '+RT.t1+'% at 75–99.99% GP%, '+RT.t2+'% at 100% or more</div>';
     var fin = ks.map(function(k){
       var P = r.parts[k];
       if (!P.elig) return two ? kv(partLabel(k), '<span style="font-family:\'DM Sans\',sans-serif;color:'+MUTED+';">nothing deducted (not eligible)</span>') : '';
@@ -6783,16 +6786,22 @@ function incSummaryPage(){
         + kv('Management fees (15%)', ded(P.fee), '#5B6678')
         + kv('Final GP after deductions', money(P.fin), '#0B7A4B', true);
     }).join('')
-      + '<div style="border-top:1px solid '+LINE+';margin-top:6px;padding-top:4px;">'+kv('Total incentive', r.pay > 0 ? fmtCur(r.pay) : r.elig ? fmtCur(0) : '–', PURPLE, true)+'</div>';
+      + '<div style="border-top:1px solid '+LINE+';margin-top:6px;padding-top:4px;">'+kv(Z ? 'ZM incentive' : 'Total incentive', r.pay > 0 ? fmtCur(r.pay) : r.elig ? fmtCur(0) : '–', PURPLE, true)+'</div>';
     var links = isPayQ
       ? '<div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;">' + ks.map(function(k){
-          return '<button data-z="'+esc(r.zone)+'" data-r="'+esc(r.name)+'" data-p="'+k+'" onclick="incSumGoCalc(this.dataset.z, this.dataset.r, this.dataset.p)" class="btnq" style="border:none;background:transparent;color:#2C4E82;font-size:11.5px;font-weight:600;cursor:pointer;padding:0;">Open '+partLabel(k)+' in Calculation →</button>';
-        }).join('') + '</div>'
+          return '<button data-z="'+esc(r.zone)+'" data-r="'+esc(Z ? '' : r.name)+'" data-p="'+k+'" onclick="incSumGoCalc(this.dataset.z, this.dataset.r, this.dataset.p)" class="btnq" style="border:none;background:transparent;color:#2C4E82;font-size:11.5px;font-weight:600;cursor:pointer;padding:0;">Open '+partLabel(k)+' in Calculation →</button>';
+        }).join('')
+        + (Z ? '<button data-z="'+esc(r.zone)+'" onclick="incSumZone(this.dataset.z)" class="btnq" style="border:none;background:transparent;color:#2C4E82;font-size:11.5px;font-weight:600;cursor:pointer;padding:0;">Show this zone\'s reps ↑</button>' : '')
+        + '</div>'
       : '<div style="font-size:11px;color:'+MUTED+';margin-top:12px;">The Calculation tab shows the quarter being paid now ('+esc(pq.label)+'), so this quarter can\'t be opened there.</div>';
     function grp(t, body){ return '<div style="min-width:0;"><div class="incs-grp">'+t+'</div>'+body+'</div>'; }
     return '<div style="margin:0 16px 14px 34px;padding:16px 20px;background:#FAFBFD;border:1px solid #E8EDF5;border-left:3px solid #C4B2E0;border-radius:0 8px 8px 0;">'
       + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px 36px;">'
         + grp('Performance', perf) + grp('Incentive breakdown', brk) + grp('Final calculation', fin)
+        + (Z ? grp('Team', kv('Sales reps', String(Z.reps)) + kv('Eligible', String(Z.elig), '#15875A') + kv('Not eligible', String(Z.reps - Z.elig), MUTED)
+              + kv('Sales reps\' incentive', fmtCur(Z.pay)) + kv('Avg per eligible rep', Z.elig ? fmtCur(Z.pay / Z.elig) : '–')
+              + '<div style="border-top:1px solid '+LINE+';margin-top:6px;padding-top:4px;">' + kv('Zone total (reps + ZM)', fmtCur(Z.pay + Z.zm), PURPLE, true)
+              + kv('Share of total payout', pct(Z.pay + Z.zm, D.total)+'%') + '</div>') : '')
       + '</div>' + links + '</div>';
   }
   var q = String(S.q || '').toLowerCase().trim(), shown = 0;
@@ -6833,27 +6842,37 @@ function incSummaryPage(){
     + '<div style="padding:9px 16px;font-size:11px;color:'+MUTED+';border-top:1px solid #EEF2F7;">Click a rep to see Core and Cross performance, rates, deductions and how the incentive was worked out.</div>'
   + '</div>';
 
-  // ── Zones: table + payout bars ──
+  // ── Zonal managers: one line each, like the reps; the zone's team figures live in its expanded panel ──
+  function mgr(z){ if (z === 'Cross Sales') return ''; var m = /^\S+\s*\((.*)\)\s*$/.exec(z || ''); return m ? m[1] : zoneParts(z)[1]; }
+  var zms = D.zones.filter(function(Z){ return Z.ent; });
+  var zkey = { name:function(Z){ return (mgr(Z.name) || Z.name).toLowerCase(); }, zone:function(Z){ return Z.name.toLowerCase(); },
+               tgt:function(Z){ return Z.ent.tgt; }, fin:function(Z){ return Z.ent.fin == null ? -1e18 : Z.ent.fin; }, inc:function(Z){ return Z.zm; } }[S.zsort || 'inc'];
+  var zdir = S.zdir || -1;
+  zms.sort(function(a, b){
+    if (a.ent.elig !== b.ent.elig) return a.ent.elig ? -1 : 1;   // eligible first
+    var x = zkey(a), y = zkey(b); return (x < y ? -1 : x > y ? 1 : 0) * zdir || a.name.localeCompare(b.name);
+  });
+  function zTh(k, label, right, w, extra){
+    var on = (S.zsort || 'inc') === k;
+    return '<th class="incs-th s" onclick="incSumZSort(\''+k+'\')" aria-sort="'+(on ? (zdir > 0 ? 'ascending' : 'descending') : 'none')+'" style="position:static;text-align:'+(right ? 'right' : 'left')+';width:'+w+';'+(on ? 'color:#1E3A66;' : '')+(extra || '')+'">'
+      + label + '<span style="display:inline-block;width:12px;color:'+PURPLE+';font-size:9px;">'+(on ? (zdir > 0 ? ' ▲' : ' ▼') : '')+'</span></th>';
+  }
+  var zBody = zms.map(function(Z){
+    var e = Z.ent, zp = zoneParts(Z.name), open = !!(S.zopen && S.zopen[Z.name]), m = mgr(Z.name);
+    return '<tr class="incs-row'+(open ? ' on' : '')+'" data-name="'+esc(Z.name)+'" onclick="incSumZOpen(this.getAttribute(\'data-name\'))" aria-expanded="'+open+'">'
+      + '<td><span aria-hidden="true" style="display:inline-block;width:16px;font-size:9px;color:'+(open ? PURPLE : MUTED)+';">'+(open ? '▼' : '▶')+'</span>'
+        + (m ? '<span style="font-size:13px;font-weight:600;color:'+INK+';">'+esc(m)+'</span>' : '<span style="font-size:12.5px;color:'+MUTED+';">No zonal manager</span>')+'</td>'
+      + '<td style="overflow:hidden;text-overflow:ellipsis;"><span style="font-weight:600;color:'+NAVY+';">'+esc(zp[0])+'</span>'+'<span style="color:'+MUTED+';margin-left:6px;">'+Z.reps+' rep'+(Z.reps === 1 ? '' : 's')+'</span></td>'
+      + '<td>'+chip(status(e))+'</td>'
+      + '<td class="incs-n" style="color:'+(e.noTarget ? '#CBD3DF' : INK)+';">'+(e.noTarget ? '–' : fmtCur(e.tgt))+'</td>'
+      + '<td class="incs-n" style="color:'+(e.fin == null ? '#CBD3DF' : '#0B7A4B')+';">'+money(e.fin)+'</td>'
+      + '<td class="incs-n" style="background:#FBF8FE;font-size:13.5px;font-weight:700;color:'+(Z.zm > 0 ? PURPLE : '#CBD3DF')+';">'+(Z.zm > 0 ? fmtCur(Z.zm) : e.elig ? fmtCur(0) : '–')+'</td>'
+    + '</tr>'
+    + (open ? '<tr data-detail="1"><td colspan="6" style="padding:0;border-bottom:1px solid #EEF2F7;background:#FFFFFF;">'+detail(e, Z)+'</td></tr>' : '');
+  }).join('');
+  var nZmElig = zms.filter(function(Z){ return Z.ent.elig; }).length;
+  // Payout by zone (reps + ZM): the one at-a-glance comparison across zones
   var zMax = Math.max.apply(null, zSorted.map(function(z){ return z.pay + z.zm; }).concat([0]));
-  var zth = 'padding:10px 16px;font-size:10.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#7A8AA3;border-bottom:1px solid #DCE3EE;white-space:nowrap;';
-  var zn = 'text-align:right;font-family:\'DM Mono\',monospace;font-variant-numeric:tabular-nums;';
-  var zTable = '<table style="width:100%;border-collapse:collapse;"><thead><tr>'
-      + ['Zone','Reps','Eligible','Not eligible','Sales reps\' incentive','Avg per eligible rep','ZM incentive','Zone total','Share'].map(function(h, i){ return '<th style="'+zth+'text-align:'+(i ? 'right' : 'left')+';'+(i === 7 ? 'color:'+PURPLE+';' : '')+'">'+h+'</th>'; }).join('')
-    + '</tr></thead><tbody>'
-    + zSorted.map(function(z){
-        var zp = zoneParts(z.name), on = S.zone === z.name;
-        return '<tr class="incs-z" onclick="incSumZone(this.getAttribute(\'data-z\'))" data-z="'+esc(z.name)+'" title="Show this zone\'s reps" style="'+(on ? 'background:#F6F3FB;' : '')+'">'
-          + '<td><span style="font-weight:600;color:'+NAVY+';">'+esc(zp[0])+'</span>'+(zp[1] ? '<span style="color:'+MUTED+';margin-left:6px;">'+esc(zp[1])+'</span>' : '')+'</td>'
-          + '<td style="'+zn+'">'+z.reps+'</td><td style="'+zn+'">'+z.elig+'</td><td style="'+zn+'color:'+MUTED+';">'+(z.reps - z.elig)+'</td>'
-          + '<td style="'+zn+'">'+fmtCur(z.pay)+'</td><td style="'+zn+'color:'+SUB+';">'+(z.elig ? fmtCur(z.pay / z.elig) : '–')+'</td>'
-          + '<td style="'+zn+'">'+(z.zm > 0 ? fmtCur(z.zm) : '<span style="color:#CBD3DF;">–</span>')+'</td>'
-          + '<td style="'+zn+'font-weight:700;color:'+PURPLE+';">'+fmtCur(z.pay + z.zm)+'</td>'
-          + '<td style="'+zn+'color:'+SUB+';">'+pct(z.pay + z.zm, D.total)+'%</td></tr>';
-      }).join('')
-    + '<tr style="background:#F8FAFD;">' + ['Total', nReps, D.nElig, nReps - D.nElig, fmtCur(D.repPay), D.nElig ? fmtCur(avg) : '–', fmtCur(D.zmPay), fmtCur(D.total), '100%'].map(function(v, i){
-        return '<td style="padding:11px 16px;font-size:12px;font-weight:700;border-top:1px solid #DCE3EE;'+(i ? zn : '')+(i === 7 ? 'color:'+PURPLE+';' : 'color:'+INK+';')+'">'+v+'</td>';
-      }).join('') + '</tr>'
-    + '</tbody></table>';
   var bars = zSorted.map(function(z){
     var v = z.pay + z.zm, w = zMax > 0 ? Math.max(v > 0 ? 1 : 0, v / zMax * 100) : 0;
     return '<div onclick="incSumZone(this.getAttribute(\'data-z\'))" data-z="'+esc(z.name)+'" title="'+esc(z.name)+': '+esc(fmtCur(v))+' ('+pct(v, D.total)+'%) · sales reps '+esc(fmtCur(z.pay))+' · ZM '+esc(fmtCur(z.zm))+'" style="display:grid;grid-template-columns:110px 1fr 130px;align-items:center;gap:12px;padding:5px 0;cursor:pointer;">'
@@ -6861,10 +6880,19 @@ function incSummaryPage(){
       + '<div style="height:12px;background:#F2F4F8;border-radius:0 4px 4px 0;"><div style="height:100%;width:'+w.toFixed(1)+'%;background:'+PURPLE+';border-radius:0 4px 4px 0;"></div></div>'
       + '<span style="font-size:12px;font-family:\'DM Mono\',monospace;color:'+INK+';text-align:right;white-space:nowrap;">'+fmtCur(v)+' <span style="color:'+MUTED+';">'+pct(v, D.total)+'%</span></span></div>';
   }).join('');
-  var zonesCard = '<div style="'+card+'overflow:hidden;">'
-    + '<div style="padding:14px 16px;border-bottom:1px solid #DCE3EE;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;"><span style="font-size:14px;font-weight:700;color:'+NAVY+';">Zones</span><span style="font-size:11.5px;color:'+MUTED+';">Click a zone to filter the reps. ZM incentive is the zone manager\'s own ('+INC_RATES.zm.t1+'% / '+INC_RATES.zm.t2+'%), kept apart from the reps\'.</span></div>'
-    + '<div style="overflow:auto;">'+zTable+'</div>'
-    + '<div style="max-width:820px;padding:16px 18px 18px;border-top:1px solid '+LINE+';"><div class="incs-grp" style="margin-bottom:8px;">Payout by zone</div>'+(bars || '<div style="font-size:11.5px;color:'+MUTED+';">No zones.</div>')+'</div>'
+  var zonesCard = '<div style="'+card+'overflow:clip;">'
+    + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 16px;border-bottom:1px solid #DCE3EE;">'
+      + '<span style="font-size:14px;font-weight:700;color:'+NAVY+';margin-right:6px;">Zonal managers</span>'
+      + '<span style="font-size:11.5px;color:'+MUTED+';">Their own incentive on the zone\'s GP ('+INC_RATES.zm.t1+'% / '+INC_RATES.zm.t2+'%), separate from the reps\'.</span>'
+      + '<span style="flex:1;"></span>'
+      + '<span style="font-size:11.5px;color:'+MUTED+';">'+nZmElig+' of '+zms.length+' eligible · ZM incentive <span style="color:'+INK+';font-family:\'DM Mono\',monospace;">'+fmtCur(D.zmPay)+'</span></span>'
+    + '</div>'
+    + '<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><thead><tr>'
+      + zTh('name','Zonal manager',0,'26%') + zTh('zone','Zone',0,'24%') + '<th class="incs-th" style="position:static;text-align:left;width:12%;">Status</th>'
+      + zTh('tgt','Zone target GP',1,'12%') + zTh('fin','Final GP',1,'12%') + zTh('inc','ZM incentive',1,'14%','color:'+PURPLE+';')
+    + '</tr></thead><tbody>' + (zBody || '<tr><td colspan="6" style="padding:32px;text-align:center;color:'+MUTED+';font-size:12px;">No zones.</td></tr>') + '</tbody></table>'
+    + '<div style="padding:9px 16px;font-size:11px;color:'+MUTED+';border-top:1px solid #EEF2F7;">Click a zonal manager to see the zone\'s performance, deductions, how the ZM incentive was worked out, and the zone\'s team.</div>'
+    + '<div style="border-top:1px solid '+LINE+';"><div style="max-width:820px;padding:16px 18px 18px;"><div class="incs-grp" style="margin-bottom:8px;">Payout by zone (reps + ZM) · click a bar to see its reps</div>'+(bars || '<div style="font-size:11.5px;color:'+MUTED+';">No zones.</div>')+'</div></div>'
   + '</div>';
   var note = '<div style="font-size:10.5px;color:'+MUTED+';margin-top:14px;">Figures come straight from the Calculation tab (same GP, targets, deductions, fees and rates) for '+partLabel(S.part)+'. Only eligible reps with an incentive above zero count towards the total. The top-bar filters apply here too.</div>';
   return '<div style="padding:18px 24px 32px;">' + css + head + access + kpis + repsCard + zonesCard + note + '</div>';
