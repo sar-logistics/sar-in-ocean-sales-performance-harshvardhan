@@ -6483,40 +6483,74 @@ function incSummaryPage(){
     + '</div>';
   }
 
-  // ── Headline figures ──
-  var avg = D.nElig ? D.repPay / D.nElig : 0;
-  function stat(label, value, note, big){
-    return '<div style="padding:16px 22px;min-width:170px;flex:'+(big ? '1.6' : '1')+';">'
-      + '<div style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:'+SUB+';">'+label+'</div>'
-      + '<div style="font-family:\'DM Mono\',monospace;font-variant-numeric:tabular-nums;font-size:'+(big ? 30 : 22)+'px;font-weight:800;color:'+(big ? PURPLE : INK)+';margin-top:6px;letter-spacing:-0.02em;">'+value+'</div>'
-      + '<div style="font-size:11px;color:'+MUTED+';margin-top:4px;">'+note+'</div></div>';
-  }
-  var sep = '<div style="width:1px;background:'+LINE+';margin:14px 0;"></div>';
-  var kpis = '<div style="'+card+'display:flex;flex-wrap:wrap;margin-bottom:14px;">'
-    + stat('Total incentive payable', fmtCur(D.total), 'Sales reps '+fmtCur(D.repPay)+' · Zone managers '+fmtCur(D.zmPay), true) + sep
-    + stat('Eligible sales reps', D.nElig + '<span style="font-size:14px;color:'+MUTED+';font-weight:600;"> / '+nReps+'</span>', pct(D.nElig, nReps)+'% of reps reached 75% GP%') + sep
-    + stat('Not eligible', String(nReps - D.nElig), 'Below 75% GP% or no target') + sep
-    + stat('Average per eligible rep', D.nElig ? fmtCur(avg) : '–', D.nElig ? 'Sales reps\' incentive spread over '+D.nElig+' eligible rep'+(D.nElig === 1 ? '' : 's') : 'Nobody is eligible')
-  + '</div>';
+  // Layout: 1) the total payout, 2) who is paid (rep list, one clean line each), 3) the working, one rep at a time.
+  // Supporting figures sit a level down (smaller, muted) rather than competing with the total.
+  var css = '<style>'
+    + '.incs-row{cursor:pointer;transition:background .12s;}.incs-row:hover{background:#F8FAFD;}.incs-row.on{background:#F6F3FB;}'
+    + '.incs-row td{padding:13px 16px;border-bottom:1px solid #EEF2F7;font-size:12.5px;white-space:nowrap;vertical-align:middle;}'
+    + '.incs-n{text-align:right;font-family:\'DM Mono\',monospace;font-variant-numeric:tabular-nums;}'
+    + '.incs-th{position:sticky;top:0;z-index:2;background:#FFFFFF;padding:10px 16px;font-size:10.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#7A8AA3;border-bottom:1px solid #DCE3EE;white-space:nowrap;}'
+    + '.incs-th.s{cursor:pointer;}.incs-th.s:hover{color:#1E3A66;}'
+    + '.incs-kv{display:flex;justify-content:space-between;gap:16px;padding:4px 0;font-size:12px;}'
+    + '.incs-kv span:first-child{color:#5B6678;flex-shrink:0;}.incs-kv > span:last-child{text-align:right;}.incs-kv span:last-child{font-family:\'DM Mono\',monospace;font-variant-numeric:tabular-nums;color:#14213D;}'
+    + '.incs-grp{font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#7A8AA3;margin-bottom:6px;}'
+    + '.incs-z td{padding:11px 16px;border-bottom:1px solid #EEF2F7;font-size:12px;white-space:nowrap;}.incs-z{cursor:pointer;}.incs-z:hover{background:#F8FAFD;}'
+    + '</style>';
+  function money(v){ return v == null ? '–' : fmtCur(v); }
+  function status(r){ return r.noTarget ? 'notgt' : r.elig ? 'elig' : 'not'; }
+  var CHIP = { elig:['Eligible','#15875A','#E9F6EF'], not:['Not eligible','#B4541A','#FCF0E8'], notgt:['No target','#64748B','#EEF1F6'] };
+  function chip(k){ var c = CHIP[k]; return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:'+c[1]+';background:'+c[2]+';border-radius:999px;padding:2px 9px;"><span style="width:6px;height:6px;border-radius:50%;background:'+c[1]+';"></span>'+c[0]+'</span>'; }
+  function achC(a){ return a == null ? MUTED : a >= 100 ? '#15875A' : a >= 75 ? '#A8720E' : '#C2410C'; }
 
-  // ── Insights (worked out from the figures above) ──
+  // ── 1. Headline: the total payout first, the rest one level down ──
+  var avg = D.nElig ? D.repPay / D.nElig : 0;
+  var repShare = D.total > 0 ? D.repPay / D.total * 100 : 0;
+  function sec(label, value, note){
+    return '<div style="min-width:120px;">'
+      + '<div style="font-size:11px;font-weight:600;color:'+SUB+';">'+label+'</div>'
+      + '<div style="font-family:\'DM Mono\',monospace;font-variant-numeric:tabular-nums;font-size:19px;font-weight:700;color:'+INK+';margin-top:4px;">'+value+'</div>'
+      + '<div style="font-size:11px;color:'+MUTED+';margin-top:2px;">'+note+'</div></div>';
+  }
   var paid = D.reps.filter(function(r){ return r.pay > 0; }).sort(function(a, b){ return b.pay - a.pay; });
   var zSorted = D.zones.slice().sort(function(a, b){ return (b.pay + b.zm) - (a.pay + a.zm); });
   var topZ = zSorted[0] && (zSorted[0].pay + zSorted[0].zm) > 0 ? zSorted[0] : null;
-  function fact(label, main, note){
-    return '<div style="flex:1;min-width:200px;padding:12px 18px;border-left:3px solid #D3DFF3;">'
-      + '<div style="font-size:10.5px;font-weight:700;color:'+SUB+';text-transform:uppercase;letter-spacing:0.05em;">'+label+'</div>'
-      + '<div style="font-size:13px;font-weight:800;color:'+INK+';margin-top:4px;">'+main+'</div>'
-      + '<div style="font-size:11px;color:'+MUTED+';margin-top:2px;">'+note+'</div></div>';
+  function ins(icon, label, main, note){
+    return '<div style="display:flex;align-items:baseline;gap:7px;min-width:0;">'
+      + '<span aria-hidden="true" style="font-size:10px;color:#9A86C0;">'+icon+'</span>'
+      + '<span style="font-size:11.5px;color:'+SUB+';white-space:nowrap;">'+label+'</span>'
+      + '<span style="font-size:12px;font-weight:700;color:'+INK+';white-space:nowrap;">'+main+'</span>'
+      + (note ? '<span style="font-size:11.5px;color:'+MUTED+';white-space:nowrap;">'+note+'</span>' : '')
+    + '</div>';
   }
-  var insights = '<div style="'+card+'display:flex;flex-wrap:wrap;gap:4px;padding:6px 4px;margin-bottom:14px;">'
-    + fact('Highest incentive', paid[0] ? esc(paid[0].name) : '–', paid[0] ? fmtCur(paid[0].pay)+' · '+esc(zoneParts(paid[0].zone)[0]) : 'Nobody is being paid')
-    + fact('Lowest incentive', paid.length > 1 ? esc(paid[paid.length - 1].name) : '–', paid.length > 1 ? fmtCur(paid[paid.length - 1].pay)+' · '+esc(zoneParts(paid[paid.length - 1].zone)[0]) : 'Fewer than two reps paid')
-    + fact('Top zone', topZ ? esc(zoneParts(topZ.name)[0]) : '–', topZ ? fmtCur(topZ.pay + topZ.zm)+' · '+pct(topZ.pay + topZ.zm, D.total)+'% of the total payout' : 'No payout yet')
-    + fact('Eligibility', pct(D.nElig, nReps)+'% of reps', D.nElig+' of '+nReps+' reps reached 75% GP%')
+  var dot = '<span style="color:#D5DCE6;">•</span>';
+  var kpis = '<div style="'+card+'margin-bottom:16px;overflow:hidden;">'
+    + '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:24px 48px;padding:20px 24px;">'
+      + '<div style="flex:1 1 300px;">'
+        + '<div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:'+SUB+';">Total incentive payable</div>'
+        + '<div style="font-family:\'DM Mono\',monospace;font-variant-numeric:tabular-nums;font-size:34px;font-weight:800;color:'+PURPLE+';letter-spacing:-0.02em;margin-top:4px;line-height:1.1;">'+fmtCur(D.total)+'</div>'
+        + '<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:#EEF1F6;max-width:320px;margin-top:10px;" title="Sales reps '+esc(fmtCur(D.repPay))+' · Zone managers '+esc(fmtCur(D.zmPay))+'">'
+          + '<div style="width:'+repShare.toFixed(1)+'%;background:'+PURPLE+';"></div>'+(D.zmPay > 0 ? '<div style="width:2px;background:#FFFFFF;"></div><div style="flex:1;background:#C4B2E0;"></div>' : '')+'</div>'
+        + '<div style="display:flex;gap:16px;margin-top:7px;font-size:11.5px;color:'+SUB+';flex-wrap:wrap;">'
+          + '<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+PURPLE+';margin-right:5px;"></span>Sales reps <b style="color:'+INK+';font-weight:700;">'+fmtCur(D.repPay)+'</b></span>'
+          + '<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#C4B2E0;margin-right:5px;"></span>Zone managers <b style="color:'+INK+';font-weight:700;">'+fmtCur(D.zmPay)+'</b></span>'
+        + '</div>'
+      + '</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:20px 40px;padding-left:28px;border-left:1px solid '+LINE+';">'
+        + sec('Eligible sales reps', D.nElig + '<span style="font-size:13px;color:'+MUTED+';font-weight:500;"> of '+nReps+'</span>', pct(D.nElig, nReps)+'% reached 75% GP%')
+        + sec('Not eligible', String(nReps - D.nElig), 'Below 75% GP% or no target')
+        + sec('Average per eligible rep', D.nElig ? fmtCur(avg) : '–', 'Sales reps\' incentive only')
+      + '</div>'
+    + '</div>'
+    // ── Insights: one quiet strip under the headline ──
+    + '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:11px 24px;background:#F8FAFD;border-top:1px solid '+LINE+';">'
+      + ins('▲', 'Highest', paid[0] ? esc(paid[0].name) : '–', paid[0] ? fmtCur(paid[0].pay)+' · '+esc(zoneParts(paid[0].zone)[0]) : 'nobody paid') + dot
+      + ins('▼', 'Lowest', paid.length > 1 ? esc(paid[paid.length - 1].name) : '–', paid.length > 1 ? fmtCur(paid[paid.length - 1].pay)+' · '+esc(zoneParts(paid[paid.length - 1].zone)[0]) : 'fewer than two paid') + dot
+      + ins('◆', 'Top zone', topZ ? esc(zoneParts(topZ.name)[0]) : '–', topZ ? fmtCur(topZ.pay + topZ.zm)+' · '+pct(topZ.pay + topZ.zm, D.total)+'% of payout' : 'no payout') + dot
+      + ins('✓', 'Eligibility', pct(D.nElig, nReps)+'%', D.nElig+' of '+nReps+' reps')
+    + '</div>'
   + '</div>';
 
-  // ── Reps table ──
+  // ── 2. Who is paid: one clean line per rep ──
   var zoneOpts = D.zones.map(function(z){ return z.name; }).sort();
   var rows = D.reps.filter(function(r){
     if (S.zone && r.zone !== S.zone) return false;
@@ -6531,120 +6565,119 @@ function incSummaryPage(){
     if (a.elig !== b.elig) return a.elig ? -1 : 1;   // eligible reps first
     var x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * S.dir || a.name.localeCompare(b.name);
   });
-  var single = S.part !== 'all';
-  var th = 'position:sticky;top:0;z-index:2;background:#F0F4FA;padding:9px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#475569;border-bottom:2px solid #B0BAC8;white-space:nowrap;';
-  function sortTh(k, label, right, extra){
-    var on = S.sort === k, arrow = on ? (S.dir > 0 ? ' ▲' : ' ▼') : '';
-    return '<th onclick="incSumSet(\'sort\',\''+k+'\')" aria-sort="'+(on ? (S.dir > 0 ? 'ascending' : 'descending') : 'none')+'" style="'+th+'cursor:pointer;text-align:'+(right ? 'right' : 'left')+';'+(extra || '')+'">'+label+'<span style="color:'+PURPLE+';">'+arrow+'</span></th>';
+  function sortTh(k, label, right, w, extra){
+    var on = S.sort === k;
+    return '<th class="incs-th s" onclick="incSumSet(\'sort\',\''+k+'\')" aria-sort="'+(on ? (S.dir > 0 ? 'ascending' : 'descending') : 'none')+'" style="text-align:'+(right ? 'right' : 'left')+';width:'+w+';'+(on ? 'color:#1E3A66;' : '')+(extra || '')+'">'
+      + label + '<span style="display:inline-block;width:12px;color:'+PURPLE+';font-size:9px;">'+(on ? (S.dir > 0 ? ' ▲' : ' ▼') : '')+'</span></th>';
   }
-  var cols = single
-    ? sortTh('name','Sales rep') + sortTh('zone','Zone') + sortTh('gp','GP achieved',1) + sortTh('tgt','Target GP',1) + sortTh('ach','GP%',1) + sortTh('fin','Final GP',1) + '<th style="'+th+'text-align:right;">Rate</th>' + sortTh('inc','Total incentive',1,'background:#F1EBF8;color:'+PURPLE+';')
-    : sortTh('name','Sales rep') + sortTh('zone','Zone') + sortTh('tgt','Target GP',1) + '<th style="'+th+'text-align:right;">Core</th><th style="'+th+'text-align:right;">Cross</th>' + sortTh('fin','Final GP',1) + sortTh('inc','Total incentive',1,'background:#F1EBF8;color:'+PURPLE+';');
-  var nCol = single ? 8 : 7;
-  var td = 'padding:9px 12px;border-top:1px solid #EEF2F7;font-size:12px;white-space:nowrap;';
-  var num = td + 'text-align:right;font-family:\'DM Mono\',monospace;font-variant-numeric:tabular-nums;';
-  function achC(a){ return a == null ? MUTED : a >= 100 ? '#15875A' : a >= 75 ? '#A8720E' : '#C2410C'; }
-  function partCell(P){
-    if (!P) return '<td style="'+num+'color:#CBD3DF;">–</td>';
-    return '<td style="'+num+'">'
-      + '<span style="color:'+achC(P.ach)+';font-weight:700;">'+(P.ach == null ? '–' : P.ach+'%')+'</span>'
-      + (P.elig && P.inc != null ? '<span style="color:'+MUTED+';font-size:10.5px;"> · '+P.rate+'% · </span><span style="color:'+INK+';font-weight:600;">'+fmtCur(P.inc)+'</span>' : '<span style="color:'+MUTED+';font-size:10.5px;"> · not eligible</span>')
-    + '</td>';
-  }
+  var cols = sortTh('name','Sales rep',0,'26%') + sortTh('zone','Zone',0,'24%') + '<th class="incs-th" style="text-align:left;width:12%;">Status</th>'
+    + sortTh('tgt','Target GP',1,'12%') + sortTh('fin','Final GP',1,'12%') + sortTh('inc','Total incentive',1,'14%','color:'+PURPLE+';');
+  var NCOL = 6;
+
+  // ── 3. The working for one rep, in three groups ──
   function detail(r){
-    var ks = Object.keys(r.parts);
-    return '<tr data-detail="1"><td colspan="'+nCol+'" style="padding:4px 12px 14px 40px;background:#FAFBFD;border-top:1px dashed #E3E9F2;">'
-      + '<div style="display:flex;gap:28px;flex-wrap:wrap;">'
-      + ks.map(function(k){
-          var P = r.parts[k];
-          function ln(l, v, c, b){ return '<tr><td style="padding:3px 18px 3px 0;font-size:11.5px;color:'+(b ? INK : SUB)+';font-weight:'+(b ? 700 : 500)+';">'+l+'</td><td style="padding:3px 0;text-align:right;font-family:\'DM Mono\',monospace;font-size:11.5px;font-weight:'+(b ? 800 : 600)+';color:'+(c || INK)+';">'+v+'</td></tr>'; }
-          function money(v, neg){ return v == null ? '–' : (neg && v > 0 ? '−' : '') + fmtCur(neg ? Math.abs(v) : v); }
-          return '<div style="min-width:260px;"><div style="font-size:11px;font-weight:800;color:'+NAVY+';margin:8px 0 4px;text-transform:uppercase;letter-spacing:0.05em;">'+partLabel(k)+'</div><table style="border-collapse:collapse;">'
-            + ln('GP achieved', fmtCur(P.gp)) + ln('Target GP', r.noTarget ? '–' : fmtCur(r.tgt)) + ln('GP%', P.ach == null ? '–' : P.ach+'%', achC(P.ach))
-            + ln('Eligible', P.elig ? '✓ Yes' : '✕ No', P.elig ? '#15875A' : '#C2410C', true)
-            + (P.elig ? INC_RM.map(function(x){ return ln(esc(x.label)+(P.ships && P.ships[x.k] ? ' <span style="color:'+MUTED+';">· '+P.ships[x.k]+' job'+(P.ships[x.k] === 1 ? '' : 's')+'</span>' : ''), money(P.rm && P.rm[x.k], true), '#475569'); }).join('')
-                + ln('Management fees (15%)', money(P.fee, true), '#475569') + ln('Final GP after deductions', money(P.fin), '#0B7A4B', true)
-                + ln('Rate', P.rate == null ? '–' : P.rate+'%') + ln('Incentive', money(P.inc), PURPLE, true) : '')
-            + '</table>'
-            + (isPayQ ? '<button data-z="'+esc(r.zone)+'" data-r="'+esc(r.name)+'" data-p="'+k+'" onclick="incSumGoCalc(this.dataset.z, this.dataset.r, this.dataset.p)" class="btnq" style="margin-top:8px;border:none;background:transparent;color:#2C4E82;font-size:11px;font-weight:700;cursor:pointer;padding:0;text-decoration:underline;">Open in Calculation →</button>' : '')
-          + '</div>';
-        }).join('')
-      + '</div>'
-      + (!isPayQ ? '<div style="font-size:10.5px;color:'+MUTED+';margin-top:8px;">The Calculation tab shows the quarter being paid now ('+esc(pq.label)+'), so this quarter can\'t be opened there.</div>' : '')
-    + '</td></tr>';
+    var ks = Object.keys(r.parts), two = ks.length > 1;
+    function kv(l, v, c, b){ return '<div class="incs-kv"><span'+(b ? ' style="color:'+INK+';font-weight:600;"' : '')+'>'+l+'</span><span style="'+(c ? 'color:'+c+';' : '')+(b ? 'font-weight:700;' : '')+'">'+v+'</span></div>'; }
+    function why(k){ var P = r.parts[k]; return r.noTarget ? 'no target set' : P.ach == null ? 'no GP%' : 'GP% '+P.ach+'% is below 75%'; }
+    var perf = kv('Target GP', r.noTarget ? '–' : fmtCur(r.tgt))
+      + ks.map(function(k){ var P = r.parts[k]; return kv(partLabel(k)+' GP achieved', fmtCur(P.gp)) + kv(partLabel(k)+' GP%', P.ach == null ? '–' : P.ach+'%', achC(P.ach)); }).join('');
+    var brk = ks.map(function(k){
+      var P = r.parts[k];
+      if (!P.elig) return kv(partLabel(k), '<span style="font-family:\'DM Sans\',sans-serif;color:'+MUTED+';white-space:normal;">Not eligible: '+why(k)+'</span>');
+      return kv(partLabel(k)+' rate', P.rate == null ? '–' : P.rate+'%') + kv(partLabel(k)+' incentive', money(P.inc), PURPLE);
+    }).join('') + '<div style="font-size:10.5px;color:'+MUTED+';margin-top:6px;">Rates: '+INC_RATES.sales.t1+'% at 75–99.99% GP%, '+INC_RATES.sales.t2+'% at 100% or more</div>';
+    var fin = ks.map(function(k){
+      var P = r.parts[k];
+      if (!P.elig) return two ? kv(partLabel(k), '<span style="font-family:\'DM Sans\',sans-serif;color:'+MUTED+';">nothing deducted (not eligible)</span>') : '';
+      function ded(v){ return v == null ? '–' : v > 0 ? '−' + fmtCur(v) : v < 0 ? '+' + fmtCur(-v) : fmtCur(0); }
+      return (two ? '<div style="font-size:11px;font-weight:700;color:'+NAVY+';margin:6px 0 2px;">'+partLabel(k)+'</div>' : '')
+        + INC_RM.map(function(x){ var n = P.ships && P.ships[x.k]; return kv(esc(x.label)+(n ? ' <span style="color:'+MUTED+';">· '+n+' job'+(n === 1 ? '' : 's')+'</span>' : ''), ded(P.rm && P.rm[x.k]), '#5B6678'); }).join('')
+        + kv('Management fees (15%)', ded(P.fee), '#5B6678')
+        + kv('Final GP after deductions', money(P.fin), '#0B7A4B', true);
+    }).join('')
+      + '<div style="border-top:1px solid '+LINE+';margin-top:6px;padding-top:4px;">'+kv('Total incentive', r.pay > 0 ? fmtCur(r.pay) : r.elig ? fmtCur(0) : '–', PURPLE, true)+'</div>';
+    var links = isPayQ
+      ? '<div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;">' + ks.map(function(k){
+          return '<button data-z="'+esc(r.zone)+'" data-r="'+esc(r.name)+'" data-p="'+k+'" onclick="incSumGoCalc(this.dataset.z, this.dataset.r, this.dataset.p)" class="btnq" style="border:none;background:transparent;color:#2C4E82;font-size:11.5px;font-weight:600;cursor:pointer;padding:0;">Open '+partLabel(k)+' in Calculation →</button>';
+        }).join('') + '</div>'
+      : '<div style="font-size:11px;color:'+MUTED+';margin-top:12px;">The Calculation tab shows the quarter being paid now ('+esc(pq.label)+'), so this quarter can\'t be opened there.</div>';
+    function grp(t, body){ return '<div style="min-width:0;"><div class="incs-grp">'+t+'</div>'+body+'</div>'; }
+    return '<div style="margin:0 16px 14px 34px;padding:16px 20px;background:#FAFBFD;border:1px solid #E8EDF5;border-left:3px solid #C4B2E0;border-radius:0 8px 8px 0;">'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px 36px;">'
+        + grp('Performance', perf) + grp('Incentive breakdown', brk) + grp('Final calculation', fin)
+      + '</div>' + links + '</div>';
   }
   var q = String(S.q || '').toLowerCase().trim(), shown = 0;
   var body = rows.map(function(r){
     var zp = zoneParts(r.zone), open = !!S.open[r.name], hide = q && r.name.toLowerCase().indexOf(q) === -1;
     if (!hide) shown++;
-    var dim = r.elig ? '' : 'color:'+MUTED+';';
-    var incTd = '<td style="'+num+'background:#FAF6FD;font-size:13px;font-weight:800;color:'+(r.pay > 0 ? PURPLE : MUTED)+';">'+(r.pay > 0 ? fmtCur(r.pay) : r.elig ? fmtCur(0) : '<span style="font-size:11px;font-weight:600;font-family:inherit;">Not eligible</span>')+'</td>';
-    var name = '<td style="'+td+'"><span style="display:inline-block;width:14px;font-size:9px;color:'+MUTED+';">'+(open ? '▼' : '▶')+'</span><span style="font-weight:700;color:'+(r.elig ? INK : SUB)+';">'+esc(r.name)+'</span></td>';
-    var zone = '<td style="'+td+'"><span style="font-weight:700;color:'+NAVY+';">'+esc(zp[0])+'</span>'+(zp[1] ? ' <span style="color:'+MUTED+';font-size:11px;">'+esc(zp[1])+'</span>' : '')+'</td>';
-    var mid = single
-      ? '<td style="'+num+dim+'">'+fmtCur(r.gp)+'</td><td style="'+num+dim+'">'+(r.noTarget ? '–' : fmtCur(r.tgt))+'</td>'
-        + '<td style="'+num+'font-weight:700;color:'+achC(r.ach)+';">'+(r.ach == null ? '–' : r.ach+'%')+'</td>'
-        + '<td style="'+num+'color:'+(r.fin == null ? '#CBD3DF' : '#0B7A4B')+';font-weight:600;">'+(r.fin == null ? '–' : fmtCur(r.fin))+'</td>'
-        + '<td style="'+num+'color:'+SUB+';">'+(r.elig && r.rate != null ? r.rate+'%' : '–')+'</td>'
-      : '<td style="'+num+dim+'">'+(r.noTarget ? '–' : fmtCur(r.tgt))+'</td>' + partCell(r.parts.core) + partCell(r.parts.cross)
-        + '<td style="'+num+'color:'+(r.fin == null ? '#CBD3DF' : '#0B7A4B')+';font-weight:600;">'+(r.fin == null ? '–' : fmtCur(r.fin))+'</td>';
-    return '<tr data-rep="'+esc(r.name.toLowerCase())+'" onclick="incSumOpen(this.getAttribute(\'data-name\'))" data-name="'+esc(r.name)+'" style="cursor:pointer;'+(hide ? 'display:none;' : '')+'" title="Show how this was worked out">'+name+zone+mid+incTd+'</tr>'
-      + (open ? detail(r).replace('<tr data-detail="1">', '<tr data-detail="1"'+(hide ? ' style="display:none;"' : '')+'>') : '');
+    var st = status(r);
+    var tr = '<tr class="incs-row'+(open ? ' on' : '')+'" data-rep="'+esc(r.name.toLowerCase())+'" data-name="'+esc(r.name)+'" onclick="incSumOpen(this.getAttribute(\'data-name\'))" aria-expanded="'+open+'" style="'+(hide ? 'display:none;' : '')+'">'
+      + '<td><span aria-hidden="true" style="display:inline-block;width:16px;font-size:9px;color:'+(open ? PURPLE : MUTED)+';">'+(open ? '▼' : '▶')+'</span>'
+        + '<span style="font-size:13px;font-weight:600;color:'+INK+';">'+esc(r.name)+'</span></td>'
+      + '<td style="overflow:hidden;text-overflow:ellipsis;"><span style="font-weight:600;color:'+NAVY+';">'+esc(zp[0])+'</span>'+(zp[1] ? '<span style="color:'+MUTED+';margin-left:6px;">'+esc(zp[1])+'</span>' : '')+'</td>'
+      + '<td>'+chip(st)+'</td>'
+      + '<td class="incs-n" style="color:'+(r.noTarget ? '#CBD3DF' : INK)+';">'+(r.noTarget ? '–' : fmtCur(r.tgt))+'</td>'
+      + '<td class="incs-n" style="color:'+(r.fin == null ? '#CBD3DF' : '#0B7A4B')+';">'+money(r.fin)+'</td>'
+      + '<td class="incs-n" style="background:#FBF8FE;font-size:13.5px;font-weight:700;color:'+(r.pay > 0 ? PURPLE : '#CBD3DF')+';">'+(r.pay > 0 ? fmtCur(r.pay) : r.elig ? fmtCur(0) : '–')+'</td>'
+    + '</tr>';
+    return tr + (open ? '<tr data-detail="1"'+(hide ? ' style="display:none;"' : '')+'><td colspan="'+NCOL+'" style="padding:0;border-bottom:1px solid #EEF2F7;background:#FFFFFF;">'+detail(r)+'</td></tr>' : '');
   }).join('');
   var shownPay = rows.filter(function(r){ return r.pay > 0; }).map(function(r){ return r.pay; });
-  var tools = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid #D5DCE6;">'
-    + '<span style="font-size:13px;font-weight:800;color:'+NAVY+';margin-right:4px;">Sales reps</span>'
-    + '<input type="search" value="'+esc(S.q || '')+'" oninput="incSumSearch(this.value)" placeholder="Search sales rep" aria-label="Search sales rep" style="border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11.5px;width:190px;color:'+INK+';">'
-    + '<select onchange="incSumSet(\'zone\', this.value)" aria-label="Zone" style="'+pill+'"><option value="">All zones</option>'+zoneOpts.map(function(z){ return '<option value="'+esc(z)+'"'+(S.zone === z ? ' selected' : '')+'>'+esc(z)+'</option>'; }).join('')+'</select>'
-    + '<select onchange="incSumSet(\'elig\', this.value)" aria-label="Eligibility" style="'+pill+'">'
+  var ctl = 'background:#FFFFFF;border:1px solid #D8E1F0;border-radius:8px;padding:6px 10px;font-size:12px;color:'+INK+';';
+  var tools = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 16px;border-bottom:1px solid #DCE3EE;">'
+    + '<span style="font-size:14px;font-weight:700;color:'+NAVY+';margin-right:6px;">Sales reps</span>'
+    + '<input type="search" value="'+esc(S.q || '')+'" oninput="incSumSearch(this.value)" placeholder="Search sales rep" aria-label="Search sales rep" style="'+ctl+'width:200px;">'
+    + '<select onchange="incSumSet(\'zone\', this.value)" aria-label="Zone" style="'+ctl+'max-width:240px;"><option value="">All zones</option>'+zoneOpts.map(function(z){ return '<option value="'+esc(z)+'"'+(S.zone === z ? ' selected' : '')+'>'+esc(z)+'</option>'; }).join('')+'</select>'
+    + '<select onchange="incSumSet(\'elig\', this.value)" aria-label="Eligibility" style="'+ctl+'">'
       + [['elig','Eligible only'],['all','All reps'],['not','Not eligible']].map(function(o){ return '<option value="'+o[0]+'"'+(S.elig === o[0] ? ' selected' : '')+'>'+o[1]+'</option>'; }).join('')+'</select>'
-    + '<span style="font-size:11px;color:'+SUB+';font-weight:600;"><span id="incSumCount">'+shown+'</span> shown</span>'
     + '<span style="flex:1;"></span>'
-    + (shownPay.length ? '<span style="font-size:11px;color:'+SUB+';">Highest <b style="color:'+PURPLE+';">'+fmtCur(Math.max.apply(null, shownPay))+'</b> · Lowest <b style="color:'+PURPLE+';">'+fmtCur(Math.min.apply(null, shownPay))+'</b></span>' : '')
+    + '<span style="font-size:11.5px;color:'+MUTED+';"><span id="incSumCount">'+shown+'</span> reps'
+      + (shownPay.length ? ' · highest <span style="color:'+INK+';font-family:\'DM Mono\',monospace;">'+fmtCur(Math.max.apply(null, shownPay))+'</span> · lowest <span style="color:'+INK+';font-family:\'DM Mono\',monospace;">'+fmtCur(Math.min.apply(null, shownPay))+'</span>' : '')+'</span>'
   + '</div>';
-  var repsCard = '<div id="incSumReps" style="'+card+'margin-bottom:14px;overflow:hidden;">' + tools
-    + '<div style="overflow:auto;max-height:560px;"><table style="width:100%;border-collapse:collapse;">'
+  var repsCard = '<div id="incSumReps" style="'+card+'margin-bottom:16px;overflow:hidden;">' + tools
+    + '<div style="overflow:auto;max-height:calc(100vh - 220px);min-height:240px;"><table style="width:100%;border-collapse:collapse;table-layout:fixed;">'
       + '<thead><tr>'+cols+'</tr></thead><tbody>'
-      + (body || '<tr><td colspan="'+nCol+'" style="padding:28px;text-align:center;color:'+MUTED+';font-size:12px;">No reps match these filters.</td></tr>')
-    + '</tbody></table></div></div>';
+      + (body || '<tr><td colspan="'+NCOL+'" style="padding:32px;text-align:center;color:'+MUTED+';font-size:12px;">No reps match these filters.</td></tr>')
+    + '</tbody></table></div>'
+    + '<div style="padding:9px 16px;font-size:11px;color:'+MUTED+';border-top:1px solid #EEF2F7;">Click a rep to see Core and Cross performance, rates, deductions and how the incentive was worked out.</div>'
+  + '</div>';
 
-  // ── Zones: table + bar chart of each zone's payout ──
+  // ── Zones: table + payout bars ──
   var zMax = Math.max.apply(null, zSorted.map(function(z){ return z.pay + z.zm; }).concat([0]));
-  var zth = 'padding:8px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#475569;border-bottom:2px solid #B0BAC8;white-space:nowrap;background:#F0F4FA;';
+  var zth = 'padding:10px 16px;font-size:10.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#7A8AA3;border-bottom:1px solid #DCE3EE;white-space:nowrap;';
+  var zn = 'text-align:right;font-family:\'DM Mono\',monospace;font-variant-numeric:tabular-nums;';
   var zTable = '<table style="width:100%;border-collapse:collapse;"><thead><tr>'
-      + ['Zone','Reps','Eligible','Not eligible','Sales reps\' incentive','Avg per eligible rep','ZM incentive','Zone total','Share'].map(function(h, i){ return '<th style="'+zth+'text-align:'+(i ? 'right' : 'left')+';">'+h+'</th>'; }).join('')
+      + ['Zone','Reps','Eligible','Not eligible','Sales reps\' incentive','Avg per eligible rep','ZM incentive','Zone total','Share'].map(function(h, i){ return '<th style="'+zth+'text-align:'+(i ? 'right' : 'left')+';'+(i === 7 ? 'color:'+PURPLE+';' : '')+'">'+h+'</th>'; }).join('')
     + '</tr></thead><tbody>'
     + zSorted.map(function(z){
         var zp = zoneParts(z.name), on = S.zone === z.name;
-        return '<tr onclick="incSumZone(this.getAttribute(\'data-z\'))" data-z="'+esc(z.name)+'" title="Show this zone\'s reps" style="cursor:pointer;'+(on ? 'background:#F1EBF8;' : '')+'">'
-          + '<td style="'+td+'"><span style="font-weight:800;color:'+NAVY+';">'+esc(zp[0])+'</span>'+(zp[1] ? ' <span style="color:'+MUTED+';font-size:11px;">'+esc(zp[1])+'</span>' : '')+'</td>'
-          + '<td style="'+num+'">'+z.reps+'</td><td style="'+num+'color:#15875A;font-weight:700;">'+z.elig+'</td><td style="'+num+'color:'+SUB+';">'+(z.reps - z.elig)+'</td>'
-          + '<td style="'+num+'">'+fmtCur(z.pay)+'</td><td style="'+num+'color:'+SUB+';">'+(z.elig ? fmtCur(z.pay / z.elig) : '–')+'</td>'
-          + '<td style="'+num+'">'+(z.zm > 0 ? fmtCur(z.zm) : '<span style="color:#CBD3DF;">–</span>')+'</td>'
-          + '<td style="'+num+'font-weight:800;color:'+PURPLE+';">'+fmtCur(z.pay + z.zm)+'</td>'
-          + '<td style="'+num+'color:'+SUB+';">'+pct(z.pay + z.zm, D.total)+'%</td></tr>';
+        return '<tr class="incs-z" onclick="incSumZone(this.getAttribute(\'data-z\'))" data-z="'+esc(z.name)+'" title="Show this zone\'s reps" style="'+(on ? 'background:#F6F3FB;' : '')+'">'
+          + '<td><span style="font-weight:600;color:'+NAVY+';">'+esc(zp[0])+'</span>'+(zp[1] ? '<span style="color:'+MUTED+';margin-left:6px;">'+esc(zp[1])+'</span>' : '')+'</td>'
+          + '<td style="'+zn+'">'+z.reps+'</td><td style="'+zn+'">'+z.elig+'</td><td style="'+zn+'color:'+MUTED+';">'+(z.reps - z.elig)+'</td>'
+          + '<td style="'+zn+'">'+fmtCur(z.pay)+'</td><td style="'+zn+'color:'+SUB+';">'+(z.elig ? fmtCur(z.pay / z.elig) : '–')+'</td>'
+          + '<td style="'+zn+'">'+(z.zm > 0 ? fmtCur(z.zm) : '<span style="color:#CBD3DF;">–</span>')+'</td>'
+          + '<td style="'+zn+'font-weight:700;color:'+PURPLE+';">'+fmtCur(z.pay + z.zm)+'</td>'
+          + '<td style="'+zn+'color:'+SUB+';">'+pct(z.pay + z.zm, D.total)+'%</td></tr>';
       }).join('')
-    + '<tr style="background:#F6F8FB;"><td style="'+td+'font-weight:800;color:'+INK+';border-top:2px solid #B0BAC8;">Total</td>'
-      + '<td style="'+num+'font-weight:800;border-top:2px solid #B0BAC8;">'+nReps+'</td><td style="'+num+'font-weight:800;border-top:2px solid #B0BAC8;">'+D.nElig+'</td><td style="'+num+'font-weight:800;border-top:2px solid #B0BAC8;">'+(nReps - D.nElig)+'</td>'
-      + '<td style="'+num+'font-weight:800;border-top:2px solid #B0BAC8;">'+fmtCur(D.repPay)+'</td><td style="'+num+'border-top:2px solid #B0BAC8;color:'+SUB+';">'+(D.nElig ? fmtCur(avg) : '–')+'</td>'
-      + '<td style="'+num+'font-weight:800;border-top:2px solid #B0BAC8;">'+fmtCur(D.zmPay)+'</td><td style="'+num+'font-weight:800;color:'+PURPLE+';border-top:2px solid #B0BAC8;">'+fmtCur(D.total)+'</td><td style="'+num+'border-top:2px solid #B0BAC8;color:'+SUB+';">100%</td></tr>'
+    + '<tr style="background:#F8FAFD;">' + ['Total', nReps, D.nElig, nReps - D.nElig, fmtCur(D.repPay), D.nElig ? fmtCur(avg) : '–', fmtCur(D.zmPay), fmtCur(D.total), '100%'].map(function(v, i){
+        return '<td style="padding:11px 16px;font-size:12px;font-weight:700;border-top:1px solid #DCE3EE;'+(i ? zn : '')+(i === 7 ? 'color:'+PURPLE+';' : 'color:'+INK+';')+'">'+v+'</td>';
+      }).join('') + '</tr>'
     + '</tbody></table>';
   var bars = zSorted.map(function(z){
     var v = z.pay + z.zm, w = zMax > 0 ? Math.max(v > 0 ? 1 : 0, v / zMax * 100) : 0;
-    return '<div onclick="incSumZone(this.getAttribute(\'data-z\'))" data-z="'+esc(z.name)+'" title="'+esc(z.name)+': '+esc(fmtCur(v))+' ('+pct(v, D.total)+'%) · sales reps '+esc(fmtCur(z.pay))+' · ZM '+esc(fmtCur(z.zm))+'" style="display:grid;grid-template-columns:110px 1fr 130px;align-items:center;gap:10px;padding:5px 0;cursor:pointer;">'
-      + '<span style="font-size:11.5px;font-weight:700;color:'+NAVY+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(zoneParts(z.name)[0])+'</span>'
-      + '<div style="height:14px;background:#F2F4F8;border-radius:0 4px 4px 0;"><div style="height:100%;width:'+w.toFixed(1)+'%;background:'+PURPLE+';border-radius:0 4px 4px 0;"></div></div>'
-      + '<span style="font-size:11.5px;font-family:\'DM Mono\',monospace;color:'+INK+';text-align:right;white-space:nowrap;">'+fmtCur(v)+' <span style="color:'+MUTED+';">'+pct(v, D.total)+'%</span></span></div>';
+    return '<div onclick="incSumZone(this.getAttribute(\'data-z\'))" data-z="'+esc(z.name)+'" title="'+esc(z.name)+': '+esc(fmtCur(v))+' ('+pct(v, D.total)+'%) · sales reps '+esc(fmtCur(z.pay))+' · ZM '+esc(fmtCur(z.zm))+'" style="display:grid;grid-template-columns:110px 1fr 130px;align-items:center;gap:12px;padding:5px 0;cursor:pointer;">'
+      + '<span style="font-size:12px;font-weight:600;color:'+NAVY+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(zoneParts(z.name)[0])+'</span>'
+      + '<div style="height:12px;background:#F2F4F8;border-radius:0 4px 4px 0;"><div style="height:100%;width:'+w.toFixed(1)+'%;background:'+PURPLE+';border-radius:0 4px 4px 0;"></div></div>'
+      + '<span style="font-size:12px;font-family:\'DM Mono\',monospace;color:'+INK+';text-align:right;white-space:nowrap;">'+fmtCur(v)+' <span style="color:'+MUTED+';">'+pct(v, D.total)+'%</span></span></div>';
   }).join('');
   var zonesCard = '<div style="'+card+'overflow:hidden;">'
-    + '<div style="padding:12px 16px;border-bottom:1px solid #D5DCE6;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:800;color:'+NAVY+';">Zones</span><span style="font-size:11px;color:'+MUTED+';">Click a zone to see its reps. ZM incentive is the zone manager\'s own incentive (2% / 3%), kept apart from the reps\'.</span></div>'
-    + '<div>'
-      + '<div style="overflow:auto;">'+zTable+'</div>'
-      + '<div style="max-width:820px;padding:14px 18px 16px;border-top:1px solid '+LINE+';"><div style="font-size:10.5px;font-weight:700;color:'+SUB+';text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Payout by zone</div>'+(bars || '<div style="font-size:11.5px;color:'+MUTED+';">No zones.</div>')+'</div>'
-    + '</div></div>';
-
-  var note = '<div style="font-size:10.5px;color:'+MUTED+';margin-top:12px;">Figures come straight from the Calculation tab (same GP, targets, deductions, fees and rates) for '+partLabel(S.part)+'. Only eligible reps with an incentive above zero count towards the total. The top-bar filters apply here too.</div>';
-  return '<div style="padding:18px 24px 32px;">' + head + access + kpis + insights + repsCard + zonesCard + note + '</div>';
+    + '<div style="padding:14px 16px;border-bottom:1px solid #DCE3EE;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;"><span style="font-size:14px;font-weight:700;color:'+NAVY+';">Zones</span><span style="font-size:11.5px;color:'+MUTED+';">Click a zone to filter the reps. ZM incentive is the zone manager\'s own ('+INC_RATES.zm.t1+'% / '+INC_RATES.zm.t2+'%), kept apart from the reps\'.</span></div>'
+    + '<div style="overflow:auto;">'+zTable+'</div>'
+    + '<div style="max-width:820px;padding:16px 18px 18px;border-top:1px solid '+LINE+';"><div class="incs-grp" style="margin-bottom:8px;">Payout by zone</div>'+(bars || '<div style="font-size:11.5px;color:'+MUTED+';">No zones.</div>')+'</div>'
+  + '</div>';
+  var note = '<div style="font-size:10.5px;color:'+MUTED+';margin-top:14px;">Figures come straight from the Calculation tab (same GP, targets, deductions, fees and rates) for '+partLabel(S.part)+'. Only eligible reps with an incentive above zero count towards the total. The top-bar filters apply here too.</div>';
+  return '<div style="padding:18px 24px 32px;">' + css + head + access + kpis + repsCard + zonesCard + note + '</div>';
 }
 
 // The Summary as a CSV file: the same figures as the screen (current Core / Cross choice and quarter)
