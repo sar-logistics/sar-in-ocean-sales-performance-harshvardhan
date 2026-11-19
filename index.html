@@ -3191,12 +3191,12 @@ function topbar(){
           // hidden on all three insight pages, same as before.
           var _isInsightPage = ['customers','agents','tradelane'].indexOf(state.page) >= 0;
 
-          var lobSection = _isInsightPage ? '' : sectionHeader('LOBs', state.filterLobs.length, lobOpen, 'toggleFilterLobDrop')
+          var lobSection = _isInsightPage ? '' : sectionHeader('LOBs', state.filterLobs.length, lobOpen, 'toggleFilterLobDrop').replace('>All LOBs<', state.filterLobNone ? '>No LOBs selected<' : '>All LOBs<')
             + (lobOpen ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'
                 + searchBox('lob-search-input', 'Search LOBs…')
                 + '<div id="lob-checklist" style="max-height:180px;overflow-y:auto;">'
-                  + checkRow('All LOBs', state.filterLobs.length===0, 'filterLobAll', '')
-                  + LOB_KEYS.map(function(k){ return checkRow(LOB_LABELS[k], state.filterLobs.indexOf(k)>-1, 'toggleFilterLob', k); }).join('')
+                  + checkRow('All LOBs', lobAllTicked(LOB_KEYS), 'filterLobAll', '')
+                  + LOB_KEYS.map(function(k){ return checkRow(LOB_LABELS[k], lobTicked(k), 'toggleFilterLob', k); }).join('')
                   + '<div class="filter-no-match" style="display:none;padding:14px 10px;text-align:center;font-size:11.5px;color:#9AAFC8;">No matching LOBs</div>'
                 + '</div>'
               + '</div>' : '');
@@ -9877,33 +9877,31 @@ document.addEventListener('click', function(ev){
   else if(act==='toggleFiltersDrop'){
     ev.stopPropagation();
     state.filtersOpen=!state.filtersOpen;
+    if (!state.filtersOpen) state.filterLobNone = false;
     render(); requestAnimationFrame(positionAllDrops);
     if (state.filtersOpen) fetchLobDataIfNeeded(function(){ render(); requestAnimationFrame(positionAllDrops); });
   }
   else if(act==='toggleFilterLobDrop'){ ev.stopPropagation(); state.filterLobDropOpen=!state.filterLobDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleFilterRepDrop'){ ev.stopPropagation(); state.filterRepDropOpen=!state.filterRepDropOpen; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='filterLobAll'){ ev.stopPropagation(); _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {}; _customerPivotCache = {}; _agentPivotCache = {}; state.filterLobs=[]; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterLobAll'){
+    ev.stopPropagation();
+    if (lobAllTicked(lobChecklistKeys())) { state.filterLobNone = true; paintLobTicks(); }
+    else { state.filterLobNone = false; state.filterLobs = []; paintLobTicks(); scheduleLobApply(); }
+  }
   else if(act==='filterRepAll'){ ev.stopPropagation(); state.filterReps=[]; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleFilterLob'){
     ev.stopPropagation();
     var lv = el.getAttribute('data-val');
-    if (state.filterLobs.indexOf(lv) > -1) {
-      state.filterLobs = state.filterLobs.filter(function(x){ return x !== lv; });
+    if (state.filterLobNone) {
+      state.filterLobNone = false; state.filterLobs = [lv];
     } else {
-      state.filterLobs = state.filterLobs.concat([lv]);
+      var _cur = state.filterLobs.length ? state.filterLobs.slice() : lobChecklistKeys();
+      if (_cur.indexOf(lv) > -1) _cur = _cur.filter(function(x){ return x !== lv; }); else _cur.push(lv);
+      // Unticking the last LOB: show nothing ticked, keep the table until a LOB is picked
+      if (_cur.length === 0) { state.filterLobNone = true; paintLobTicks(); return; }
+      state.filterLobs = _cur;
     }
-    _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {}; _customerPivotCache = {}; _agentPivotCache = {}; _pendencyDrillCache = {};
-    // If newly selected LOB isn't in lobData yet, fetch full lobData then re-render
-    var _sampleRep = repsRawOriginal && repsRawOriginal[0];
-    var _hasAllLobs = _sampleRep && _sampleRep.lobData &&
-      state.filterLobs.every(function(fl){ return !!_sampleRep.lobData[fl]; });
-    if (!_hasAllLobs && state.filterLobs.length > 0) {
-      _lobDataFetched = false; // force re-fetch with full lobData
-      fetchLobDataIfNeeded(function(){ computeFilteredRepsRaw(); render(); });
-    } else {
-      render();
-    }
-    requestAnimationFrame(positionAllDrops);
+    paintLobTicks(); scheduleLobApply();
   }
   else if(act==='toggleFilterRep'){
     ev.stopPropagation();
@@ -9955,6 +9953,7 @@ document.addEventListener('click', function(ev){
         else if(act==='toggleFilterZoneDrop'){ ev.stopPropagation(); state.filterZoneDropOpen=!state.filterZoneDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='filterResetAll'){
     ev.stopPropagation();
+    state.filterLobNone=false; if(_lobApplyTimer){clearTimeout(_lobApplyTimer);_lobApplyTimer=null;}
     state.filterLobs=[]; state.filterReps=[]; state.filterZones=[];
     // Same reasoning as filterZoneAll above — do not strip a Regional
     // Managers actual RLS scope, only reset manual choices for other roles.
@@ -10410,7 +10409,7 @@ document.addEventListener('keydown', function(e){
     if(state.viewDropOpen||state.fromDropOpen||state.toDropOpen||state.weeklyDropOpen){ 
       state.viewDropOpen=false; state.fromDropOpen=false; state.toDropOpen=false; state.weeklyDropOpen=false; render(); 
     } else if(state.filtersOpen){
-      state.filtersOpen=false; state.filterLobDropOpen=false; state.filterRepDropOpen=false; render();
+      state.filtersOpen=false; state.filterLobDropOpen=false; state.filterRepDropOpen=false; state.filterLobNone=false; render();
     } else if(state.drill){ state.drill=null; _cleanupDrillFilterPopup(); render(); }
     else if(state.pendencyDrill){ state.pendencyDrill=null; _cleanupPendFilterPopup(); render(); }
   } 
@@ -10425,6 +10424,52 @@ function positionDrop(btnAct, dropId){
   var left = r.left;
   if(left+300>window.innerWidth-8) left = window.innerWidth-308;
   drop.style.left = Math.max(8,left)+'px';
+}
+
+// ── LOB filter: instant ticks + one table redraw after the last click ──
+// Ticks are painted straight into the open checklist, then the (heavy) page
+// redraw runs once, 300ms after the last click. "All LOBs" toggles: all on ->
+// all off (nothing ticked; the table keeps the last data until a LOB is
+// picked, and closing the panel puts the ticks back to the real selection).
+var _lobApplyTimer = null;
+function lobTicked(k){ return !state.filterLobNone && (state.filterLobs.length === 0 || state.filterLobs.indexOf(k) > -1); }
+function lobAllTicked(keys){ return !state.filterLobNone && (state.filterLobs.length === 0 || keys.every(function(k){ return state.filterLobs.indexOf(k) > -1; })); }
+function lobChecklistKeys(){
+  var box = document.getElementById('lob-checklist'); if (!box) return [];
+  return Array.prototype.map.call(box.querySelectorAll('[data-act="toggleFilterLob"]'), function(r){ return r.getAttribute('data-val'); });
+}
+function paintLobTicks(){
+  var box = document.getElementById('lob-checklist'); if (!box) return;
+  var tick = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  function set(row, on){
+    var b = row.firstElementChild; if (!b) return;
+    b.style.border = '1.5px solid ' + (on ? BRAND_A1 : '#C5D0E0');
+    b.style.background = on ? BRAND_A1 : '#FFFFFF';
+    b.innerHTML = on ? tick : '';
+    var sp = row.querySelector('span'); if (sp) sp.style.fontWeight = on ? '600' : '500';
+  }
+  Array.prototype.forEach.call(box.querySelectorAll('[data-act="toggleFilterLob"]'), function(r){ set(r, lobTicked(r.getAttribute('data-val'))); });
+  var all = box.querySelector('[data-act="filterLobAll"]'); if (all) set(all, lobAllTicked(lobChecklistKeys()));
+  var hdr = document.querySelector('#filters-drop [data-act="toggleFilterLobDrop"] span');
+  if (hdr) hdr.textContent = state.filterLobNone ? 'No LOBs selected' : (state.filterLobs.length === 0 ? 'All LOBs' : state.filterLobs.length + ' LOBs selected');
+}
+function clearLobCaches(){ _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {}; _customerPivotCache = {}; _agentPivotCache = {}; _pendencyDrillCache = {}; }
+function scheduleLobApply(){
+  clearLobCaches();
+  if (_lobApplyTimer) clearTimeout(_lobApplyTimer);
+  _lobApplyTimer = setTimeout(function(){
+    _lobApplyTimer = null;
+    // If a selected LOB isn't in lobData yet, fetch full lobData then re-render
+    var _sampleRep = repsRawOriginal && repsRawOriginal[0];
+    var _hasAllLobs = _sampleRep && _sampleRep.lobData &&
+      state.filterLobs.every(function(fl){ return !!_sampleRep.lobData[fl]; });
+    if (!_hasAllLobs && state.filterLobs.length > 0) {
+      _lobDataFetched = false; // force re-fetch with full lobData
+      fetchLobDataIfNeeded(function(){ computeFilteredRepsRaw(); render(); requestAnimationFrame(positionAllDrops); });
+    } else {
+      render(); requestAnimationFrame(positionAllDrops);
+    }
+  }, 300);
 }
 
 function positionAllDrops(_retryCount){
