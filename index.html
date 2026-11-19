@@ -6328,8 +6328,8 @@ function _incentivePageInner(foldQ, pre){
       : ent.isZone ? 'box-shadow:inset 3px 0 0 '+BRAND_A1+', inset -1.5px 0 0 '+BORDER_STRONG+';'
       : 'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';';
     var zoneClick = ent.isZone ? ' data-zone="'+esc(ent.name)+'" onclick="incToggleZone(this.getAttribute(\'data-zone\'))"' : '';
-    // A gap above every zone / the Grand Total so each reads as its own section
-    var gap = (ent.isZone || ent.isGrand) ? '<tr><td colspan="'+(heads.length + 2)+'" style="height:10px;padding:0;background:#FFFFFF;"></td></tr>' : '';
+    // No spacer between blocks: each zone starts with its thicker top border (user, 19-Nov-2026)
+    var gap = '';
     return gap + parts.map(function(p, pi){
       var topBorder = pi === 0 ? ((ent.isGrand || ent.isZone) ? 'border-top:2px solid #8FA3C4;' : 'border-top:1.5px solid #B8C4D6;') : (p.bold ? 'border-top:1px solid #DDE3EC;' : 'border-top:1px solid #F1F3F7;');
       // One name cell for the whole block (rowspan), centred, so it never makes a single row taller
