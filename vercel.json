@@ -2,7 +2,8 @@
   "version": 2,
   "functions": {
     "api/mongo-batch.js": {
-      "maxDuration": 120
+      "maxDuration": 120,
+      "includeFiles": "index.html"
     }
   },
   "rewrites": [

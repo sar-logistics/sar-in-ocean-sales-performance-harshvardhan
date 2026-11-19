@@ -6,7 +6,7 @@
 const { MongoClient } = require("mongodb");
 const { arPush, arGet, arBucketsGet, arBucketsSave, arDetail } = require("./_ar");
 const { incentiveOutstanding, incentiveHeld, incentiveRunSave, incentiveRuns, incentiveRun, incentiveShipment, incentiveRunDelete, incentiveAccess, incentiveAccessSave,
-  incentiveLock, incentiveLockState, incentiveDueQuarters, incentiveHeldShips, incentiveSnapshotFreeze, incentiveSnapshotPart, incentiveSnapshotDelete } = require("./_incentive");
+  incentiveLock, incentiveLockState, incentiveDueQuarters, incentiveHeldShips, incentiveSnapshotFreeze, incentiveSnapshotPart, incentiveSnapshotDelete, incentiveRunFromSnapshot } = require("./_incentive");
 
 const MONGO_URI = process.env.MONGO_URI;
 const DB_NAME   = "sar-in-air-sales";  // Option B: same DB as Air, Ocean dashboard filters differently
@@ -2924,7 +2924,7 @@ module.exports = async function handler(req, res) {
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "tradelaneDrill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug", "ar", "arDetail", "incentiveOutstanding", "incentiveRuns", "incentiveRun", "incentiveShipment", "incentiveHeld", "incentiveAccess", "incentiveLock", "incentiveSnapshot", "incentiveLockCheck"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "tradelaneDrill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug", "ar", "arDetail", "incentiveOutstanding", "incentiveRuns", "incentiveRun", "incentiveShipment", "incentiveHeld", "incentiveAccess", "incentiveLock", "incentiveSnapshot", "incentiveLockCheck", "incentiveRunCheck"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -2977,19 +2977,37 @@ module.exports = async function handler(req, res) {
         const ar = await incentiveOutstanding(db, true);
         return (fresh = { salesData, allRows, ar });
       };
+      // In quarter order: freeze, then the quarter's payout run from the frozen data (the next quarter's freeze and
+      // run need the shipments this run holds). A quarter that fails stops the ones after it until the next call.
       for (const quarter of incentiveDueQuarters()) {
         const st = await incentiveLockState(db, quarter);
-        if (st.frozen) { results.push({ quarter, already: true, frozenAt: st.frozen.frozenAt }); continue; }
+        const out = { quarter };
+        if (st.frozen) { out.already = true; out.frozenAt = st.frozen.frozenAt; }
+        else {
+          try {
+            const { salesData, allRows, ar } = await loadFresh();
+            const held = await incentiveHeldShips(db, quarter);
+            const keyOf = (v) => String(v == null ? "" : v).trim().toUpperCase();
+            const rows = allRows.filter((r) => st.months.indexOf(r._ml) > -1 || (r.shipmentNo && held[keyOf(r.shipmentNo)]));
+            const r = await incentiveSnapshotFreeze(db, quarter, { sales: salesData, rows, ar });
+            Object.assign(out, r.json);
+            if (!r.json.success) { results.push(out); break; }
+          } catch (e) { out.success = false; out.error = e.message || String(e); results.push(out); break; }
+        }
         try {
-          const { salesData, allRows, ar } = await loadFresh();
-          const held = await incentiveHeldShips(db, quarter);
-          const keyOf = (v) => String(v == null ? "" : v).trim().toUpperCase();
-          const rows = allRows.filter((r) => st.months.indexOf(r._ml) > -1 || (r.shipmentNo && held[keyOf(r.shipmentNo)]));
-          const r = await incentiveSnapshotFreeze(db, quarter, { sales: salesData, rows, ar });
-          results.push(Object.assign({ quarter }, r.json));
-        } catch (e) { results.push({ quarter, success: false, error: e.message || String(e) }); }
+          const run = await incentiveRunFromSnapshot(db, quarter);
+          out.run = run.json.success ? (run.json.already ? { already: true, runId: run.json.runId } : { saved: true, runId: run.json.runId, totals: run.json.totals })
+            : { success: false, error: run.json.error };
+          if (!run.json.success) { results.push(out); break; }
+        } catch (e) { out.run = { success: false, error: e.message || String(e) }; results.push(out); break; }
+        results.push(out);
       }
       return res.status(200).json({ success: true, env: process.env.VERCEL_ENV || "local", checkedAt: new Date(), results });
+    }
+    // Read-only: work the frozen quarter's run out on the server without saving it (checks the server calculation)
+    if (action === "incentiveRunCheck") {
+      try { const r = await incentiveRunFromSnapshot(db, String(req.query.quarter || ""), true); return res.status(r.status).json(r.json); }
+      catch (e) { return res.status(500).json({ success: false, error: e.message || String(e) }); }
     }
     if (action === "incentiveAccess") { const r = await incentiveAccess(db); return res.status(r.status).json(r.json); }
     if (action === "incentiveAccessSave") { const r = await incentiveAccessSave(db, req.body || {}); return res.status(r.status).json(r.json); }

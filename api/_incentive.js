@@ -546,5 +546,30 @@ async function incentiveAccessSave(db, body) {
   return { status: 200, json: { success: true, emails: emails, updatedBy: by, updatedAt: updatedAt } };
 }
 
+// The one payout run of a frozen quarter, worked out on the server (nightly job, straight after the freeze) from
+// the frozen data with the page's own calculation (_incentive_engine.js). Final on production, trial elsewhere.
+// Saved once: a quarter whose frozen data already has its run is skipped.
+async function incentiveRunFromSnapshot(db, quarter, dryRun) {
+  const st = await incentiveLockState(db, quarter);
+  if (!st.frozen) return { status: 409, json: { success: false, error: quarter + " isn't frozen yet" } };
+  const done = await db.collection(RUNS).findOne({ snapshotId: st.frozen.snapId }, { projection: { _id: 1 } });
+  if (done && !dryRun) return { status: 200, json: { success: true, already: true, runId: done._id } };
+  const snapId = st.frozen.snapId;
+  const part = async (kind, i) => {
+    const doc = await db.collection(SNAP_PARTS).findOne({ snapId, kind, i: i || 0 });
+    if (!doc) throw new Error("Missing frozen part " + kind + " " + (i || 0));
+    return doc.data;
+  };
+  const sales = await part("sales"), ar = await part("ar");
+  let rows = [];
+  for (let i = 0; i < (st.frozen.rowParts || 0); i++) rows = rows.concat(await part("rows", i));
+  const mode = lockEnv() === "production" ? "final" : "trial";
+  const h = await incentiveHeld(db, { quarter, mode });
+  const body = require("./_incentive_engine").buildRunFromFrozen(st, { sales, ar, rows }, h.json.held || []);
+  body.mode = mode; body.snapshotId = snapId; body.by = { name: "Nightly server job", email: "" };
+  if (dryRun) return { status: 200, json: { success: true, dryRun: true, quarter, snapshotId: snapId, reps: body.reps.length, ships: body.ships.length, checks: body.checks, asOn: body.asOn } };
+  return incentiveRunSave(db, body);
+}
+
 module.exports = { incentiveOutstanding, incentiveHeld, incentiveRunSave, incentiveRuns, incentiveRun, incentiveShipment, incentiveRunDelete, incentiveAccess, incentiveAccessSave,
-  incentiveLock, incentiveLockState, incentiveDueQuarters, incentiveHeldShips, incentiveSnapshotFreeze, incentiveSnapshotPart, incentiveSnapshotDelete, INC_LOCK };
+  incentiveLock, incentiveLockState, incentiveDueQuarters, incentiveHeldShips, incentiveSnapshotFreeze, incentiveSnapshotPart, incentiveSnapshotDelete, incentiveRunFromSnapshot, INC_LOCK };

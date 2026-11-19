@@ -6035,7 +6035,6 @@ function _incMergeQuarters(ms, qs){
            byZone:byZone, heads:heads, groups:null, nCols:nTot, multi:ms.length > 1 };
 }
 function incentivePage(){
-  if (state.incTab === 'history') return _incTabs() + incHistoryPage();
   // A locked quarter is shown from the data frozen on its lock date (same calculation, frozen inputs)
   var pq = _incPayQuarter(), gate = _incLockGate(pq.key);
   if (gate) return _incTabs() + gate;
@@ -6413,10 +6412,10 @@ function _incentivePageInner(foldQ, pre){
    A quarter locks at the end of the quarter after it (rule and dates live in api/_incentive.js, INC_LOCK). On that
    date the server freezes the data the Incentive pages are worked out from. From then on the Calculation and
    Summary tabs (and their drill-throughs and export) run the same calculation on that frozen copy instead of
-   today's data, so a locked quarter never changes. The one payout run for it is worked out from the frozen copy
-   too, automatically, and the server refuses any other run for that quarter. */
+   today's data, so a locked quarter never changes. The server's nightly job makes the quarter's one payout
+   run from the frozen copy right after freezing it, and refuses any other run for that quarter. */
 var incLock = {}, incLockBusy = {}, incLockErr = {};
-var incFrozen = {}, incFrozenBusy = {}, incFrozenErr = {}, incAutoRun = {};
+var incFrozen = {}, incFrozenBusy = {}, incFrozenErr = {};
 function _incLockLoad(q, force){
   if (incLockBusy[q] || (incLock[q] && !force)) return;
   incLockBusy[q] = true;
@@ -6479,7 +6478,7 @@ function _incWithData(F, fn){
 }
 // Before the Calculation / Summary tabs draw: know whether the quarter is locked, and load its frozen copy if so.
 // Returns what to show meanwhile, or '' when ready.
-function _incLockGate(q, noRun){
+function _incLockGate(q){
   function wait(msg){ return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div><div style="font-size:13px;color:#9AAFC8;font-weight:500;">'+msg+'</div></div>'; }
   function fail(msg){ return '<div style="padding:40px 24px;text-align:center;color:#B83A2B;font-size:12px;font-weight:600;">'+esc(msg)
     + '<div style="margin-top:12px;"><button onclick="incLockRetry(\''+q+'\')" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:6px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">Try again</button></div></div>'; }
@@ -6488,7 +6487,6 @@ function _incLockGate(q, noRun){
     if (incFrozenErr[q]) return fail('Couldn’t load the frozen data for ' + incLock[q].label + ': ' + incFrozenErr[q]);
     _incFrozenLoad(q); return wait('Loading the frozen ' + esc(incLock[q].label) + ' data…');
   }
-  if (incLock[q].frozen && !noRun) _incAutoRunCheck(q);
   return '';
 }
 function incLockRetry(q){ incLockErr[q] = ''; incFrozenErr[q] = ''; delete incLock[q]; render(); }
@@ -6503,101 +6501,24 @@ function _incLockBadge(q){
     : { t:'Open · locks ' + _incDate(L.lockAt), c:'#2C4E82', bg:'#EEF3FC', b:'#D3DFF3', tip:'Numbers follow today\'s data until the lock date.' };
   return '<span title="'+esc(st.tip)+'" style="font-size:11px;font-weight:700;color:'+st.c+';background:'+st.bg+';border:1px solid '+st.b+';border-radius:999px;padding:3px 10px;white-space:nowrap;">'+esc(st.t)+'</span>';
 }
-// The one run for a frozen quarter: worked out from the frozen copy and saved once (final on production, a trial
-// copy on staging). Whoever opens the page first with a full view triggers it; the result is the same whoever does.
-function _incAutoRunCheck(q){
-  var L = incLock[q], F = incFrozen[q];
-  if (!L || !L.frozen || !F || incAutoRun[q] || _getRLSReps().length) return;
-  if (!incRuns) { if (!incRunsLoading && !incRunsError) incLoadRuns(); return; }
-  if (incRuns.some(function(r){ return r.snapshotId === L.frozen.snapId; })) { incAutoRun[q] = { done:true }; return; }
-  incAutoRun[q] = { busy:true };
-  var mode = L.env === 'production' ? 'final' : 'trial';
-  fetch('/api/mongo-batch?action=incentiveHeld&mode=' + mode + '&quarter=' + encodeURIComponent(q) + '&t=' + Date.now())
-    .then(function(r){ return r.json(); })
-    .then(function(h){
-      if (!h || !h.success) throw new Error((h && h.error) || 'Held shipments failed to load');
-      var body = _incWithData(F, function(){ return _incBuildRun({ key:q, label:L.label, months:L.months }, h.held || []); });
-      body.mode = mode; body.snapshotId = L.frozen.snapId; body.asOn = F.incOutMeta.asOn; body.arPaidDocs = F.incOutMeta.paidDocs;
-      return fetch('/api/mongo-batch?action=incentiveRunSave', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
-    })
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      if (!d || !d.success) throw new Error((d && d.error) || 'The run for the frozen quarter wasn\'t saved');
-      incAutoRun[q] = { done:true, runId:d.runId }; incLoadRuns(true);
-    })
-    .catch(function(e){ incAutoRun[q] = { err:e.message || String(e) }; if (state.page === 'incentive') render(); });
-}
-// Staging only (Admins): freeze now / throw the test freeze away, to try the lock before it goes live
-function incLockFreezeNow(q){
-  if (!confirm('Freeze ' + q + ' now with today\'s data (staging test)?')) return;
-  incLockErr[q] = 'Freezing… this takes up to a minute'; render();
-  fetch('/api/mongo-batch?action=incentiveLockCheck&t=' + Date.now())
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      var r = d && d.results && d.results.filter(function(x){ return x.quarter === q; })[0];
-      if (!r || (!r.success && !r.already)) throw new Error((r && r.error) || (d && d.error) || 'Not frozen');
-      incLockErr[q] = ''; delete incLock[q]; delete incFrozen[q]; delete incAutoRun[q]; render();
-    })
-    .catch(function(e){ incLockErr[q] = ''; alert(e.message || String(e)); render(); });
-}
-function incLockUndoTest(q){
-  if (!confirm('Throw away the staging test freeze of ' + q + ' (and its run)? Production is never affected.')) return;
-  fetch('/api/mongo-batch?action=incentiveSnapshotDelete', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ action:'incentiveSnapshotDelete', quarter:q, by:_incMyEmail() }) })
-    .then(function(r){ return r.json(); })
-    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Failed'); delete incLock[q]; delete incFrozen[q]; delete incAutoRun[q]; incLoadRuns(true); render(); })
-    .catch(function(e){ alert(e.message || String(e)); });
-}
-// Lock card for the Payout History tab
-function _incLockCard(){
-  var pq = _incPayQuarter(), q = pq.key, L = incLock[q];
-  if (!L) { _incLockLoad(q); return ''; }
-  var a = incAutoRun[q] || {}, run = incRuns && L.frozen && incRuns.filter(function(r){ return r.snapshotId === L.frozen.snapId; })[0];
-  var lines = [];
-  lines.push(_incLockBadge(q));
-  if (L.frozen) {
-    var c = L.frozen.counts || {};
-    lines.push('<span style="font-size:11.5px;color:#5B6678;">Frozen: '+(c.reps || 0)+' reps · '+(c.quarterRows || 0)+' shipment rows'+(c.rows > c.quarterRows ? ' (+'+(c.rows - c.quarterRows)+' held from earlier)' : '')+' · AR as on '+esc(L.frozen.arAsOn || '–')+'</span>');
-    lines.push(run ? '<span style="font-size:11.5px;color:#15875A;font-weight:700;">'+(run.final ? 'Final' : 'Trial (staging)')+' run saved from the frozen data</span>'
-      : a.err ? '<span style="font-size:11.5px;color:#B83A2B;font-weight:700;">Run from the frozen data not saved: '+esc(a.err)+'</span>'
-      : '<span style="font-size:11.5px;color:#2C4E82;">The run is worked out from the frozen data the next time the Calculation tab is opened by someone who sees every rep.</span>');
-  }
-  var staging = L.env !== 'production' && _incIsAdmin();
-  var tools = staging ? '<span style="flex:1;"></span>'
-      + (L.frozen ? '<button onclick="incLockUndoTest(\''+q+'\')" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#B83A2B;cursor:pointer;">Undo test freeze (staging)</button>'
-        : L.locked ? '<button onclick="incLockFreezeNow(\''+q+'\')" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">Freeze now (staging test)</button>' : '')
-      + (incLockErr[q] ? '<span style="font-size:11px;color:#2C4E82;">'+esc(incLockErr[q])+'</span>' : '')
-    : '';
-  return '<div style="background:#FFFFFF;border:1px solid #D5DCE6;border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);margin-bottom:16px;">'
-    + '<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid #D5DCE6;flex-wrap:wrap;"><span style="font-size:13px;font-weight:800;color:#0D2B5E;">'+esc(L.label)+' lock</span>'
-      + '<span style="font-size:11px;color:#6B82A0;font-weight:600;">Locks at the end of the quarter after it ('+esc(_incDate(L.lockAt))+' IST); paid in '+esc(pq.payLabel)+'.</span>'+tools+'</div>'
-    + '<div style="padding:12px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">'+lines.join('')+'</div></div>';
-}
 
-/* ---------------------- Incentive: payout runs (history) ----------------------
-   A run takes one FY quarter, works out every rep's Core and Cross numbers exactly as the Incentive table does
-   (no zone / rep / LOB / region filter, whoever is looking), and saves a snapshot on the server: every rep's
-   GP, target, GP% and eligibility, and one ledger entry per shipment with what happened to it (paid, held,
-   removed, already paid in an earlier run). The server decides the statuses and refuses to pay a shipment twice.
-   Trial runs only for now: final runs stay off until the Incentive % and the paid-late data are in. */
+/* ---------------------- Incentive: payout runs ----------------------
+   Each quarter's one payout run is made by the server's nightly job (api/mongo-batch.js incentiveLockCheck) straight
+   after it freezes the quarter. The server runs THIS page's _incCaptureQuarter / _incBuildRun on the frozen data
+   (api/_incentive_engine.js), so the run has exactly the numbers these tabs show: every rep's GP, target, GP% and
+   eligibility, and one ledger entry per shipment (paid, held, removed, already paid in an earlier run). There is
+   no run screen and nothing to start by hand. Keep these two functions working without a browser around them. */
 // LOBs a run covers: Sales Performance's default LOB set (Ocean + Air cross-sales + General)
 var INC_RUN_LOBS = ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT','GENERAL'];
-var incRuns = null, incRunsLoading = false, incRunsError = '', incRunCache = {}, incGenBusy = false, incGenMsg = null;
-var INC_STATUS = {
-  paid:    { l:'Paid',         c:'#15875A', bg:'#E7F6EE' },
-  held:    { l:'Held',         c:'#A8720E', bg:'#FCF3DA' },
-  removed: { l:'Removed',      c:'#DC2626', bg:'#FDECEC' },
-  already: { l:'Already paid', c:'#64748B', bg:'#EEF1F6' }
-};
-var INC_WHY = { fl:'FL not done', unpaid:'O/S amount', late:'Paid 30+ days overdue', below:'Rep below 75% GP%', already:'Paid / removed in an earlier run' };
-function incSetTab(t){ state.incTab = t === 'history' ? 'history' : t === 'summary' && _incCanSummary() ? 'summary' : 'calc'; render(); }
+function incSetTab(t){ state.incTab = t === 'summary' && _incCanSummary() ? 'summary' : 'calc'; render(); }
 function _incTabs(){
   _incAccessLoad();
-  var cur = state.incTab === 'history' ? 'history' : state.incTab === 'summary' && _incCanSummary() ? 'summary' : 'calc';
+  var cur = state.incTab === 'summary' && _incCanSummary() ? 'summary' : 'calc';
   function tab(k, label){
     var on = cur === k;
     return '<button onclick="incSetTab(\''+k+'\')" class="btnq" style="border:none;background:transparent;padding:8px 2px;margin-right:18px;font-size:12.5px;font-weight:'+(on ? 800 : 600)+';color:'+(on ? '#0D2B5E' : '#6B82A0')+';border-bottom:2.5px solid '+(on ? BRAND_A2 : 'transparent')+';cursor:pointer;">'+label+'</button>';
   }
-  return '<div style="padding:14px 24px 0;display:flex;align-items:flex-end;border-bottom:1px solid #E3EAF3;">'+tab('calc','Calculation')+(_incCanSummary() ? tab('summary','Summary') : '')+tab('history','Payout History')+'</div>';
+  return '<div style="padding:14px 24px 0;display:flex;align-items:flex-end;border-bottom:1px solid #E3EAF3;">'+tab('calc','Calculation')+(_incCanSummary() ? tab('summary','Summary') : '')+'</div>';
 }
 /* ---------------------- Incentive: Summary tab (management) ----------------------
    A payout overview for management. Every number comes from the Calculation tab's own engine
@@ -7089,77 +7010,6 @@ function _incSumExportOne(){
   a.download = 'Incentive Summary ' + period.label + ' ' + part + ' ' + cur + '.csv';
   document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
-// FY quarters that have Sales Performance months: [{ key:'FY27-Q2', label:'Q2 FY27', months:['Jul-26','Aug-26','Sep-26'] }]
-function _incQuarters(){
-  var out = [], by = {};
-  months26.forEach(function(m){
-    var b = m.split('-'), mi = MONTH_NAME_TO_IDX[b[0]], yy = parseInt(b[1], 10);
-    var fy = mi >= 3 ? yy + 1 : yy, q = mi >= 3 ? Math.floor((mi - 3) / 3) + 1 : 4, k = 'FY' + fy + '-Q' + q;
-    if (!by[k]) { by[k] = { key:k, label:'Q' + q + ' FY' + fy, months:[] }; out.push(by[k]); }
-    by[k].months.push(m);
-  });
-  return out;
-}
-function incLoadRuns(force){
-  if (incRunsLoading) return;
-  incRunsLoading = true; incRunsError = '';
-  fetch('/api/mongo-batch?action=incentiveRuns' + (force ? '&t=' + Date.now() : ''))
-    .then(function(r){ return r.json(); })
-    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Runs failed to load'); incRuns = d.runs || []; })
-    .catch(function(e){ incRunsError = e.message || String(e); })
-    .finally(function(){ incRunsLoading = false; if (state.page === 'incentive') render(); });
-}
-function incOpenRun(id){
-  state.incRunSel = id; state.incRepSel = null; state.incStatusF = '';
-  if (!incRunCache[id]) {
-    incRunCache[id] = { loading:true };
-    fetch('/api/mongo-batch?action=incentiveRun&id=' + encodeURIComponent(id))
-      .then(function(r){ return r.json(); })
-      .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Run failed to load'); incRunCache[id] = { run:d.run, entries:d.entries || [] }; })
-      .catch(function(e){ incRunCache[id] = { error:e.message || String(e) }; })
-      .finally(function(){ if (state.page === 'incentive') render(); });
-  }
-  render();
-}
-function incCloseRun(){ state.incRunSel = null; state.incRepSel = null; render(); }
-function incPickRep(k){ state.incRepSel = state.incRepSel === k ? null : k; state.incStatusF = ''; render(); }
-function incSetStatusF(s){ state.incStatusF = state.incStatusF === s ? '' : s; render(); }
-function incSetGenQ(k){ state.incGenQ = k; render(); }
-function incShipSearch(){
-  var el = document.getElementById('incShipQ'), q = el ? el.value.trim() : '';
-  state.incShipQ = q;
-  if (!q) { state.incShipRes = null; render(); return; }
-  state.incShipRes = { loading:true };
-  render();
-  fetch('/api/mongo-batch?action=incentiveShipment&s=' + encodeURIComponent(q))
-    .then(function(r){ return r.json(); })
-    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Search failed'); state.incShipRes = d; })
-    .catch(function(e){ state.incShipRes = { error:e.message || String(e) }; })
-    .finally(function(){ render(); });
-}
-function incDeleteRun(id){
-  if (!confirm('Delete this trial run? Trial runs are only for checking; this cannot be undone.')) return;
-  fetch('/api/mongo-batch?action=incentiveRunDelete', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ action:'incentiveRunDelete', id:id }) })
-    .then(function(r){ return r.json(); })
-    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Delete failed'); delete incRunCache[id]; state.incRunSel = null; incLoadRuns(true); })
-    .catch(function(e){ alert(e.message || String(e)); });
-}
-// Every entry of a run as a CSV file
-function incExportRun(id){
-  var R = incRunCache[id]; if (!R || !R.entries) return;
-  var cols = [['Run', function(){ return R.run.label + ' (' + R.run.mode + ')'; }], ['Shipment No', function(e){ return e.s || '(no Shipment No)'; }],
-    ['Sales Rep', 'rep'], ['Zone', 'zone'], ['Core/Cross', 'part'], ['Month', 'month'], ['Customer', 'customer'], ['GP (INR)', 'gp'],
-    ['Status', function(e){ return (INC_STATUS[e.status] || {}).l || e.status; }], ['Reason', function(e){ return e.why ? INC_WHY[e.why] || e.why : ''; }],
-    ['Released from', function(e){ return e.released ? e.fromLabel : ''; }], ['Earlier run', function(e){ return e.prevRun ? e.prevRun.label + ' (' + e.prevRun.status + ')' : ''; }], ['Note', 'note']];
-  function q(v){ v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
-  var lines = [cols.map(function(c){ return q(c[0]); }).join(',')].concat(R.entries.map(function(e){
-    return cols.map(function(c){ return q(typeof c[1] === 'function' ? c[1](e) : e[c[1]]); }).join(',');
-  }));
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\n')], { type:'text/csv' }));
-  a.download = 'Incentive ' + R.run.label + ' ' + R.run.mode + '.csv';
-  document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
-}
 
 // Rep numbers for the months of one quarter, the same as the Incentive table shows with no filters
 function _incCaptureQuarter(months){
@@ -7177,38 +7027,6 @@ function _incCaptureQuarter(months){
     computeFilteredRepsRaw();
   }
   return cap || [];
-}
-function incGenerateRun(){
-  var q = _incQuarters().filter(function(x){ return x.key === state.incGenQ; })[0];
-  if (!q || incGenBusy) return;
-  if (incLock[q.key] && incLock[q.key].locked) { incGenMsg = { err:q.label + ' is locked; its run comes from the frozen data.' }; render(); return; }
-  if (_getRLSReps().length) { incGenMsg = { err:'Only users who can see every sales rep can generate a run.' }; render(); return; }
-  incGenBusy = true; incGenMsg = { info:'Loading the latest outstanding and paid-invoice data…' }; render();
-  function fail(e){ incGenBusy = false; incGenMsg = { err:e.message || String(e) }; render(); }
-  var steps = function(){
-    if (!allDrillRows || !allDrillRows.length) return loadDrillData(steps);
-    fetchIncentiveOutstanding(function(){
-      if (!incOutRefs) return fail(new Error('Outstanding data failed to load: ' + incOutError));
-      fetch('/api/mongo-batch?action=incentiveHeld&mode=trial&quarter=' + encodeURIComponent(q.key) + '&t=' + Date.now())
-        .then(function(r){ return r.json(); })
-        .then(function(h){
-          if (!h || !h.success) throw new Error((h && h.error) || 'Held shipments failed to load');
-          incGenMsg = { info:'Working out ' + q.label + '…' }; render();
-          var body = _incBuildRun(q, h.held || []);
-          incGenMsg = { info:'Saving ' + body.ships.length + ' shipments…' }; render();
-          return fetch('/api/mongo-batch?action=incentiveRunSave', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
-        })
-        .then(function(r){ return r.json(); })
-        .then(function(d){
-          if (!d || !d.success) throw new Error((d && d.error) || 'Run failed to save');
-          incGenBusy = false; incGenMsg = { ok:'Trial run saved for ' + q.label + '.' };
-          Object.keys(incRunCache).forEach(function(k){ if (k.indexOf(q.key + ':') === 0) delete incRunCache[k]; });
-          incLoadRuns(true); incOpenRun(d.runId);
-        })
-        .catch(fail);
-    }, true);
-  };
-  steps();
 }
 function _incBuildRun(q, held){
   var cap = _incCaptureQuarter(q.months);
@@ -7258,148 +7076,7 @@ function _incBuildRun(q, held){
   };
 }
 
-function incHistoryPage(){
-  if (!incRuns && !incRunsLoading && !incRunsError) incLoadRuns();
-  var BORDER = '#D5DCE6';
-  var card = function(inner){ return '<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);margin-bottom:16px;">'+inner+'</div>'; };
-  var head = function(title, right){ return '<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid '+BORDER+';flex-wrap:wrap;"><span style="font-size:13px;font-weight:800;color:#0D2B5E;">'+title+'</span>'+(right || '')+'</div>'; };
-  var pill = function(st){ var S = INC_STATUS[st] || { l:st, c:'#475569', bg:'#EEF1F6' }; return '<span style="display:inline-block;font-size:10px;font-weight:800;color:'+S.c+';background:'+S.bg+';border-radius:999px;padding:2px 8px;">'+S.l+'</span>'; };
-  var btn = 'border:1.5px solid #D8E1F0;background:#F4F7FC;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;';
-  var th = 'padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#475569;background:#F0F4FA;border-bottom:2px solid #B0BAC8;white-space:nowrap;';
-  var td = 'padding:6px 10px;font-size:11.5px;border-top:1px solid #EEF1F6;white-space:nowrap;';
-  var num = 'text-align:right;font-family:\'DM Mono\',monospace;';
-  var cur = function(v){ return v == null ? '–' : fmtCur(v); };
-  var out = '<div style="padding:16px 24px 32px;">';
 
-  // Generate
-  // Only the quarter being paid now can be run (earlier quarters were never given out)
-  var qs = _incQuarters().filter(function(x){ return x.key === _incPayQuarter().key; });
-  state.incGenQ = qs.length ? qs[0].key : null;
-  var canGen = !_getRLSReps().length;
-  var genLock = state.incGenQ && incLock[state.incGenQ] && incLock[state.incGenQ].locked;
-  out += _incLockCard();
-  out += card(head('Generate a payout run',
-      '<span style="font-size:11px;color:#6B82A0;font-weight:600;">Trial only: shows exactly what a real run would pay, hold and remove, without counting anything as paid.</span>')
-    + '<div style="padding:12px 18px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
-      + '<select onchange="incSetGenQ(this.value)" style="border:1.5px solid #D8E1F0;border-radius:8px;padding:5px 8px;font-size:12px;font-weight:600;color:#1E3A66;">'
-        + qs.map(function(x){ return '<option value="'+x.key+'"'+(x.key === state.incGenQ ? ' selected' : '')+'>'+x.label+' ('+x.months[0]+' – '+x.months[x.months.length - 1]+')</option>'; }).join('') + '</select>'
-      + (genLock ? '<span style="font-size:11px;color:#7A4E00;font-weight:700;">🔒 This quarter is locked: its one run is worked out from the frozen data automatically. No manual runs.</span>'
-        : canGen ? '<button onclick="incGenerateRun()" class="btnq" '+(incGenBusy ? 'disabled ' : '')+'style="border:none;border-radius:999px;padding:6px 16px;font-size:11.5px;font-weight:800;color:#fff;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');cursor:pointer;opacity:'+(incGenBusy ? 0.6 : 1)+';">'+(incGenBusy ? 'Working…' : 'Generate trial run')+'</button>'
-                : '<span style="font-size:11px;color:#A8720E;font-weight:700;">Only users who can see every sales rep can generate a run.</span>')
-      + (incGenMsg ? '<span style="font-size:11.5px;font-weight:700;color:'+(incGenMsg.err ? '#B83A2B' : incGenMsg.ok ? '#15875A' : '#2C4E82')+';">'+esc(incGenMsg.err || incGenMsg.ok || incGenMsg.info)+'</span>' : '')
-    + '</div>'
-    + '<div style="padding:0 18px 12px;font-size:10.5px;color:#8A9AB5;line-height:1.5;">Each shipment gets one status. <b>Paid</b>: incentive given. <b>Held</b>: FL not done or O/S amount; checked again by the next quarter\'s run and paid once clean. <b>Removed</b>: rep below 75% GP% that quarter, or paid more than 30 days overdue; never paid. <b>Already paid</b>: an earlier run paid or removed it, so it is skipped. Running a trial again for the same quarter replaces it.</div>');
-
-  // Shipment search
-  var SR = state.incShipRes;
-  out += card(head('Find a shipment', '<input id="incShipQ" value="'+esc(state.incShipQ || '')+'" placeholder="Shipment No, e.g. SH00030473" onkeydown="if(event.key===\'Enter\')incShipSearch()" style="border:1.5px solid #D8E1F0;border-radius:8px;padding:5px 10px;font-size:12px;width:240px;">'
-      + '<button onclick="incShipSearch()" class="btnq" style="'+btn+'">Search</button>')
-    + (!SR ? '' : SR.loading ? '<div style="padding:14px 18px;font-size:12px;color:#9AAFC8;">Searching…</div>'
-      : SR.error ? '<div style="padding:14px 18px;font-size:12px;color:#B83A2B;">'+esc(SR.error)+'</div>'
-      : !SR.entries.length ? '<div style="padding:14px 18px;font-size:12px;color:#6B82A0;">'+esc(SR.s)+' is not in any run yet.</div>'
-      : '<div style="overflow:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr>'
-          + ['Run','Sales Rep','Core/Cross','Month','GP','Status','Reason / note'].map(function(h, i){ return '<th style="'+th+(i === 4 ? 'text-align:right;' : 'text-align:left;')+'">'+h+'</th>'; }).join('') + '</tr></thead><tbody>'
-          + SR.entries.map(function(e){
-              return '<tr><td style="'+td+'">'+esc(e.runLabel)+' <span style="font-size:9.5px;color:#94A3B8;font-weight:700;text-transform:uppercase;">'+esc(e.runMode || '')+'</span></td><td style="'+td+'">'+esc(e.rep || '')+'</td><td style="'+td+'">'+(e.part === 'cross' ? 'Cross' : 'Core')+'</td><td style="'+td+'">'+esc(e.month || '')+'</td>'
-                + '<td style="'+td+num+'">'+cur(e.gp)+'</td><td style="'+td+'">'+pill(e.status)+'</td>'
-                + '<td style="'+td+'white-space:normal;">'+esc([e.why ? INC_WHY[e.why] || e.why : '', e.released ? 'Released from ' + e.fromLabel : '', e.prevRun ? 'See ' + e.prevRun.label : '', e.note || ''].filter(Boolean).join(' · '))+'</td></tr>';
-            }).join('') + '</tbody></table></div>'));
-
-  // Runs
-  if (incRunsError) out += card('<div style="padding:24px;text-align:center;font-size:12px;color:#B83A2B;font-weight:600;">Couldn\'t load runs: '+esc(incRunsError)+' <button onclick="incLoadRuns(true)" class="btnq" style="'+btn+'">Try again</button></div>');
-  else if (!incRuns) out += card('<div style="padding:40px;text-align:center;"><div class="login-spinner" style="width:28px;height:28px;border-width:3px;margin:0 auto;"></div></div>');
-  else if (!state.incRunSel) {
-    out += card(head('Payout runs', '<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+incRuns.length+' run'+(incRuns.length === 1 ? '' : 's')+'</span>')
-      + (!incRuns.length ? '<div style="padding:28px;text-align:center;font-size:12px;color:#6B82A0;">No runs yet. Generate a trial run above.</div>'
-      : '<div style="overflow:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr>'
-        + ['Quarter','Type','Run on','By','AR as on','Paid','Held','Removed','Already paid','Final GP','Checks'].map(function(h, i){ return '<th style="'+th+(i >= 5 && i <= 9 ? 'text-align:right;' : 'text-align:left;')+'">'+h+'</th>'; }).join('') + '</tr></thead><tbody>'
-        + incRuns.map(function(r){
-            var c = r.counts || {}, t = r.totals || {}, k = r.checks || {};
-            var issues = [k.gpMatches ? '' : 'GP mismatch', k.paidDataMissing ? 'No paid-late data' : '', k.rateMissing ? 'No Incentive %' : ''].filter(Boolean);
-            return '<tr class="dcell" data-id="'+esc(r._id)+'" onclick="incOpenRun(this.getAttribute(\'data-id\'))" style="cursor:pointer;">'
-              + '<td style="'+td+'font-weight:800;color:#0D2B5E;">'+esc(r.label)+'</td>'
-              + '<td style="'+td+'"><span style="font-size:10px;font-weight:800;border-radius:999px;padding:2px 8px;'+(r.mode === 'final' ? 'color:#fff;background:#0D2B5E;' : 'color:#6B3FA0;background:#F1EAFB;')+'">'+(r.mode === 'final' ? 'FINAL' : 'TRIAL')+'</span></td>'
-              + '<td style="'+td+'">'+esc(new Date(r.at).toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }))+'</td>'
-              + '<td style="'+td+'">'+esc((r.by && r.by.name) || '')+'</td><td style="'+td+'">'+esc(r.asOn || '')+'</td>'
-              + '<td style="'+td+num+'color:#15875A;">'+cur(t.paid)+'<div style="font-size:9.5px;color:#94A3B8;">'+(c.paid || 0)+' jobs</div></td>'
-              + '<td style="'+td+num+'color:#A8720E;">'+cur(t.held)+'<div style="font-size:9.5px;color:#94A3B8;">'+(c.held || 0)+' jobs</div></td>'
-              + '<td style="'+td+num+'color:#DC2626;">'+cur(t.removed)+'<div style="font-size:9.5px;color:#94A3B8;">'+(c.removed || 0)+' jobs</div></td>'
-              + '<td style="'+td+num+'color:#64748B;">'+cur(t.already)+'<div style="font-size:9.5px;color:#94A3B8;">'+(c.already || 0)+' jobs</div></td>'
-              + '<td style="'+td+num+'font-weight:700;">'+cur(t.final)+'</td>'
-              + '<td style="'+td+'font-size:10.5px;font-weight:700;color:'+(issues.length ? '#A8720E' : '#15875A')+';">'+(issues.length ? esc(issues.join(' · ')) : 'All passed')+'</td></tr>';
-          }).join('') + '</tbody></table></div>'));
-  } else {
-    out += _incRunDetail(state.incRunSel, card, head, pill, btn, th, td, num, cur);
-  }
-  return out + '</div>';
-}
-
-function _incRunDetail(id, card, head, pill, btn, th, td, num, cur){
-  var R = incRunCache[id];
-  var back = '<button onclick="incCloseRun()" class="btnq" style="'+btn+'">← All runs</button>';
-  if (!R || R.loading) return card(head('Loading run…', back) + '<div style="padding:40px;text-align:center;"><div class="login-spinner" style="width:28px;height:28px;border-width:3px;margin:0 auto;"></div></div>');
-  if (R.error) return card(head('Run', back) + '<div style="padding:24px;font-size:12px;color:#B83A2B;">'+esc(R.error)+'</div>');
-  var run = R.run, k = run.checks || {}, t = run.totals || {};
-  var html = '';
-  var chk = function(ok, label, detail){ return '<div style="display:flex;gap:8px;align-items:baseline;font-size:11.5px;padding:3px 0;"><span style="font-weight:800;color:'+(ok ? '#15875A' : '#A8720E')+';">'+(ok ? '✓' : '!')+'</span><span style="color:#15233B;font-weight:600;">'+label+'</span><span style="color:#6B82A0;">'+detail+'</span></div>'; };
-  html += card(head(esc(run.label) + ' · ' + (run.mode === 'final' ? 'Final run' : 'Trial run'),
-      back + '<button onclick="incExportRun(\''+esc(run._id)+'\')" class="btnq" style="'+btn+'">Export to Excel (CSV)</button>'
-      + (run.mode === 'trial' ? '<button onclick="incDeleteRun(\''+esc(run._id)+'\')" class="btnq" style="'+btn+'color:#B83A2B;">Delete trial</button>' : '')
-      + '<span style="font-size:11px;color:#6B82A0;font-weight:600;">Run on '+esc(new Date(run.at).toLocaleString('en-GB'))+(run.by && run.by.name ? ' by '+esc(run.by.name) : '')+' · AR as on '+esc(run.asOn || '–')+' · '+esc((run.months || []).join(', '))+'</span>')
-    + '<div style="padding:10px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">'
-      + [['Paid GP', t.paid, '#15875A'], ['of which released', t.released, '#15875A'], ['Held GP', t.held, '#A8720E'], ['Removed GP', t.removed, '#DC2626'], ['Already paid GP', t.already, '#64748B'], ['Management fees', t.fee, '#946312'], ['Final GP', t.final, '#0D2B5E'], ['Total incentive (sales reps)', t.incentive, '#6B3FA0']]
-        .map(function(x){ return '<div style="background:#F7F9FC;border:1px solid #E3EAF3;border-radius:10px;padding:8px 12px;"><div style="font-size:10px;font-weight:700;color:#6B82A0;text-transform:uppercase;letter-spacing:0.04em;">'+x[0]+'</div><div style="font-size:15px;font-weight:800;color:'+x[2]+';font-family:\'DM Mono\',monospace;margin-top:2px;">'+cur(x[1])+'</div></div>'; }).join('')
-    + '</div>'
-    + '<div style="padding:4px 18px 12px;">'
-      + chk(k.gpMatches, 'GP matches Sales Performance', 'Sales Performance '+cur(k.spGp)+' · reps in this run '+cur(k.repGp)+(k.repGapCount ? ' · '+k.repGapCount+' rep part'+(k.repGapCount === 1 ? '' : 's')+' where shipments don\'t add up to the GP' : ''))
-      + chk(!k.paidDataMissing, 'Paid-late data present', k.paidDataMissing ? 'ar_outstanding has no paid invoices yet, so no shipment could be removed for paying 30+ days overdue' : 'Paid invoices found in ar_outstanding')
-      + chk(!k.rateMissing, 'Incentive % set', k.rateMissing ? 'Not provided yet: Final GP is worked out, the incentive amount is not' : '')
-      + (k.unassignedRows ? chk(false, 'Shipments with no sales rep', k.unassignedRows+' rows, '+cur(k.unassignedGp)+' GP: not in any rep\'s numbers, so not in this run') : '')
-    + '</div>');
-
-  // Reps
-  var rows = [];
-  (run.reps || []).forEach(function(x){ ['core', 'cross'].forEach(function(p){ if (x[p] && (x[p].gp || x[p].shipGp || x[p].paid || x[p].held)) rows.push({ x:x, p:p, P:x[p] }); }); });
-  rows.sort(function(a, b){ return (a.x.zone || '').localeCompare(b.x.zone || '') || a.x.rep.localeCompare(b.x.rep) || (a.p === 'core' ? -1 : 1); });
-  var sel = state.incRepSel;
-  html += card(head('Sales reps', '<span style="font-size:11px;color:#6B82A0;font-weight:600;">Click a rep to see every shipment and what happened to it</span>')
-    + '<div style="overflow:auto;max-height:calc(100vh - 260px);"><table style="width:100%;border-collapse:collapse;"><thead style="position:sticky;top:0;z-index:2;"><tr>'
-      + ['Sales Rep','Zone','Part','GP','Target','GP%','Eligible','Paid','Released','Held','Removed','Already paid','Mgmt fees','Final GP','Incentive'].map(function(h, i){ return '<th style="'+th+(i >= 3 ? 'text-align:right;' : 'text-align:left;')+'">'+h+'</th>'; }).join('') + '</tr></thead><tbody>'
-      + rows.map(function(r){
-          var key = r.x.rep + '|' + r.p, P = r.P, on = sel === key;
-          var line = '<tr class="dcell" data-k="'+esc(key)+'" onclick="incPickRep(this.getAttribute(\'data-k\'))" style="cursor:pointer;background:'+(on ? '#EEF3FC' : '#fff')+';">'
-            + '<td style="'+td+'font-weight:700;color:#1E3A66;">'+(on ? '▼ ' : '▶ ')+esc(r.x.rep)+'</td><td style="'+td+'color:#6B82A0;">'+esc(r.x.zone || '')+'</td><td style="'+td+'">'+(r.p === 'core' ? 'Core' : 'Cross')+'</td>'
-            + '<td style="'+td+num+'">'+cur(P.gp)+'</td><td style="'+td+num+'">'+(r.x.noTarget ? '–' : cur(P.tgt))+'</td><td style="'+td+num+'">'+(P.pct == null ? '–' : P.pct+'%')+'</td>'
-            + '<td style="'+td+num+'font-weight:800;color:'+(P.elig ? '#15875A' : '#DC2626')+';">'+(P.elig ? 'Yes' : 'No')+'</td>'
-            + '<td style="'+td+num+'color:#15875A;">'+cur(P.paid)+'</td><td style="'+td+num+'color:#15875A;">'+(P.released ? cur(P.released) : '–')+'</td>'
-            + '<td style="'+td+num+'color:#A8720E;">'+(P.held ? cur(P.held) : '–')+'</td><td style="'+td+num+'color:#DC2626;">'+(P.removed ? cur(P.removed) : '–')+'</td>'
-            + '<td style="'+td+num+'color:#64748B;">'+(P.already ? cur(P.already) : '–')+'</td><td style="'+td+num+'color:#946312;">'+cur(P.fee)+'</td>'
-            + '<td style="'+td+num+'font-weight:800;">'+cur(P.final)+'</td><td style="'+td+num+'color:#6B3FA0;">'+cur(P.incentive)+'</td></tr>';
-          if (on) line += '<tr><td colspan="15" style="padding:0 0 10px 24px;background:#F7F9FC;">'+_incRepShips(R.entries, r.x.rep, r.p, pill, th, td, num, cur)+'</td></tr>';
-          return line;
-        }).join('') + '</tbody></table></div>');
-  return html;
-}
-function _incRepShips(entries, rep, part, pill, th, td, num, cur){
-  var list = entries.filter(function(e){ return e.rep === rep && e.part === part; });
-  var counts = {}; list.forEach(function(e){ counts[e.status] = (counts[e.status] || 0) + 1; });
-  var f = state.incStatusF;
-  var shown = f ? list.filter(function(e){ return e.status === f; }) : list;
-  shown.sort(function(a, b){ return (a.status > b.status ? 1 : a.status < b.status ? -1 : 0) || (b.gp - a.gp); });
-  var chips = ['paid', 'held', 'removed', 'already'].filter(function(s){ return counts[s]; }).map(function(s){
-    var S = INC_STATUS[s], on = f === s;
-    return '<button onclick="event.stopPropagation();incSetStatusF(\''+s+'\')" class="btnq" style="border:1.5px solid '+(on ? S.c : '#D8E1F0')+';background:'+(on ? S.bg : '#fff')+';color:'+S.c+';border-radius:999px;padding:3px 10px;font-size:10.5px;font-weight:800;cursor:pointer;">'+S.l+' · '+counts[s]+'</button>';
-  }).join(' ');
-  return '<div style="padding:10px 10px 4px;display:flex;gap:6px;flex-wrap:wrap;">'+chips+'</div>'
-    + '<table style="width:100%;border-collapse:collapse;background:#fff;"><thead><tr>'
-    + ['Shipment No','Month','Customer','GP','Status','Reason / note'].map(function(h, i){ return '<th style="'+th+(i === 3 ? 'text-align:right;' : 'text-align:left;')+'">'+h+'</th>'; }).join('') + '</tr></thead><tbody>'
-    + shown.slice(0, 500).map(function(e){
-        return '<tr><td style="'+td+'font-family:\'DM Mono\',monospace;">'+esc(e.s || '(no Shipment No)')+'</td><td style="'+td+'">'+esc(e.month || '')+'</td><td style="'+td+'max-width:260px;overflow:hidden;text-overflow:ellipsis;">'+esc(e.customer || '')+'</td>'
-          + '<td style="'+td+num+'">'+cur(e.gp)+'</td><td style="'+td+'">'+pill(e.status)+'</td>'
-          + '<td style="'+td+'white-space:normal;color:#475569;">'+esc([e.why ? INC_WHY[e.why] || e.why : '', e.released ? 'Released from ' + e.fromLabel : '', e.prevRun ? 'See ' + e.prevRun.label : '', e.note || ''].filter(Boolean).join(' · '))+'</td></tr>';
-      }).join('')
-    + '</tbody></table>' + (shown.length > 500 ? '<div style="padding:6px 10px;font-size:11px;color:#6B82A0;">Showing 500 of '+shown.length+'. Export the run for the full list.</div>' : '');
-}
 
 /* ====================== ACCOUNTS RECEIVABLE ====================== */
 // Customer outstanding from the AR sheet (pushed by apps-script/arSync.gs).
