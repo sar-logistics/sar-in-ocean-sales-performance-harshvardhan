@@ -5867,7 +5867,7 @@ function incToggleGp(k){ state.incGpOpen = state.incGpOpen || {}; state.incGpOpe
 // Click on a GP / GP removed number: the same shipment drill-through as Sales Performance.
 // data-rm = 'all' (every removed job) or one INC_RM reason: only those jobs are listed.
 function incDrill(el){
-  var F = _incFrozenFor(el.getAttribute('data-q') || _incPayQuarter().key);
+  var F = _incFrozenFor(el.getAttribute('data-q') || (state.incTab === 'summary' ? _incSumQuarter().q.key : _incPayQuarter().key));
   if (!F) return _incDrillOne(el);
   var R = window.render; window.render = function(){};   // draw once, after today's data is back
   try { _incWithData(F, function(){ _incDrillOne(el); }); } finally { window.render = R; }
@@ -5962,6 +5962,15 @@ function _incCalcYears(){
   var lastY = cur.fy - 1 >= firstFy ? [1, 2, 3, 4].map(function(q){ return key(cur.fy - 1, q); }).filter(ok) : [];
   return { pq:pq, fy:cur.fy, thisY:thisY, lastY:lastY };
 }
+// Summary quarter (user, 19-Nov-2026): a dropdown, the quarter being paid now by default; this year's earlier paid
+// quarters and last year's can be picked. Newest first.
+function _incSumQuarter(){
+  var Y = _incCalcYears(), keys = Y.thisY.slice().reverse().concat(Y.lastY.slice().reverse());
+  if (keys.indexOf(Y.pq.key) === -1) keys.unshift(Y.pq.key);
+  var k = state.incSumQ && keys.indexOf(state.incSumQ) !== -1 ? state.incSumQ : Y.pq.key;
+  return { q:_incQuarterOf(k), keys:keys, pq:Y.pq, fy:Y.fy };
+}
+function incSumSetQ(k){ state.incSumQ = k; render(); }
 function incSetYear(v){ state.incYear = v === 'last' ? 'last' : 'this'; render(); }
 function _incYearPicker(Y, last){
   if (!Y.lastY.length) return '';
@@ -6031,7 +6040,9 @@ function incentivePage(){
   var pq = _incPayQuarter(), gate = _incLockGate(pq.key);
   if (gate) return _incTabs() + gate;
   if (state.incTab === 'summary' && _incCanSummary()) {
-    return _incWithData(_incFrozenFor(pq.key), function(){ window._incYearSel = ''; return _incTabs() + incSummaryPage(); });
+    var sq = _incSumQuarter().q.key, sg = sq === pq.key ? '' : _incLockGate(sq, true);
+    if (sg) return _incTabs() + sg;
+    return _incWithData(_incFrozenFor(sq), function(){ window._incYearSel = ''; return _incTabs() + incSummaryPage(); });
   }
   // Calculation: one column per quarter of the year picked, each from its own frozen data
   var Y = _incCalcYears(), last = state.incYear === 'last' && Y.lastY.length > 0;
@@ -6736,8 +6747,8 @@ function _incSumData(M, part){
 
 function incSummaryPage(){
   var S = _incSum();
-  // Only the quarter being paid now (the calculator starts with it; earlier quarters were never given out)
-  var pq = _incPayQuarter(), period = pq, isPayQ = true;
+  // The quarter picked in the dropdown (the quarter being paid now unless another one is chosen)
+  var SQ = _incSumQuarter(), pq = SQ.q, period = pq, isPayQ = true;
   // Same period handling as the Calculation tab (put back after)
   var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo };
   state.reportView = 'Monthly'; state.dateFrom = period.months[0]; state.dateTo = period.months[period.months.length - 1];
@@ -6761,8 +6772,10 @@ function incSummaryPage(){
   // ── Header: period, Core / Cross, quarter, export, access ──
   var head = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">'
     + '<span style="font-size:15px;font-weight:800;color:'+NAVY+';letter-spacing:-0.01em;">Incentive payout summary</span>'
-    + '<span style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 10px;border:1px solid #D3DFF3;">'
-      + (isPayQ ? 'Paid in '+esc(pq.payLabel)+' · ' : '') + 'for '+esc(period.label)+' ('+esc(period.months[0])+' – '+esc(period.months[period.months.length - 1])+') · '+cur+'</span>'
+    + '<select onchange="incSumSetQ(this.value)" aria-label="Quarter" class="btnq" title="A quarter\'s incentive is paid two quarters later" style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 8px;border:1px solid #D3DFF3;cursor:pointer;">'
+      + SQ.keys.map(function(k){ var Q = _incQuarterOf(k);
+          return '<option value="'+esc(k)+'"'+(k === pq.key ? ' selected' : '')+'>Paid in '+esc(Q.payLabel)+' · for '+esc(Q.label)+' ('+esc(Q.months[0])+' – '+esc(Q.months[2])+')'+(k === SQ.pq.key ? ' · paying now' : Q.fy < SQ.fy ? ' · last year' : '')+' · '+cur+'</option>'; }).join('')
+      + '</select>'
     + _incLockBadge(pq.key)
     + '<div role="radiogroup" aria-label="Core or Cross" style="display:inline-flex;gap:2px;padding:2px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;">'
       + ['all','core','cross'].map(function(k){ return '<button onclick="incSumSet(\'part\',\''+k+'\')" class="btnq" role="radio" aria-checked="'+(S.part === k)+'" style="'+btn(S.part === k)+'">'+partLabel(k)+'</button>'; }).join('')
@@ -7033,9 +7046,9 @@ function incSummaryPage(){
 }
 
 // The Summary as a CSV file: the same figures as the screen (current Core / Cross choice and quarter)
-function incSumExport(){ _incWithData(_incFrozenFor(_incPayQuarter().key), _incSumExportOne); }
+function incSumExport(){ _incWithData(_incFrozenFor(_incSumQuarter().q.key), _incSumExportOne); }
 function _incSumExportOne(){
-  var S = _incSum(), pq = _incPayQuarter(), period = pq;
+  var S = _incSum(), pq = _incSumQuarter().q, period = pq;
   var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo };
   state.reportView = 'Monthly'; state.dateFrom = period.months[0]; state.dateTo = period.months[period.months.length - 1];
   window._incModel = null;
