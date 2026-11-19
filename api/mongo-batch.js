@@ -2965,19 +2965,26 @@ module.exports = async function handler(req, res) {
       // Run by the Vercel cron (vercel.json) every night, and safe to call any time: it only freezes quarters whose
       // lock moment has passed and that aren't frozen yet, with the data exactly as it is right now.
       const results = [];
+      let fresh = null;   // today's data, read once per call and shared by every quarter frozen in it
+      const loadFresh = async () => {
+        if (fresh) return fresh;
+        const sales = await getSalesAggregate(db, true);   // fresh, not the cache
+        const salesData = { months: sales.months, zones: sales.zones, pushedAt: sales.pushedAt || null,
+          repsRaw: (sales.repsRaw || []).map((r) => { const c = { ...r }; delete c.weekData; return c; }) };
+        drillRowsCache = null; drillRowsCacheTime = 0;   // fresh shipment rows
+        await getDrillRows(db, "Grand Total", "Shipments", "FY Total");
+        const allRows = (drillRowsCache && drillRowsCache.allRows) || [];
+        const ar = await incentiveOutstanding(db, true);
+        return (fresh = { salesData, allRows, ar });
+      };
       for (const quarter of incentiveDueQuarters()) {
         const st = await incentiveLockState(db, quarter);
         if (st.frozen) { results.push({ quarter, already: true, frozenAt: st.frozen.frozenAt }); continue; }
         try {
-          const sales = await getSalesAggregate(db, true);   // fresh, not the cache
-          const salesData = { months: sales.months, zones: sales.zones, pushedAt: sales.pushedAt || null,
-            repsRaw: (sales.repsRaw || []).map((r) => { const c = { ...r }; delete c.weekData; return c; }) };
-          drillRowsCache = null; drillRowsCacheTime = 0;   // fresh shipment rows
-          await getDrillRows(db, "Grand Total", "Shipments", "FY Total");
+          const { salesData, allRows, ar } = await loadFresh();
           const held = await incentiveHeldShips(db, quarter);
           const keyOf = (v) => String(v == null ? "" : v).trim().toUpperCase();
-          const rows = ((drillRowsCache && drillRowsCache.allRows) || []).filter((r) => st.months.indexOf(r._ml) > -1 || (r.shipmentNo && held[keyOf(r.shipmentNo)]));
-          const ar = await incentiveOutstanding(db, true);
+          const rows = allRows.filter((r) => st.months.indexOf(r._ml) > -1 || (r.shipmentNo && held[keyOf(r.shipmentNo)]));
           const r = await incentiveSnapshotFreeze(db, quarter, { sales: salesData, rows, ar });
           results.push(Object.assign({ quarter }, r.json));
         } catch (e) { results.push({ quarter, success: false, error: e.message || String(e) }); }
