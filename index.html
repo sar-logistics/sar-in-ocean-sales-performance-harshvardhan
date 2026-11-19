@@ -6346,7 +6346,18 @@ function incAccessRemove(e){
 function _incSum(){ return state.incSum || (state.incSum = { part:'all', zone:'', elig:'elig', sort:'inc', dir:-1, q:'', quarter:'', open:{} }); }
 function incSumSet(k, v){ var S = _incSum(); if (k === 'sort') { if (S.sort === v) S.dir = -S.dir; else { S.sort = v; S.dir = v === 'name' || v === 'zone' ? 1 : -1; } } else S[k] = v; render(); }
 function incSumOpen(name){ var S = _incSum(); S.open[name] = !S.open[name]; render(); }
-function incSumZone(z){ var S = _incSum(); S.zone = S.zone === z ? '' : z; S.elig = 'elig'; render(); setTimeout(function(){ var t = document.getElementById('incSumReps'); if (t) t.scrollIntoView({ behavior:'smooth', block:'start' }); }, 30); }
+function incSumZone(z){
+  var S = _incSum(); S.zone = S.zone === z ? '' : z; S.elig = 'elig'; render();
+  // Scroll the page's own scroller (#main-slot) to the reps list. Not scrollIntoView: that also scrolls the
+  // overflow:hidden app shell around it, and the page then can't be scrolled back. Done now and again after
+  // render's own scroll restore (which puts the old position back on the next frame).
+  function go(){
+    var ms = document.getElementById('main-slot'), t = document.getElementById('incSumReps');
+    if (!ms || !t || state.page !== 'incentive' || state.incTab !== 'summary') return;
+    ms.scrollTop = Math.max(0, t.getBoundingClientRect().top - ms.getBoundingClientRect().top + ms.scrollTop - 8);
+  }
+  go(); requestAnimationFrame(function(){ go(); setTimeout(go, 0); });
+}
 // Search filters the rows in place, so typing never loses focus
 function incSumSearch(v){
   _incSum().q = v;
@@ -6416,10 +6427,8 @@ function _incSumData(M, part){
 
 function incSummaryPage(){
   var S = _incSum();
-  var qs = _incQuarters(), pq = _incPayQuarter();
-  var sel = qs.filter(function(q){ return q.key === S.quarter; })[0] || null;
-  var period = sel ? { key:sel.key, label:sel.label, months:sel.months } : pq;
-  var isPayQ = period.key === pq.key;
+  // Only the quarter being paid now (the calculator starts with it; earlier quarters were never given out)
+  var pq = _incPayQuarter(), period = pq, isPayQ = true;
   // Same period handling as the Calculation tab (put back after)
   var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo };
   state.reportView = 'Monthly'; state.dateFrom = period.months[0]; state.dateTo = period.months[period.months.length - 1];
@@ -6448,9 +6457,6 @@ function incSummaryPage(){
     + '<div role="radiogroup" aria-label="Core or Cross" style="display:inline-flex;gap:2px;padding:2px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;">'
       + ['all','core','cross'].map(function(k){ return '<button onclick="incSumSet(\'part\',\''+k+'\')" class="btnq" role="radio" aria-checked="'+(S.part === k)+'" style="'+btn(S.part === k)+'">'+partLabel(k)+'</button>'; }).join('')
     + '</div>'
-    + '<select onchange="incSumSet(\'quarter\', this.value)" title="Quarter" style="'+pill+'">'
-      + qs.slice().reverse().map(function(q){ var on = q.key === period.key; return '<option value="'+esc(q.key === pq.key ? '' : q.key)+'"'+(on ? ' selected' : '')+'>'+esc(q.label)+(q.key === pq.key ? ' (paid now)' : '')+'</option>'; }).join('')
-    + '</select>'
     + '<span style="flex:1;"></span>'
     + '<button onclick="incSumExport()" class="btnq" style="'+pill+'">Export CSV</button>'
     + (_incIsAdmin() ? '<button onclick="incAccessToggle()" class="btnq" style="'+pill+(state.incAccessOpen ? 'background:#E6EDF9;' : '')+'">Who can see this ('+(incAccess ? incAccess.emails.length : 0)+')</button>' : '')
@@ -6486,6 +6492,7 @@ function incSummaryPage(){
   // Layout: 1) the total payout, 2) who is paid (rep list, one clean line each), 3) the working, one rep at a time.
   // Supporting figures sit a level down (smaller, muted) rather than competing with the total.
   var css = '<style>'
+    + '#main-slot tr.incs-row,#main-slot tr[data-detail],#main-slot tr.incs-z{content-visibility:visible;contain-intrinsic-size:none;}'
     + '.incs-row{cursor:pointer;transition:background .12s;}.incs-row:hover{background:#F8FAFD;}.incs-row.on{background:#F6F3FB;}'
     + '.incs-row td{padding:13px 16px;border-bottom:1px solid #EEF2F7;font-size:12.5px;white-space:nowrap;vertical-align:middle;}'
     + '.incs-n{text-align:right;font-family:\'DM Mono\',monospace;font-variant-numeric:tabular-nums;}'
@@ -6635,8 +6642,10 @@ function incSummaryPage(){
     + '<span style="font-size:11.5px;color:'+MUTED+';"><span id="incSumCount">'+shown+'</span> reps'
       + (shownPay.length ? ' · highest <span style="color:'+INK+';font-family:\'DM Mono\',monospace;">'+fmtCur(Math.max.apply(null, shownPay))+'</span> · lowest <span style="color:'+INK+';font-family:\'DM Mono\',monospace;">'+fmtCur(Math.min.apply(null, shownPay))+'</span>' : '')+'</span>'
   + '</div>';
-  var repsCard = '<div id="incSumReps" style="'+card+'margin-bottom:16px;overflow:hidden;">' + tools
-    + '<div style="overflow:auto;max-height:calc(100vh - 220px);min-height:240px;"><table style="width:100%;border-collapse:collapse;table-layout:fixed;">'
+  // No scroll box of its own: the list is part of the page, so the page is the only thing that scrolls
+  // (overflow:clip keeps the rounded corners without making a scroll container; the header stays sticky).
+  var repsCard = '<div id="incSumReps" style="'+card+'margin-bottom:16px;overflow:clip;">' + tools
+    + '<div><table style="width:100%;border-collapse:collapse;table-layout:fixed;">'
       + '<thead><tr>'+cols+'</tr></thead><tbody>'
       + (body || '<tr><td colspan="'+NCOL+'" style="padding:32px;text-align:center;color:'+MUTED+';font-size:12px;">No reps match these filters.</td></tr>')
     + '</tbody></table></div>'
@@ -6682,8 +6691,7 @@ function incSummaryPage(){
 
 // The Summary as a CSV file: the same figures as the screen (current Core / Cross choice and quarter)
 function incSumExport(){
-  var S = _incSum(), qs = _incQuarters(), pq = _incPayQuarter();
-  var sel = qs.filter(function(q){ return q.key === S.quarter; })[0], period = sel || pq;
+  var S = _incSum(), pq = _incPayQuarter(), period = pq;
   var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo };
   state.reportView = 'Monthly'; state.dateFrom = period.months[0]; state.dateTo = period.months[period.months.length - 1];
   window._incModel = null;
@@ -6905,9 +6913,9 @@ function incHistoryPage(){
   var out = '<div style="padding:16px 24px 32px;">';
 
   // Generate
-  var qs = _incQuarters();
-  if (!state.incGenQ && qs.some(function(x){ return x.key === _incPayQuarter().key; })) state.incGenQ = _incPayQuarter().key;
-  if (!state.incGenQ) { var last = qs.filter(function(x){ return hasDataForIndices(x.months.map(function(m){ return months26.indexOf(m); })); }); state.incGenQ = (last[last.length - 1] || qs[0] || {}).key; }
+  // Only the quarter being paid now can be run (earlier quarters were never given out)
+  var qs = _incQuarters().filter(function(x){ return x.key === _incPayQuarter().key; });
+  state.incGenQ = qs.length ? qs[0].key : null;
   var canGen = !_getRLSReps().length;
   out += card(head('Generate a payout run',
       '<span style="font-size:11px;color:#6B82A0;font-weight:600;">Trial only: shows exactly what a real run would pay, hold and remove, without counting anything as paid.</span>')
