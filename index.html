@@ -6270,7 +6270,8 @@ function _incentivePageInner(foldQ, pre){
       { label:'Management Fees (15%)', sub:true, ded:true, type:'cur', color:'#475569', vals:P.fee, total:P.feeT }
     ]);
     rows.push({ label:'Total Incentive', type:'inc', bold:true, primary:true, shade:true, color:'#6B3FA0', vals:P.inc, total:P.incT, rates:P.rate, rateT:P.rateT,
-      note:ent.isZone ? 'ZM: '+INC_RATES.zm.t1+'% / '+INC_RATES.zm.t2+'%' : ent.isGrand ? '' : 'Sales: '+INC_RATES.sales.t1+'% / '+INC_RATES.sales.t2+'%' });
+      // Which rate applies when: the lower one from 75% to 99.99% GP, the higher one from 100%
+      note:ent.isGrand ? '' : (ent.isZone ? 'ZM: '+INC_RATES.zm.t1 : 'Sales: '+INC_RATES.sales.t1)+'% at 75–99.99% GP · '+(ent.isZone ? INC_RATES.zm.t2 : INC_RATES.sales.t2)+'% at 100%+ GP' });
     return rows;
   }
   function fmtVal(v, p, r){
@@ -6400,6 +6401,7 @@ function _incentivePageInner(foldQ, pre){
           : '<span style="font-size:11px;color:#9AAFC8;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+(foldQ ? 'Quarterly' : state.reportView)+' · '+state.currency+'</span>')
         +(window._incPay ? _incLockBadge(window._incPay.key) : '')
         +(function(){
+          if (state.page === 'incdemo') return '<span style="font-size:11px;color:#6B82A0;font-weight:600;">Core: Sea Export + Sea Import</span>';   // the demo is Core only
           var cur = state.incPart === 'cross' ? 'cross' : 'core';
           function seg(k, label, hint){
             var on = cur === k;
@@ -6713,18 +6715,13 @@ function _incAccessPanel(kind){
    Targets tab never apply here. Nothing is saved anywhere. */
 var _incDemoF = null;
 var INC_DEMO_Q = { key:'DEMO', label:'Q1 FY27', months:['Apr-26', 'May-26', 'Jun-26'], payLabel:'Q3 FY27' };
+// One zone per scenario: 1 ZM + both reps paid, 2 one rep paid / ZM not, 3 both reps paid / ZM not, 4 ZM paid / reps not
 var INC_DEMO_ZONES = [
-  { zone:'DZ01 (Arjun Mehta)', region:'North', tgt:1500000, scen:1, reps:[{ n:'Rohan Kapoor', tgt:1000000, core:1150000, cross:120000 }, { n:'Sneha Iyer', tgt:800000, core:700000, cross:80000 }] },
-  { zone:'DZ02 (Kavita Rao)', region:'West', tgt:2500000, scen:2, reps:[{ n:'Vikram Joshi', tgt:1000000, core:920000, cross:60000 }, { n:'Neha Kulkarni', tgt:900000, core:500000, cross:40000 }] },
-  { zone:'DZ03 (Imran Qureshi)', region:'South', tgt:2000000, scen:3, reps:[{ n:'Aditya Menon', tgt:600000, core:660000, cross:50000 }, { n:'Priya Nambiar', tgt:700000, core:560000, cross:30000 }] },
-  { zone:'DZ04 (Pooja Nair)', region:'East', tgt:1600000, scen:4, reps:[{ n:'Karan Malhotra', tgt:1200000, core:720000, cross:90000 }, { n:'Ananya Das', tgt:1100000, core:770000, cross:100000 }] }
+  { zone:'DZ01 (Arjun Mehta)', region:'North', tgt:1500000, scen:1, reps:[{ n:'Rohan Kapoor', tgt:1000000, core:1150000 }, { n:'Sneha Iyer', tgt:800000, core:700000 }] },
+  { zone:'DZ02 (Kavita Rao)', region:'West', tgt:2500000, scen:2, reps:[{ n:'Vikram Joshi', tgt:1000000, core:920000 }, { n:'Neha Kulkarni', tgt:900000, core:500000 }] },
+  { zone:'DZ03 (Imran Qureshi)', region:'South', tgt:2000000, scen:3, reps:[{ n:'Aditya Menon', tgt:600000, core:660000 }, { n:'Priya Nambiar', tgt:700000, core:560000 }] },
+  { zone:'DZ04 (Pooja Nair)', region:'East', tgt:1600000, scen:4, reps:[{ n:'Karan Malhotra', tgt:1200000, core:720000 }, { n:'Ananya Das', tgt:1100000, core:770000 }] }
 ];
-var INC_DEMO_SCEN = {
-  1:{ t:'Zonal manager paid, both sales reps paid', zm:true, reps:true },
-  2:{ t:'One sales rep paid, the other not; zonal manager not paid', zm:false, reps:'one' },
-  3:{ t:'Both sales reps paid, zonal manager not paid', zm:false, reps:true },
-  4:{ t:'Zonal manager paid, both sales reps not paid', zm:true, reps:false }
-};
 function _incDemoData(){
   if (_incDemoF) return _incDemoF;
   var months = INC_DEMO_Q.months, rows = [], reps = [], zones = [], refs = {}, late = {}, n = 0;
@@ -6757,9 +6754,8 @@ function _incDemoData(){
         var L = lobData[lob] || (lobData[lob] = {}), c = L[m] || (L[m] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0, rev:0, revBilled:0, revProv:0 });
         c.gp += g; c.ship += 1; c.rev += r; if (isProv) { c.gpProv += g; c.revProv += r; } else { c.gpActual += g; c.revBilled += r; }
       }
-      // Core: 6 shipments, one each with FL not done, O/S amount and paid late; Cross: one air shipment
+      // Core only: 6 shipments, one each with FL not done, O/S amount and paid late
       W.forEach(function(w, k){ add(k % 2 ? 'SEA IMPORT' : 'SEA EXPORT', Math.round(R.core * w), k, k === 1 ? 'fl' : k === 3 ? 'unpaid' : k === 5 ? 'late' : ''); });
-      add('AIR EXPORT', R.cross, 6, '');
       var core = W.reduce(function(a, w){ return a + Math.round(R.core * w); }, 0);
       R.core = core;   // the exact rounded total
       var t = R.tgt / 3;
@@ -6780,15 +6776,16 @@ function _incDemoData(){
 // no Incentive Targets (all put back after)
 function _incDemoRun(fn){
   var keep = { fl:state.filterLobs, fz:state.filterZones, fr:state.filterReps, fg:state.filterRegions, fgl:state.filterGl,
-               rls:window._getRLSReps, tg:incTargets, cu:currentUser };
+               rls:window._getRLSReps, tg:incTargets, cu:currentUser, part:state.incPart };
   try {
+    state.incPart = 'core'; if (state.incDemoSum) state.incDemoSum.part = 'core';
     state.filterLobs = []; state.filterZones = []; state.filterReps = []; state.filterRegions = []; state.filterGl = [];
     window._getRLSReps = function(){ return []; }; incTargets = null;
     currentUser = Object.assign({}, currentUser || {}, { role:'Admin', region:'' });
     return _incWithData(_incDemoData(), fn);
   } finally {
     state.filterLobs = keep.fl; state.filterZones = keep.fz; state.filterReps = keep.fr; state.filterRegions = keep.fg; state.filterGl = keep.fgl;
-    window._getRLSReps = keep.rls; incTargets = keep.tg; currentUser = keep.cu;
+    window._getRLSReps = keep.rls; incTargets = keep.tg; currentUser = keep.cu; state.incPart = keep.part;
   }
 }
 function incDemoSetTab(t){ state.incDemoTab = t === 'summary' ? 'summary' : 'calc'; render(); }
@@ -6813,27 +6810,7 @@ function incDemoPage(){
       return _incentivePageInner(true, _incMergeQuarters([m], [Q]));
     });
   } finally { state.reportView = keep.reportView; state.dateFrom = keep.dateFrom; state.dateTo = keep.dateTo; window._incPay = keep.pay; window._incYearSel = keep.ys; }
-  var NAVY = '#0D2B5E', SUB = '#5B6678';
-  function chip(ok, who){
-    if (ok === 'one') return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#A8720E;background:#FCF3DA;border-radius:999px;padding:2px 9px;">½ 1 of 2 '+who.toLowerCase()+'</span>';
-    return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:'+(ok ? '#15875A' : '#B4541A')+';background:'+(ok ? '#E9F6EF' : '#FCF0E8')+';border-radius:999px;padding:2px 9px;">'+(ok ? '✓' : '✕')+' '+who+'</span>';
-  }
-  var cards = INC_DEMO_ZONES.map(function(Z){
-    var S = INC_DEMO_SCEN[Z.scen], zp = /^(\S+)\s*\((.*)\)$/.exec(Z.zone);
-    return '<div style="flex:1 1 230px;min-width:0;background:#FFFFFF;border:1px solid #D5DCE6;border-radius:10px;padding:12px 14px;">'
-      + '<div style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#7A8AA3;">Scenario '+Z.scen+'</div>'
-      + '<div style="font-size:12.5px;font-weight:700;color:'+NAVY+';margin-top:3px;line-height:1.35;">'+esc(S.t)+'</div>'
-      + '<div style="font-size:11.5px;color:'+SUB+';margin-top:6px;">Zone <b style="color:'+NAVY+';">'+esc(zp[1])+'</b> · ZM '+esc(zp[2])+' · '+Z.reps.map(function(r){ return esc(r.n); }).join(', ')+'</div>'
-      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">'+chip(S.zm, 'Zonal manager')+chip(S.reps, 'Sales reps')+'</div></div>';
-  }).join('');
-  var intro = '<div style="padding:20px 24px 0;">'
-    + '<div style="background:#FFF8E6;border:1px solid #EED9A4;border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:12px;color:#7A4E00;line-height:1.5;">'
-      + '<b>Demo with made-up data.</b> This is the real Incentive calculation, table and shipment drill-down, run on 4 made-up zones with 2 sales reps each. '
-      + 'Open ▶ Eligibility and ▶ Final GP after Deductions, and click any amount to see its shipments. Every rep has one shipment with FL not done, one with an O/S amount and one paid 45 days late, so each deduction shows up. Nothing here is real or saved.</div>'
-    + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+cards+'</div>'
-    + '<div style="font-size:11.5px;color:'+SUB+';margin-top:10px;">How it works: a sales rep or zone is eligible when GP ÷ Target GP is at least 75% (Core and Cross separately). Then the jobs with FL not done, an O/S amount or paid more than 30 days late are taken off, 15% management fees come off what\'s left, and the rate is applied: sales reps 3% (75–99.99%) or 7% (100%+), zonal managers 2% or 3%, on the zone\'s GP.</div>'
-  + '</div>';
-  return tabs + intro + html;
+  return tabs + html;
 }
 
 /* ---------------------- Incentive: Targets tab ----------------------
@@ -7052,7 +7029,7 @@ function incTargetsPage(){
   return out;
 }
 
-function _incSum(){ var k = state.page === 'incdemo' ? 'incDemoSum' : 'incSum'; return state[k] || (state[k] = { part:'all', zone:'', elig:'elig', sort:'inc', dir:-1, q:'', quarter:'', open:{} }); }
+function _incSum(){ var k = state.page === 'incdemo' ? 'incDemoSum' : 'incSum'; return state[k] || (state[k] = { part:k === 'incDemoSum' ? 'core' : 'all', zone:'', elig:'elig', sort:'inc', dir:-1, q:'', quarter:'', open:{} }); }
 function incSumSet(k, v){ var S = _incSum(); if (k === 'sort') { if (S.sort === v) S.dir = -S.dir; else { S.sort = v; S.dir = v === 'name' || v === 'zone' ? 1 : -1; } } else S[k] = v; render(); }
 function incSumOpen(name){ var S = _incSum(); S.open[name] = !S.open[name]; render(); }
 function incSumZSearch(v){
@@ -7179,9 +7156,9 @@ function incSummaryPage(){
           return '<option value="'+esc(k)+'"'+(k === pq.key ? ' selected' : '')+'>for '+esc(Q.label)+'</option>'; }).join('')
       + '</select>')
     + (SQ.demo ? '' : _incLockBadge(pq.key))
-    + '<div role="radiogroup" aria-label="Core or Cross" style="display:inline-flex;gap:2px;padding:2px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;">'
+    + (SQ.demo ? '<span style="font-size:11px;color:#6B82A0;font-weight:600;">Core: Sea Export + Sea Import</span>' : '<div role="radiogroup" aria-label="Core or Cross" style="display:inline-flex;gap:2px;padding:2px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;">'
       + ['all','core','cross'].map(function(k){ return '<button onclick="incSumSet(\'part\',\''+k+'\')" class="btnq" role="radio" aria-checked="'+(S.part === k)+'" style="'+btn(S.part === k)+'">'+partLabel(k)+'</button>'; }).join('')
-    + '</div>'
+    + '</div>')
     + '<span style="flex:1;"></span>'
     + '<button onclick="incSumExport()" class="btnq" style="'+pill+'">Export CSV</button>'
     + (!SQ.demo && _incIsAdmin() ? '<button onclick="incAccessToggle()" class="btnq" style="'+pill+(state.incAccessOpen ? 'background:#E6EDF9;' : '')+'">Who can see this ('+_incAccessCount('summary')+')</button>' : '')
