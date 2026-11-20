@@ -5859,6 +5859,7 @@ function incRetry(){ incOutError = ''; fetchIncentiveOutstanding(function(){ ren
 // Core (SEA EXPORT / SEA IMPORT) or Cross (every other LOB): which part every row shows. Core by default.
 function incSetPart(p){ state.incPart = p === 'cross' ? 'cross' : 'core'; render(); }
 function incToggleZone(z){ state.incZoneOpen = state.incZoneOpen || {}; state.incZoneOpen[z] = !state.incZoneOpen[z]; render(); }
+function incRateInfo(){ state.incRateOpen = !state.incRateOpen; render(); }
 function incToggleAllZones(open){
   state.incZoneOpen = {};
   if (open) (window._incZoneNames || []).forEach(function(z){ state.incZoneOpen[z] = true; });
@@ -6401,15 +6402,16 @@ function _incentivePageInner(foldQ, pre){
     var R = INC_RATES, td = 'padding:7px 18px;font-size:12px;border-top:1px solid #EEF1F6;text-align:center;';
     function pc(v){ return '<b style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:800;color:#6B3FA0;">'+v+'%</b>'; }
     var no = '<span style="color:#A0AEC0;font-weight:600;">Not eligible</span>';
-    return '<div style="display:inline-block;background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.06);margin-bottom:14px;overflow:hidden;">'
+    return '<div role="dialog" aria-label="Incentive rates" style="position:absolute;right:0;top:calc(100% + 8px);z-index:30;width:max-content;white-space:nowrap;background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 12px 32px rgba(13,43,94,0.18);overflow:hidden;">'
+      + '<button onclick="incRateInfo()" class="btnq" aria-label="Close" style="position:absolute;top:6px;right:8px;border:none;background:transparent;color:#8A9AB5;font-size:14px;cursor:pointer;">×</button>'
       + '<table style="border-collapse:collapse;">'
-      + '<tr style="background:#F6F8FC;"><th style="padding:8px 18px;font-size:10.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#7A8AA3;text-align:left;">Incentive rate · GP achieved</th>'
-        + ['Below 75%', '75% – 99.99%', '100% or more'].map(function(h){ return '<th style="padding:8px 18px;font-size:11px;font-weight:700;color:#1E3A66;text-align:center;white-space:nowrap;">'+h+'</th>'; }).join('') + '</tr>'
+      + '<tr style="background:#F6F8FC;"><th style="padding:8px 18px 8px 18px;font-size:10.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#7A8AA3;text-align:left;">Incentive rate · GP achieved</th>'
+        + ['Below 75%', '75% – 99.99%', '100% or more'].map(function(h, i){ return '<th style="padding:8px '+(i === 2 ? 40 : 18)+'px 8px 18px;font-size:11px;font-weight:700;color:#1E3A66;text-align:center;white-space:nowrap;">'+h+'</th>'; }).join('') + '</tr>'
       + '<tr><td style="'+td+'text-align:left;font-weight:700;color:#14213D;">Sales rep</td><td style="'+td+'">'+no+'</td><td style="'+td+'">'+pc(R.sales.t1)+'</td><td style="'+td+'">'+pc(R.sales.t2)+'</td></tr>'
       + '<tr><td style="'+td+'text-align:left;font-weight:700;color:#14213D;">Zonal manager <span style="font-weight:500;color:#8A9AB5;">(on the zone\'s GP)</span></td><td style="'+td+'">'+no+'</td><td style="'+td+'">'+pc(R.zm.t1)+'</td><td style="'+td+'">'+pc(R.zm.t2)+'</td></tr>'
       + '</table></div>';
   })();
-  return '<div style="padding:20px 24px 32px;">' + rateCard
+  return '<div style="padding:20px 24px 32px;">'
     +'<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);width:100%;box-sizing:border-box;">'
       +'<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid '+BORDER+';flex-wrap:wrap;border-radius:12px 12px 0 0;">'
         +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Incentive</span>'
@@ -6434,6 +6436,12 @@ function _incentivePageInner(foldQ, pre){
         })()
         +(zones.length ? '<button onclick="incToggleAllZones('+(allOpen ? 'false' : 'true')+')" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+(allOpen ? 'Collapse All' : 'Expand All')+'</button>' : '')
         +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+zones.length+' zones · '+reps.length+' sales reps</span>'
+        // ⓘ at the end of the row: opens the incentive rate table
+        +'<span style="flex:1;"></span>'
+        +'<span style="position:relative;display:inline-flex;">'
+          +'<button onclick="incRateInfo()" class="btnq" aria-label="How the incentive rate is decided" aria-expanded="'+!!state.incRateOpen+'" title="How the incentive rate is decided" style="width:26px;height:26px;border-radius:50%;border:1.5px solid '+(state.incRateOpen ? BRAND_A1 : '#D8E1F0')+';background:'+(state.incRateOpen ? '#EEF3FC' : '#FFFFFF')+';color:#2C4E82;font-family:Georgia,serif;font-style:italic;font-weight:700;font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;">i</button>'
+          +(state.incRateOpen ? rateCard : '')
+        +'</span>'
         +(incOutMeta && !incOutMeta.paidDocs ? '<span style="font-size:11px;color:#A8720E;font-weight:700;">· Paid 30+ days overdue: no paid invoices in ar_outstanding yet. The AR sync that ran'+(incOutMeta.pushedAt ? ' (last push '+esc(new Date(incOutMeta.pushedAt).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }))+')' : '')+' is an old copy: paste apps-script/arSync.gs into the Apps Script project and run it</span>' : '')
         +(incOutMeta && !incOutMeta.docsWithRef ? '<span style="font-size:11px;color:#B83A2B;font-weight:700;">· No Ref No (refNo) found in ar_outstanding'+(incOutMeta.fields ? ' (fields: '+esc(incOutMeta.fields.join(', '))+')' : '')+'</span>' : '')
       +'</div>'
