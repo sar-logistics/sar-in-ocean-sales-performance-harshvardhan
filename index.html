@@ -5967,6 +5967,7 @@ function _incCalcYears(){
 // Summary quarter (user, 19-Nov-2026): a dropdown, the quarter being paid now by default; this year's earlier paid
 // quarters and last year's can be picked. Newest first.
 function _incSumQuarter(){
+  if (state.page === 'incdemo') return { q:INC_DEMO_Q, keys:[INC_DEMO_Q.key], pq:INC_DEMO_Q, fy:2027, demo:true };
   var Y = _incCalcYears(), keys = Y.thisY.slice().reverse().concat(Y.lastY.slice().reverse());
   if (keys.indexOf(Y.pq.key) === -1) keys.unshift(Y.pq.key);
   var k = state.incSumQ && keys.indexOf(state.incSumQ) !== -1 ? state.incSumQ : Y.pq.key;
@@ -6790,12 +6791,19 @@ function _incDemoRun(fn){
     window._getRLSReps = keep.rls; incTargets = keep.tg; currentUser = keep.cu;
   }
 }
+function incDemoSetTab(t){ state.incDemoTab = t === 'summary' ? 'summary' : 'calc'; render(); }
 function incDemoPage(){
-  var Q = INC_DEMO_Q;
+  var Q = INC_DEMO_Q, tabSum = state.incDemoTab === 'summary';
+  function tab(k, label){
+    var on = (k === 'summary') === tabSum;
+    return '<button onclick="incDemoSetTab(\''+k+'\')" class="btnq" style="border:none;background:transparent;padding:8px 2px;margin-right:18px;font-size:12.5px;font-weight:'+(on ? 800 : 600)+';color:'+(on ? '#0D2B5E' : '#6B82A0')+';border-bottom:2.5px solid '+(on ? BRAND_A2 : 'transparent')+';cursor:pointer;">'+label+'</button>';
+  }
+  var tabs = '<div style="padding:14px 24px 0;display:flex;align-items:flex-end;border-bottom:1px solid #E3EAF3;">'+tab('calc', 'Calculation')+tab('summary', 'Summary')+'</div>';
   if (!state.incDemoInit) { state.incDemoInit = true; state.incZoneOpen = state.incZoneOpen || {}; INC_DEMO_ZONES.forEach(function(z){ state.incZoneOpen[z.zone] = true; }); }
   var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo, pay:window._incPay, ys:window._incYearSel }, html;
   try {
     html = _incDemoRun(function(){
+      if (tabSum) return incSummaryPage();
       state.reportView = 'Monthly'; state.dateFrom = Q.months[0]; state.dateTo = Q.months[2];
       window._incCollect = true;
       var m; try { m = _incentivePageInner(true); } finally { window._incCollect = false; }
@@ -6822,7 +6830,7 @@ function incDemoPage(){
     + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+cards+'</div>'
     + '<div style="font-size:11.5px;color:'+SUB+';margin-top:10px;">How it works: a sales rep or zone is eligible when GP ÷ Target GP is at least 75% (Core and Cross separately). Then the jobs with FL not done, an O/S amount or paid more than 30 days late are taken off, 15% management fees come off what\'s left, and the rate is applied: sales reps 3% (75–99.99%) or 7% (100%+), zonal managers 2% or 3%, on the zone\'s GP.</div>'
   + '</div>';
-  return intro + html;
+  return tabs + intro + html;
 }
 
 /* ---------------------- Incentive: Targets tab ----------------------
@@ -7041,7 +7049,7 @@ function incTargetsPage(){
   return out;
 }
 
-function _incSum(){ return state.incSum || (state.incSum = { part:'all', zone:'', elig:'elig', sort:'inc', dir:-1, q:'', quarter:'', open:{} }); }
+function _incSum(){ var k = state.page === 'incdemo' ? 'incDemoSum' : 'incSum'; return state[k] || (state[k] = { part:'all', zone:'', elig:'elig', sort:'inc', dir:-1, q:'', quarter:'', open:{} }); }
 function incSumSet(k, v){ var S = _incSum(); if (k === 'sort') { if (S.sort === v) S.dir = -S.dir; else { S.sort = v; S.dir = v === 'name' || v === 'zone' ? 1 : -1; } } else S[k] = v; render(); }
 function incSumOpen(name){ var S = _incSum(); S.open[name] = !S.open[name]; render(); }
 function incSumZSearch(v){
@@ -7064,7 +7072,7 @@ function incSumZone(z){
   // render's own scroll restore (which puts the old position back on the next frame).
   function go(){
     var ms = document.getElementById('main-slot'), t = document.getElementById('incSumReps');
-    if (!ms || !t || state.page !== 'incentive' || state.incTab !== 'summary') return;
+    if (!ms || !t || !(state.page === 'incentive' ? state.incTab === 'summary' : state.page === 'incdemo' && state.incDemoTab === 'summary')) return;
     ms.scrollTop = Math.max(0, t.getBoundingClientRect().top - ms.getBoundingClientRect().top + ms.scrollTop - 8);
   }
   go(); requestAnimationFrame(function(){ go(); setTimeout(go, 0); });
@@ -7083,7 +7091,7 @@ function incSumSearch(v){
 }
 // Jump to a rep (or a zone) in the Calculation tab, with its groups open
 function incSumGoCalc(zone, rep, part){
-  state.incTab = 'calc';
+  if (state.page === 'incdemo') state.incDemoTab = 'calc'; else state.incTab = 'calc';
   if (part === 'core' || part === 'cross') state.incPart = part;
   if (zone) { state.incZoneOpen = state.incZoneOpen || {}; state.incZoneOpen[zone] = true; }
   if (rep) { state.incGpOpen = state.incGpOpen || {}; state.incGpOpen['E:R:' + rep] = true; state.incGpOpen['A:R:' + rep] = true; }
@@ -7163,21 +7171,21 @@ function incSummaryPage(){
   // ── Header: period, Core / Cross, quarter, export, access ──
   var head = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">'
     + '<span style="font-size:15px;font-weight:800;color:'+NAVY+';letter-spacing:-0.01em;">Incentive payout summary</span>'
-    + '<select onchange="incSumSetQ(this.value)" aria-label="Quarter" class="btnq" title="A quarter\'s incentive is paid two quarters later" style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 8px;border:1px solid #D3DFF3;cursor:pointer;">'
+    + (SQ.demo ? '<span style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 10px;border:1px solid #D3DFF3;">for '+esc(pq.label)+' · demo data</span>' : '<select onchange="incSumSetQ(this.value)" aria-label="Quarter" class="btnq" title="A quarter\'s incentive is paid two quarters later" style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 8px;border:1px solid #D3DFF3;cursor:pointer;">'
       + SQ.keys.map(function(k){ var Q = _incQuarterOf(k);
           return '<option value="'+esc(k)+'"'+(k === pq.key ? ' selected' : '')+'>for '+esc(Q.label)+'</option>'; }).join('')
-      + '</select>'
-    + _incLockBadge(pq.key)
+      + '</select>')
+    + (SQ.demo ? '' : _incLockBadge(pq.key))
     + '<div role="radiogroup" aria-label="Core or Cross" style="display:inline-flex;gap:2px;padding:2px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;">'
       + ['all','core','cross'].map(function(k){ return '<button onclick="incSumSet(\'part\',\''+k+'\')" class="btnq" role="radio" aria-checked="'+(S.part === k)+'" style="'+btn(S.part === k)+'">'+partLabel(k)+'</button>'; }).join('')
     + '</div>'
     + '<span style="flex:1;"></span>'
     + '<button onclick="incSumExport()" class="btnq" style="'+pill+'">Export CSV</button>'
-    + (_incIsAdmin() ? '<button onclick="incAccessToggle()" class="btnq" style="'+pill+(state.incAccessOpen ? 'background:#E6EDF9;' : '')+'">Who can see this ('+_incAccessCount('summary')+')</button>' : '')
+    + (!SQ.demo && _incIsAdmin() ? '<button onclick="incAccessToggle()" class="btnq" style="'+pill+(state.incAccessOpen ? 'background:#E6EDF9;' : '')+'">Who can see this ('+_incAccessCount('summary')+')</button>' : '')
   + '</div>';
 
   // ── Access panel (Admins only) ──
-  var access = _incIsAdmin() && state.incAccessOpen ? _incAccessPanel('summary') : '';
+  var access = !SQ.demo && _incIsAdmin() && state.incAccessOpen ? _incAccessPanel('summary') : '';
 
   // Layout: 1) the total payout, 2) who is paid (rep list, one clean line each), 3) the working, one rep at a time.
   // Supporting figures sit a level down (smaller, muted) rather than competing with the total.
@@ -7414,7 +7422,7 @@ function incSummaryPage(){
 }
 
 // The Summary as a CSV file: the same figures as the screen (current Core / Cross choice and quarter)
-function incSumExport(){ _incWithData(_incFrozenFor(_incSumQuarter().q.key), _incSumExportOne); }
+function incSumExport(){ if (state.page === 'incdemo') return _incDemoRun(_incSumExportOne); _incWithData(_incFrozenFor(_incSumQuarter().q.key), _incSumExportOne); }
 function _incSumExportOne(){
   var S = _incSum(), pq = _incSumQuarter().q, period = pq;
   var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo };
