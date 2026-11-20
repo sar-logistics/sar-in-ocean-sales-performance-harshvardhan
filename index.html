@@ -6707,7 +6707,7 @@ function _incAccessPanel(kind){
 
 /* ---------------------- Incentive Demo (sidebar page) ----------------------
    Shows everyone how the incentive is worked out, on made-up data: 4 zones with 2 sales reps each, one zone per
-   scenario (ZM paid + both reps paid / nobody paid / reps paid but not the ZM / ZM paid but not the reps). The data
+   scenario (ZM paid + both reps paid / one rep paid, ZM not / reps paid but not the ZM / ZM paid but not the reps). The data
    has the same shape as the real Sales Performance and shipment data, so the page runs the real calculation, table
    and shipment drill-down on it, exactly like the Calculation tab. Filters, per-rep visibility and the Incentive
    Targets tab never apply here. Nothing is saved anywhere. */
@@ -6715,13 +6715,13 @@ var _incDemoF = null;
 var INC_DEMO_Q = { key:'DEMO', label:'Q1 FY27', months:['Apr-26', 'May-26', 'Jun-26'], payLabel:'Q3 FY27' };
 var INC_DEMO_ZONES = [
   { zone:'DZ01 (Arjun Mehta)', region:'North', tgt:1500000, scen:1, reps:[{ n:'Rohan Kapoor', tgt:1000000, core:1150000, cross:120000 }, { n:'Sneha Iyer', tgt:800000, core:700000, cross:80000 }] },
-  { zone:'DZ02 (Kavita Rao)', region:'West', tgt:2500000, scen:2, reps:[{ n:'Vikram Joshi', tgt:1000000, core:450000, cross:60000 }, { n:'Neha Kulkarni', tgt:900000, core:500000, cross:40000 }] },
+  { zone:'DZ02 (Kavita Rao)', region:'West', tgt:2500000, scen:2, reps:[{ n:'Vikram Joshi', tgt:1000000, core:920000, cross:60000 }, { n:'Neha Kulkarni', tgt:900000, core:500000, cross:40000 }] },
   { zone:'DZ03 (Imran Qureshi)', region:'South', tgt:2000000, scen:3, reps:[{ n:'Aditya Menon', tgt:600000, core:660000, cross:50000 }, { n:'Priya Nambiar', tgt:700000, core:560000, cross:30000 }] },
   { zone:'DZ04 (Pooja Nair)', region:'East', tgt:1600000, scen:4, reps:[{ n:'Karan Malhotra', tgt:1200000, core:720000, cross:90000 }, { n:'Ananya Das', tgt:1100000, core:770000, cross:100000 }] }
 ];
 var INC_DEMO_SCEN = {
   1:{ t:'Zonal manager paid, both sales reps paid', zm:true, reps:true },
-  2:{ t:'Nobody paid: zonal manager and both sales reps below 75%', zm:false, reps:false },
+  2:{ t:'One sales rep paid, the other not; zonal manager not paid', zm:false, reps:'one' },
   3:{ t:'Both sales reps paid, zonal manager not paid', zm:false, reps:true },
   4:{ t:'Zonal manager paid, both sales reps not paid', zm:true, reps:false }
 };
@@ -6814,7 +6814,10 @@ function incDemoPage(){
     });
   } finally { state.reportView = keep.reportView; state.dateFrom = keep.dateFrom; state.dateTo = keep.dateTo; window._incPay = keep.pay; window._incYearSel = keep.ys; }
   var NAVY = '#0D2B5E', SUB = '#5B6678';
-  function chip(ok, who){ return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:'+(ok ? '#15875A' : '#B4541A')+';background:'+(ok ? '#E9F6EF' : '#FCF0E8')+';border-radius:999px;padding:2px 9px;">'+(ok ? '✓' : '✕')+' '+who+'</span>'; }
+  function chip(ok, who){
+    if (ok === 'one') return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#A8720E;background:#FCF3DA;border-radius:999px;padding:2px 9px;">½ 1 of 2 '+who.toLowerCase()+'</span>';
+    return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:'+(ok ? '#15875A' : '#B4541A')+';background:'+(ok ? '#E9F6EF' : '#FCF0E8')+';border-radius:999px;padding:2px 9px;">'+(ok ? '✓' : '✕')+' '+who+'</span>';
+  }
   var cards = INC_DEMO_ZONES.map(function(Z){
     var S = INC_DEMO_SCEN[Z.scen], zp = /^(\S+)\s*\((.*)\)$/.exec(Z.zone);
     return '<div style="flex:1 1 230px;min-width:0;background:#FFFFFF;border:1px solid #D5DCE6;border-radius:10px;padding:12px 14px;">'
