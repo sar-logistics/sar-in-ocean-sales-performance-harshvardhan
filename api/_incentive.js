@@ -584,8 +584,8 @@ async function incentiveRunFromSnapshot(db, quarter, dryRun) {
 
 // ── Targets tab ──────────────────────────────────────────────────
 // GP targets set on the Incentive Targets tab, used ONLY by the Incentive pages and payout runs (Sales Performance
-// keeps its own). One document per FY + rep / zone: { year, q:{Q1..Q4}, m:{"Apr-26":…} } in INR, any level may be
-// blank (blank = the Sales Performance target). Editable any time; a change to a quarter that already has its payout
+// keeps its own). One document per FY + rep / zone: { mAll (every month), qAll (every quarter), year } in INR, any
+// may be blank (blank = the Sales Performance target). Editable any time; a change to a quarter that already has its payout
 // run redoes that run and every later one (the earlier ones are kept, marked superseded).
 const TARGETS = "incentive_targets", TARGET_LOG = "incentive_target_log";
 async function _canTargets(db, email) {
@@ -600,19 +600,16 @@ async function incentiveTargets(db) {
   const targets = await db.collection(TARGETS).find({}).toArray();
   return { status: 200, json: { success: true, targets } };
 }
-function _fyMonths(fy) {
-  const y = 2000 + parseInt(fy.slice(2), 10);
-  return ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"].map((m, i) => m + "-" + String(i < 9 ? y - 1 : y).slice(-2));
-}
-// POST action=incentiveTargetSave { by, fy:"FY27", changes:[{ kind:"rep"|"zone", name, field:"year"|"Q1".."Q4"|"Apr-26"…, value:number|null }] }
+// POST action=incentiveTargetSave { by, fy:"FY27", changes:[{ kind:"rep"|"zone", name, field:"month"|"quarter"|"year", value:number|null }] }
 async function incentiveTargetSave(db, body) {
   const by = _em(body && body.by);
   if (!(await _canTargets(db, by))) return { status: 403, json: { success: false, error: "You don't have access to the Targets tab" } };
   const fy = String((body && body.fy) || "");
   if (!/^FY\d\d$/.test(fy)) return { status: 400, json: { success: false, error: "fy like FY27 required" } };
-  const months = _fyMonths(fy), changes = Array.isArray(body.changes) ? body.changes : [];
+  const changes = Array.isArray(body.changes) ? body.changes : [];
   if (!changes.length) return { status: 400, json: { success: false, error: "No changes" } };
-  const qOfField = (f) => (f === "year" ? [1, 2, 3, 4] : /^Q[1-4]$/.test(f) ? [+f[1]] : months.indexOf(f) > -1 ? [Math.floor(months.indexOf(f) / 3) + 1] : null);
+  // Monthly (every month), Quarterly (every quarter), Yearly: each covers the whole year
+  const qOfField = (f) => (f === "year" || f === "quarter" || f === "month" ? [1, 2, 3, 4] : null);
   const now = new Date(), touched = {}, log = [];
   for (const c of changes) {
     const kind = c && c.kind === "zone" ? "zone" : c && c.kind === "rep" ? "rep" : null;
@@ -622,9 +619,9 @@ async function incentiveTargetSave(db, body) {
     if (!kind || !name || name.length > 160 || !qs || (v !== null && !(isFinite(v) && v >= 0)))
       return { status: 400, json: { success: false, error: "Bad change: " + JSON.stringify(c).slice(0, 200) } };
     const id = fy + "|" + kind + "|" + name;
-    const path = field === "year" ? "year" : /^Q/.test(field) ? "q." + field : "m." + field;
+    const path = field === "year" ? "year" : field === "quarter" ? "qAll" : "mAll";
     const old = await db.collection(TARGETS).findOne({ _id: id });
-    const from = !old ? null : field === "year" ? old.year : /^Q/.test(field) ? (old.q || {})[field] : (old.m || {})[field];
+    const from = !old ? null : old[path];
     const upd = v === null ? { $unset: { [path]: "" }, $set: { fy, kind, name, updatedBy: by, updatedAt: now } }
       : { $set: { [path]: Math.round(v * 100) / 100, fy, kind, name, updatedBy: by, updatedAt: now } };
     await db.collection(TARGETS).updateOne({ _id: id }, upd, { upsert: true });

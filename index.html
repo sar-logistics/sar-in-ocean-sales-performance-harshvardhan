@@ -6701,9 +6701,10 @@ function _incAccessPanel(kind){
 /* ---------------------- Incentive: Targets tab ----------------------
    GP targets set here are used ONLY by the Incentive pages (Calculation, Summary) and the payout runs; Sales
    Performance and every other page keep their own targets. Per FY, per sales rep and per zone (zonal manager),
-   at any of three levels: year, quarter, month (INR on the server). For a quarter the incentive uses: its three
-   months (when all three are set), else the quarter, else year ÷ 4, else the Sales Performance target. One target
-   for both Core and Cross. Editable any time: the server redoes the payout of a quarter already paid out. */
+   three values typed by hand (user, 20-Nov-2026): Monthly (the same for every month), Quarterly (the same for every
+   quarter) and Yearly, in INR on the server. For a quarter the incentive uses Monthly × 3, else Quarterly, else
+   Yearly ÷ 4, else the Sales Performance target. One target for Core and Cross. Editable any time: the server redoes
+   the payout of a quarter already paid out. */
 var incTargets = null, incTargetsLoading = false, incTargetsErr = '';
 var INC_FY_MON = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
 function _incTargetsSet(list){ var m = {}; (list || []).forEach(function(d){ if (d && d.fy && d.kind && d.name) m[d.fy + '|' + d.kind + '|' + d.name] = d; }); incTargets = m; }
@@ -6720,9 +6721,8 @@ function _incFyMonths(fy){ var y = 2000 + parseInt(String(fy).slice(2), 10); ret
 // The Incentive target of one rep / zone for one FY quarter (INR), or null = use the Sales Performance target
 function _incTargetFor(kind, name, fy, q){
   var d = incTargets && incTargets[fy + '|' + kind + '|' + name]; if (!d) return null;
-  var ms = _incFyMonths(fy).slice((q - 1) * 3, q * 3), mv = ms.map(function(m){ return d.m && d.m[m] != null ? Number(d.m[m]) : null; });
-  if (mv.every(function(v){ return v !== null; })) return mv[0] + mv[1] + mv[2];
-  if (d.q && d.q['Q' + q] != null) return Number(d.q['Q' + q]);
+  if (d.mAll != null) return Number(d.mAll) * 3;
+  if (d.qAll != null) return Number(d.qAll);
   if (d.year != null) return Number(d.year) / 4;
   return null;
 }
@@ -6760,7 +6760,7 @@ function _incTgtShow(inr){
 }
 function _incTgtSaved(kind, name, field){
   var S = _incTgtState(), d = incTargets && incTargets[S.fy + '|' + kind + '|' + name]; if (!d) return null;
-  var v = field === 'year' ? d.year : /^Q/.test(field) ? (d.q || {})[field] : (d.m || {})[field];
+  var v = field === 'year' ? d.year : field === 'quarter' ? d.qAll : field === 'month' ? d.mAll : null;
   return v == null ? null : Number(v);
 }
 function incTgtEdit(el){
@@ -6791,10 +6791,8 @@ function incTgtSave(){
   var S = _incTgtState(), ch = Object.keys(S.draft).map(function(k){ return S.draft[k]; });
   if (!ch.length || S.busy || ch.some(function(c){ return c.bad; })) return;
   // Quarters touched that are already locked: their payout is redone
-  var months = _incFyMonths(S.fy), qs = {};
-  ch.forEach(function(c){
-    (c.field === 'year' ? [1, 2, 3, 4] : /^Q/.test(c.field) ? [+c.field[1]] : [Math.floor(months.indexOf(c.field) / 3) + 1]).forEach(function(q){ qs[S.fy + '-Q' + q] = true; });
-  });
+  var qs = {};
+  if (ch.length) [1, 2, 3, 4].forEach(function(q){ qs[S.fy + '-Q' + q] = true; });   // each value covers the whole year
   var pk = _incPayQuarter().key, locked = Object.keys(qs).filter(function(k){ return k <= pk; }).sort();
   if (locked.length && !confirm('These changes affect ' + locked.map(function(k){ return _incQuarterOf(k).label; }).join(', ') + ', already locked. The incentive is recalculated and the payout redone with the new targets. Continue?')) return;
   S.busy = true; render();
@@ -6828,106 +6826,91 @@ function _incTgtSp(fy){
   });
   return (_incTgtSpCache = out);
 }
-function incTgtSearch(v){
-  _incTgtState().q = v; var q = String(v || '').toLowerCase().trim();
-  var rows = [].slice.call(document.querySelectorAll('#incTgtTable tr[data-s]')), zoneHit = {};
-  rows.forEach(function(tr){ var hit = !q || tr.getAttribute('data-s').indexOf(q) > -1; tr.style.display = hit ? '' : 'none'; if (hit && tr.getAttribute('data-z')) zoneHit[tr.getAttribute('data-z')] = true; });
-  rows.forEach(function(tr){ if (tr.getAttribute('data-zr') && zoneHit[tr.getAttribute('data-zr')]) tr.style.display = ''; });
+function incTgtSearch(list, v){
+  var S = _incTgtState(); S['q' + list] = v; var q = String(v || '').toLowerCase().trim();
+  var rows = [].slice.call(document.querySelectorAll('#incTgt' + list + ' tr[data-s]')), n = 0;
+  rows.forEach(function(tr){ var hit = !q || tr.getAttribute('data-s').indexOf(q) > -1; tr.style.display = hit ? '' : 'none'; if (hit) n++; });
+  var c = document.getElementById('incTgt' + list + 'N'); if (c) c.textContent = n + ' shown';
 }
 function incTargetsPage(){
   _incAccessLoad(false, 'targets');
   var admin = _incIsAdmin(), can = _incCanTargets(), S = _incTgtState();
   var INK = '#14213D', SUB = '#5B6678', MUTED = '#8A9AB5', NAVY = '#0D2B5E', LINE = '#E3E9F2';
   var pill = 'background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;';
+  var card = 'background:#FFFFFF;border:1px solid #D5DCE6;border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.06);';
   function wait(msg){ return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div><div style="font-size:13px;color:#9AAFC8;font-weight:500;">'+msg+'</div></div>'; }
-  if (!incTgtAccess) return wait('Loading…');
+  var wrap = function(x){ return '<div style="padding:16px 24px 32px;">'+x+'</div>'; };
+  if (!incTgtAccess) return wrap(wait('Loading…'));
+  var ready = can && dataReady && repsRawOriginal.length && months26.length && incTargets;
+
+  // FYs: the ones with data, plus the current and the next one
+  var fyList = [], cfy = new Date().getMonth() >= 3 ? new Date().getFullYear() + 1 : new Date().getFullYear();
+  if (ready) {
+    var fys = {}; months26.forEach(function(m){ var b = m.split('-'), mi = MONTH_NAME_TO_IDX[b[0]], yy = parseInt(b[1], 10); fys['FY' + String(mi >= 3 ? yy + 1 : yy).slice(-2)] = 1; });
+    fys['FY' + String(cfy).slice(-2)] = 1; fys['FY' + String(cfy + 1).slice(-2)] = 1;
+    fyList = Object.keys(fys).sort();
+    if (!S.fy || fyList.indexOf(S.fy) === -1) S.fy = 'FY' + String(cfy).slice(-2);
+  }
+  var nChanges = Object.keys(S.draft).length, bad = Object.keys(S.draft).some(function(k){ return S.draft[k].bad; });
   var head = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">'
     + '<span style="font-size:15px;font-weight:800;color:'+NAVY+';">Incentive targets</span>'
-    + '<span style="font-size:11px;color:'+SUB+';">Used only by the Incentive pages. Blank = the Sales Performance target.</span>'
+    + (ready ? '<select onchange="incTgtSet(\'fy\', this.value)" aria-label="Financial year" class="btnq" style="font-size:11px;color:#2C4E82;font-weight:700;background:#EEF3FC;border-radius:999px;padding:3px 8px;border:1px solid #D3DFF3;cursor:pointer;">'+fyList.map(function(f){ return '<option value="'+f+'"'+(f === S.fy ? ' selected' : '')+'>'+f+'</option>'; }).join('')+'</select>' : '')
+    + '<span style="font-size:11px;color:'+SUB+';">Used only by the Incentive pages · blank = the Sales Performance target (grey) · amounts in '+state.currency+', type 300000, 3L, 3cr or 45k</span>'
     + '<span style="flex:1;"></span>'
+    + (ready ? '<span id="incTgtBar" style="display:inline-flex;align-items:center;gap:8px;">'+_incTgtBar(nChanges, bad)+'</span>' : '')
     + (admin ? '<button onclick="incAccessToggle(\'targets\')" class="btnq" style="'+pill+(state.incTgtAccessOpen ? 'background:#E6EDF9;' : '')+'">Who can see this ('+_incAccessCount('targets')+')</button>' : '')
   + '</div>' + (admin && state.incTgtAccessOpen ? _incAccessPanel('targets') : '');
-  var wrap = function(x){ return '<div style="padding:16px 24px 32px;">'+x+'</div>'; };
-  if (!can) return wrap(head + '<div style="background:#fff;border:1px solid #D5DCE6;border-radius:12px;padding:40px;text-align:center;font-size:12.5px;color:'+SUB+';">You can choose who sees the targets, but you aren\'t on the list yourself. Tick the Admin role or add yourself under "Who can see this".</div>');
+  if (!can) return wrap(head + '<div style="'+card+'padding:40px;text-align:center;font-size:12.5px;color:'+SUB+';">You can choose who sees the targets, but you aren\'t on the list yourself. Tick the Admin role or add yourself under "Who can see this".</div>');
   if (!dataReady || !repsRawOriginal.length || !months26.length) return wrap(head + wait('Loading your data…'));
   if (!incTargets) { if (incTargetsErr) return wrap(head + '<div style="padding:40px;text-align:center;color:#B83A2B;font-size:12px;font-weight:600;">Couldn’t load the targets: '+esc(incTargetsErr)+' <button onclick="incTargetsErr=\'\';_incTargetsLoad(true);render();" class="btnq" style="'+pill+'">Try again</button></div>'); _incTargetsLoad(); return wrap(head + wait('Loading targets…')); }
 
-  // FYs: the ones with data, plus the current and the next one
-  var fys = {}; months26.forEach(function(m){ var b = m.split('-'), mi = MONTH_NAME_TO_IDX[b[0]], yy = parseInt(b[1], 10); fys['FY' + String(mi >= 3 ? yy + 1 : yy).slice(-2)] = 1; });
-  var now = new Date(), cfy = now.getMonth() >= 3 ? now.getFullYear() + 1 : now.getFullYear();
-  fys['FY' + String(cfy).slice(-2)] = 1; fys['FY' + String(cfy + 1).slice(-2)] = 1;
-  var fyList = Object.keys(fys).sort();
-  if (!S.fy || fyList.indexOf(S.fy) === -1) S.fy = 'FY' + String(cfy).slice(-2);
   var SP = _incTgtSp(S.fy), months = _incFyMonths(S.fy);
-  var fields = S.view === 'Y' ? ['year'] : S.view === 'M' ? months : ['Q1', 'Q2', 'Q3', 'Q4'];
-  function fieldLabel(f){ return f === 'year' ? S.fy : /^Q/.test(f) ? f + ' ' + S.fy : f; }
-  function spOf(e, f){
-    var ms = f === 'year' ? months : /^Q/.test(f) ? months.slice((+f[1] - 1) * 3, +f[1] * 3) : [f];
-    var have = ms.filter(function(m){ return e.m[m] != null; });
-    return have.length ? have.reduce(function(a, m){ return a + e.m[m]; }, 0) : null;
+  var msg = S.msg ? '<div style="'+card+'padding:10px 16px;margin-bottom:14px;font-size:11.5px;font-weight:700;color:'+(S.msg.err ? '#B83A2B' : '#0B7A4B')+';background:'+(S.msg.err ? '#FDECEC' : '#E7F6EE')+';">'+esc(S.msg.err || S.msg.ok)+'</div>' : '';
+  function spYear(e){ var have = months.filter(function(m){ return e.m[m] != null; }); return have.length ? have.reduce(function(a, m){ return a + e.m[m]; }, 0) * 12 / have.length : null; }
+  function cell(e, f, sp){
+    var key = e.kind + '|' + e.name + '|' + f, dr = S.draft[key];
+    var v = dr && !dr.bad ? dr.value : dr ? null : _incTgtSaved(e.kind, e.name, f);
+    return '<td style="padding:6px 10px;">'
+      + '<input data-k="'+e.kind+'" data-n="'+esc(e.name)+'" data-f="'+f+'" value="'+esc(_incTgtShow(v))+'" placeholder="'+esc(sp == null ? '–' : fmtCur(sp))+'" onchange="incTgtEdit(this)" aria-label="'+esc(e.name)+' '+f+' target" '
+      + 'style="width:100%;box-sizing:border-box;text-align:right;font-family:\'DM Mono\',monospace;font-size:12.5px;font-weight:700;color:'+INK+';border:1px solid #D8E1F0;border-radius:8px;padding:7px 10px;'+(dr ? 'background:#FFF6DB;' : '')+'"></td>';
   }
   function warn(e){
     var d = incTargets[S.fy + '|' + e.kind + '|' + e.name]; if (!d) return '';
-    var out = [], q = d.q || {}, m = d.m || {};
-    if (d.year != null && [1, 2, 3, 4].every(function(i){ return q['Q' + i] != null; })) {
-      var sq = [1, 2, 3, 4].reduce(function(a, i){ return a + Number(q['Q' + i]); }, 0);
-      if (Math.abs(sq - d.year) > 1) out.push('Quarters add up to ' + fmtCur(sq) + ', the year is ' + fmtCur(d.year));
-    }
-    [1, 2, 3, 4].forEach(function(i){
-      var ms = months.slice((i - 1) * 3, i * 3);
-      if (q['Q' + i] != null && ms.every(function(x){ return m[x] != null; })) {
-        var sm = ms.reduce(function(a, x){ return a + Number(m[x]); }, 0);
-        if (Math.abs(sm - q['Q' + i]) > 1) out.push('Q' + i + ' months add up to ' + fmtCur(sm) + ', Q' + i + ' is ' + fmtCur(q['Q' + i]) + ' (the months are used)');
-      }
-    });
-    return out.length ? ' <span title="'+esc(out.join('\n'))+'" style="color:#B45309;cursor:help;">⚠</span>' : '';
+    var y = [d.mAll != null ? Number(d.mAll) * 12 : null, d.qAll != null ? Number(d.qAll) * 4 : null, d.year != null ? Number(d.year) : null].filter(function(x){ return x !== null; });
+    if (y.length < 2 || Math.max.apply(null, y) - Math.min.apply(null, y) <= 1) return '';
+    var t = 'These don\'t match: ' + [d.mAll != null ? 'monthly × 12 = ' + fmtCur(d.mAll * 12) : '', d.qAll != null ? 'quarterly × 4 = ' + fmtCur(d.qAll * 4) : '', d.year != null ? 'yearly = ' + fmtCur(d.year) : ''].filter(Boolean).join(', ') + '. The incentive uses monthly, then quarterly, then yearly.';
+    return ' <span title="'+esc(t)+'" style="color:#B45309;cursor:help;">⚠</span>';
   }
-  function cell(e, f){
-    var key = e.kind + '|' + e.name + '|' + f, dr = S.draft[key];
-    var v = dr && !dr.bad ? dr.value : dr ? null : _incTgtSaved(e.kind, e.name, f);
-    var sp = spOf(e, f);
-    return '<td style="padding:4px 6px;border-bottom:1px solid #EEF2F7;">'
-      + '<input data-k="'+e.kind+'" data-n="'+esc(e.name)+'" data-f="'+f+'" value="'+esc(_incTgtShow(v))+'" placeholder="'+esc(sp == null ? '–' : fmtCur(sp))+'" onchange="incTgtEdit(this)" '
-      + 'style="width:100%;box-sizing:border-box;text-align:right;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:'+INK+';border:1px solid #D8E1F0;border-radius:6px;padding:6px 8px;'+(dr ? 'background:#FFF6DB;' : '')+'"></td>';
-  }
-  function zoneParts(z){ var m = /^(\S+)\s*(.*)$/.exec(z || ''); return m ? [m[1], m[2]] : [z, '']; }
-  var byZone = {}; SP.reps.forEach(function(r){ (byZone[r.zone] || (byZone[r.zone] = [])).push(r); });
-  var zoneNames = SP.zones.map(function(z){ return z.name; });
-  Object.keys(byZone).forEach(function(z){ if (zoneNames.indexOf(z) === -1) zoneNames.push(z); });
-  var zByName = {}; SP.zones.forEach(function(z){ zByName[z.name] = z; });
-  var th = 'position:sticky;top:0;z-index:2;background:#F0F4FA;padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#475569;border-bottom:2px solid #B0BAC8;white-space:nowrap;';
-  var body = zoneNames.map(function(zn){
-    var z = zByName[zn], zp = zoneParts(zn), reps = byZone[zn] || [];
-    var zs = (zn + ' ' + reps.map(function(r){ return r.name; }).join(' ')).toLowerCase();
-    var zrow = z ? '<tr data-s="'+esc(zn.toLowerCase())+'" data-zr="'+esc(zn)+'" style="background:#F3F6FC;">'
-        + '<td style="position:sticky;left:0;z-index:1;background:#F3F6FC;padding:8px 12px;border-bottom:1px solid #E3E9F2;border-top:2px solid #8FA3C4;white-space:nowrap;">'
-          + '<span style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5678C2;">ZONE</span> <b style="font-size:12.5px;color:'+NAVY+';">'+esc(zp[0])+'</b> <span style="font-size:11px;color:'+SUB+';">'+esc(zp[1])+'</span>'
-          + ' <span style="font-size:9.5px;font-weight:700;color:#6B3FA0;background:#F1ECF8;border-radius:999px;padding:1px 7px;">Zonal manager</span>'+warn(z)+'</td>'
-        + fields.map(function(f){ return cell(z, f).replace('border-bottom:1px solid #EEF2F7;', 'border-bottom:1px solid #E3E9F2;border-top:2px solid #8FA3C4;'); }).join('') + '</tr>' : '';
-    return zrow + reps.map(function(r){
-      return '<tr data-s="'+esc((r.name + ' ' + zn).toLowerCase())+'" data-z="'+esc(zn)+'">'
-        + '<td style="position:sticky;left:0;z-index:1;background:#FFFFFF;padding:6px 12px 6px 26px;border-bottom:1px solid #EEF2F7;white-space:nowrap;font-size:12px;font-weight:600;color:'+INK+';">'+esc(r.name)+warn(r)+'</td>'
-        + fields.map(function(f){ return cell(r, f); }).join('') + '</tr>';
+  function zoneParts(z){ if (z === 'Cross Sales') return ['Cross Sales', '']; var m = /^(\S+)\s*(.*)$/.exec(z || ''); return m ? [m[1], m[2]] : [z, '']; }
+  var th = 'position:sticky;top:0;z-index:2;background:#FFFFFF;padding:10px 16px;font-size:10.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#7A8AA3;border-bottom:1px solid #DCE3EE;white-space:nowrap;';
+  function list(id, title, ents, isZone){
+    var q = S['q' + id] || '';
+    var rows = ents.map(function(e){
+      var zp = zoneParts(isZone ? e.name : e.zone), sy = spYear(e);
+      var s = (e.name + ' ' + (isZone ? '' : e.zone)).toLowerCase();
+      return '<tr data-s="'+esc(s)+'" style="border-bottom:1px solid #EEF2F7;">'
+        + '<td style="padding:10px 16px;font-size:12.5px;font-weight:700;color:'+INK+';white-space:nowrap;">'+esc(isZone ? (zp[1].replace(/^\(|\)$/g, '') || zp[0]) : e.name)+warn(e)+'</td>'
+        + '<td style="padding:10px 16px;font-size:12px;white-space:nowrap;"><b style="color:'+INK+';font-weight:700;">'+esc(zp[0])+'</b> <span style="color:'+MUTED+';">'+esc(isZone ? '' : zp[1])+'</span></td>'
+        + cell(e, 'month', sy == null ? null : sy / 12) + cell(e, 'quarter', sy == null ? null : sy / 4) + cell(e, 'year', sy)
+      + '</tr>';
     }).join('');
-  }).join('');
-  function seg(k, label){ var on = S.view === k; return '<button onclick="incTgtSet(\'view\',\''+k+'\')" class="btnq" style="border:none;border-radius:999px;padding:5px 13px;font-size:11px;font-weight:700;cursor:pointer;'+(on ? 'background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');color:#FFFFFF;' : 'background:transparent;color:#1E3A66;')+'">'+label+'</button>'; }
-  var nChanges = Object.keys(S.draft).length, bad = Object.keys(S.draft).some(function(k){ return S.draft[k].bad; });
-  var tools = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid '+LINE+';">'
-    + '<select onchange="incTgtSet(\'fy\', this.value)" class="btnq" style="'+pill+'">'+fyList.map(function(f){ return '<option value="'+f+'"'+(f === S.fy ? ' selected' : '')+'>'+f+'</option>'; }).join('')+'</select>'
-    + '<div style="display:inline-flex;gap:2px;padding:2px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;">'+seg('Y', 'Yearly')+seg('Q', 'Quarterly')+seg('M', 'Monthly')+'</div>'
-    + '<input placeholder="Search rep or zone" value="'+esc(S.q || '')+'" oninput="incTgtSearch(this.value)" style="border:1.5px solid #D8E1F0;border-radius:8px;padding:6px 10px;font-size:12px;min-width:200px;">'
-    + '<span style="font-size:11px;color:'+MUTED+';">Amounts in '+state.currency+' · type 3000000, 30L, 3cr or 45k · grey = Sales Performance target</span>'
-    + '<span style="flex:1;"></span>'
-    + '<span id="incTgtBar" style="display:inline-flex;align-items:center;gap:8px;">'+_incTgtBar(nChanges, bad)+'</span>'
-  + '</div>';
-  var msg = S.msg ? '<div style="padding:9px 16px;font-size:11.5px;font-weight:700;border-bottom:1px solid '+LINE+';color:'+(S.msg.err ? '#B83A2B' : '#0B7A4B')+';background:'+(S.msg.err ? '#FDECEC' : '#E7F6EE')+';">'+esc(S.msg.err || S.msg.ok)+'</div>' : '';
-  var table = '<style>#incTgtTable input::placeholder{color:#B4C0D1;font-weight:500;}#incTgtTable input:focus{outline:2px solid #6488D6;outline-offset:-1px;}</style>'
-    + '<div style="overflow:auto;max-height:calc(100vh - 250px);">'
-    + '<table id="incTgtTable" style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:'+(260 + fields.length * 120)+'px;">'
-    + '<thead><tr><th style="'+th+'left:0;z-index:3;text-align:left;min-width:260px;">Zone / sales rep</th>'+fields.map(function(f){ return '<th style="'+th+'text-align:right;">'+esc(fieldLabel(f))+'</th>'; }).join('')+'</tr></thead>'
-    + '<tbody>'+body+'</tbody></table></div>';
-  var out = wrap(head + '<div style="background:#FFFFFF;border:1px solid #D5DCE6;border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.06);overflow:hidden;">'+tools+msg+table+'</div>');
-  if (S.q) setTimeout(function(){ incTgtSearch(S.q); }, 0);
+    return '<div style="'+card+'margin-bottom:16px;overflow:clip;">'
+      + '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;border-bottom:1px solid '+LINE+';">'
+        + '<span style="font-size:14px;font-weight:800;color:'+NAVY+';">'+title+'</span>'
+        + '<input placeholder="Search '+(isZone ? 'zonal manager or zone' : 'sales rep or zone')+'" value="'+esc(q)+'" oninput="incTgtSearch(\''+id+'\', this.value)" style="border:1.5px solid #D8E1F0;border-radius:8px;padding:7px 11px;font-size:12px;min-width:240px;">'
+        + '<span style="flex:1;"></span><span id="incTgt'+id+'N" style="font-size:11.5px;color:'+MUTED+';">'+ents.length+' shown</span>'
+      + '</div>'
+      + '<table id="incTgt'+id+'" style="width:100%;border-collapse:collapse;table-layout:fixed;">'
+        + '<colgroup><col style="width:28%;"><col style="width:18%;"><col><col><col></colgroup>'
+        + '<thead><tr><th style="'+th+'text-align:left;">'+(isZone ? 'Zonal manager' : 'Sales rep')+'</th><th style="'+th+'text-align:left;">Zone</th>'
+        + '<th style="'+th+'text-align:right;">Monthly <span style="text-transform:none;font-weight:600;">(every month)</span></th><th style="'+th+'text-align:right;">Quarterly <span style="text-transform:none;font-weight:600;">(every quarter)</span></th><th style="'+th+'text-align:right;">Yearly</th></tr></thead>'
+        + '<tbody>'+rows+'</tbody></table></div>';
+  }
+  var reps = SP.reps.slice().sort(function(a, b){ return (a.zone || '').localeCompare(b.zone || '') || a.name.localeCompare(b.name); });
+  var out = wrap(head + msg
+    + '<style>#incTgtReps input::placeholder,#incTgtZms input::placeholder{color:#B4C0D1;font-weight:500;}#incTgtReps input:focus,#incTgtZms input:focus{outline:2px solid #6488D6;outline-offset:-1px;}</style>'
+    + list('Reps', 'Sales reps', reps, false) + list('Zms', 'Zonal managers', SP.zones, true));
+  setTimeout(function(){ if (S.qReps) incTgtSearch('Reps', S.qReps); if (S.qZms) incTgtSearch('Zms', S.qZms); }, 0);
   return out;
 }
 
