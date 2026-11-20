@@ -62,7 +62,7 @@ function engine() {
 // st = incentiveLockState(quarter) (frozen), parts = { sales, ar, rows } as stored, held = [{ key, s, part, rep }]
 function buildRunFromFrozen(st, parts, held) {
   const ctx = engine();
-  ctx.__incIn = { st, sales: parts.sales || {}, ar: parts.ar || {}, rows: parts.rows || [], held: held || [] };
+  ctx.__incIn = { st, sales: parts.sales || {}, ar: parts.ar || {}, rows: parts.rows || [], targets: parts.targets || [], held: held || [] };
   try {
     // Same steps as the page's _incFrozenLoad, then the run exactly as the page builds it
     return JSON.parse(JSON.stringify(vm.runInContext(`(function(){
@@ -76,6 +76,7 @@ function buildRunFromFrozen(st, parts, held) {
         incOutMeta:{ asOn:ar.asOn, docsWithRef:ar.docsWithRef || 0, fields:ar.fields || null, paidDocs:ar.paidDocs || 0, lateDays:ar.lateDays || 30, pushedAt:ar.pushedAt || null } };
       dataReady = true;
       currentUser = { name:'Nightly server job', email:'', role:'Admin' };   // sees every rep
+      _incTargetsSet(I.targets);   // the Incentive Targets tab
       return _incWithData(F, function(){
         buildZoneAggregates();
         return _incBuildRun({ key:I.st.quarter, label:I.st.label, months:I.st.months }, I.held);

@@ -6037,9 +6037,16 @@ function _incMergeQuarters(ms, qs){
            byZone:byZone, heads:heads, groups:null, nCols:nTot, multi:ms.length > 1, blank:blankCols };
 }
 function incentivePage(){
+  if (state.incTab === 'targets' && (_incCanTargets() || _incIsAdmin())) return _incTabs() + incTargetsPage();
   // A locked quarter is shown from the data frozen on its lock date (same calculation, frozen inputs)
   var pq = _incPayQuarter(), gate = _incLockGate(pq.key);
   if (gate) return _incTabs() + gate;
+  // The Incentive Targets (they replace the Sales Performance targets on these tabs)
+  if (!incTargets) {
+    if (incTargetsErr) return _incTabs() + '<div style="padding:40px 24px;text-align:center;color:#B83A2B;font-size:12px;font-weight:600;">Couldn’t load the Incentive targets: '+esc(incTargetsErr)+'<div style="margin-top:12px;"><button onclick="incTargetsErr=\'\';_incTargetsLoad(true);render();" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:6px 14px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">Try again</button></div></div>';
+    _incTargetsLoad();
+    return _incTabs() + '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div><div style="font-size:13px;color:#9AAFC8;font-weight:500;">Loading targets…</div></div>';
+  }
   if (state.incTab === 'summary' && _incCanSummary()) {
     var sq = _incSumQuarter().q.key, sg = sq === pq.key ? '' : _incLockGate(sq, true);
     if (sg) return _incTabs() + sg;
@@ -6145,6 +6152,8 @@ function _incentivePageInner(foldQ, pre){
       }));
     });
   }
+  // Targets set on the Incentive Targets tab replace the Sales Performance ones (Incentive only)
+  if (qCols) _incApplyTargets(cap, qCols.map(function(g){ return _incFyQ(g.label); }));
   var reps = cap.filter(function(c){ return c.isRep && !c.isBranch; });
   if (!reps.length) return emptyBox('No sales reps', 'No sales reps match the current filters.');
 
@@ -6518,59 +6527,78 @@ function _incLockBadge(q){
    no run screen and nothing to start by hand. Keep these two functions working without a browser around them. */
 // LOBs a run covers: Sales Performance's default LOB set (Ocean + Air cross-sales + General)
 var INC_RUN_LOBS = ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT','GENERAL'];
-function incSetTab(t){ state.incTab = t === 'summary' && _incCanSummary() ? 'summary' : 'calc'; render(); }
+function incSetTab(t){ state.incTab = t === 'summary' && _incCanSummary() ? 'summary' : t === 'targets' && (_incCanTargets() || _incIsAdmin()) ? 'targets' : 'calc'; render(); }
 function _incTabs(){
-  _incAccessLoad();
-  var cur = state.incTab === 'summary' && _incCanSummary() ? 'summary' : 'calc';
+  _incAccessLoad(); _incAccessLoad(false, 'targets');
+  var tgtTab = _incCanTargets() || _incIsAdmin();
+  var cur = state.incTab === 'summary' && _incCanSummary() ? 'summary' : state.incTab === 'targets' && tgtTab ? 'targets' : 'calc';
   function tab(k, label){
     var on = cur === k;
     return '<button onclick="incSetTab(\''+k+'\')" class="btnq" style="border:none;background:transparent;padding:8px 2px;margin-right:18px;font-size:12.5px;font-weight:'+(on ? 800 : 600)+';color:'+(on ? '#0D2B5E' : '#6B82A0')+';border-bottom:2.5px solid '+(on ? BRAND_A2 : 'transparent')+';cursor:pointer;">'+label+'</button>';
   }
-  return '<div style="padding:14px 24px 0;display:flex;align-items:flex-end;border-bottom:1px solid #E3EAF3;">'+tab('calc','Calculation')+(_incCanSummary() ? tab('summary','Summary') : '')+'</div>';
+  return '<div style="padding:14px 24px 0;display:flex;align-items:flex-end;border-bottom:1px solid #E3EAF3;">'+tab('calc','Calculation')+(_incCanSummary() ? tab('summary','Summary') : '')+(tgtTab ? tab('targets','Targets') : '')+'</div>';
 }
 /* ---------------------- Incentive: Summary tab (management) ----------------------
    A payout overview for management. Every number comes from the Calculation tab's own engine
    (window._incModel, filled by _incentivePageInner): nothing is worked out again here, it is only added up.
    Only Admins and the people an Admin grants access to see this tab (list kept on the server). */
-var incAccess = null, incAccessLoading = false, incAccessErr = '';
+// Who sees which Incentive tab. kind 'summary': Admin always + the roles / people ticked. kind 'targets': only the
+// roles (Admin included, if ticked) and people ticked. Only Admins change either list (checked on the server too).
+var incAccess = null, incAccessLoading = false, incAccessErr = '';          // Summary
+var incTgtAccess = null, incTgtAccessLoading = false, incTgtAccessErr = ''; // Targets
 function _incIsAdmin(){ return !!currentUser && String(currentUser.role || '').toLowerCase().trim() === 'admin'; }
 function _incMyEmail(){ return currentUser && currentUser.email ? String(currentUser.email).toLowerCase().trim() : ''; }
-// Roles that can be given the Summary (Admin always has it); the same roles as the Admin Panel
+// Roles that can be ticked (the Admin Panel's roles); Admin is tickable for Targets only
 var INC_ACCESS_ROLES = ['HR', 'Regional Manager', 'Zonal Manager', 'Sales Rep'];
 function _incRoleKey(r){ return String(r || '').toLowerCase().trim(); }
-function _incRoleHas(role){
-  var k = _incRoleKey(role);
-  return !!incAccess && (incAccess.roles || []).some(function(r){ return _incRoleKey(r) === k; });
+function _incAcc(kind){ return kind === 'targets' ? incTgtAccess : incAccess; }
+function _incRoleHas(role, kind){
+  var k = _incRoleKey(role), A = _incAcc(kind);
+  return !!A && (A.roles || []).some(function(r){ return _incRoleKey(r) === k; });
 }
-// Why a person sees the Summary: 'admin', 'role', 'person' or '' (doesn't)
-function _incAccessWhy(email, role){
-  if (_incRoleKey(role) === 'admin') return 'admin';
-  if (role && _incRoleHas(role)) return 'role';
-  var e = String(email || '').toLowerCase().trim();
-  return e && incAccess && incAccess.emails.indexOf(e) > -1 ? 'person' : '';
+// Why a person sees the tab: 'admin', 'role', 'person' or '' (doesn't)
+function _incAccessWhy(email, role, kind){
+  if (kind !== 'targets' && _incRoleKey(role) === 'admin') return 'admin';
+  if (role && _incRoleHas(role, kind)) return 'role';
+  var e = String(email || '').toLowerCase().trim(), A = _incAcc(kind);
+  return e && A && (A.emails || []).indexOf(e) > -1 ? 'person' : '';
 }
 function _incCanSummary(){
   if (_incIsAdmin()) return true;
-  return !!_incAccessWhy(_incMyEmail(), currentUser && currentUser.role);
+  return !!_incAccessWhy(_incMyEmail(), currentUser && currentUser.role, 'summary');
 }
-function _incAccessLoad(force){
-  if (incAccessLoading || (incAccess && !force)) return;
-  incAccessLoading = true;
-  fetch('/api/mongo-batch?action=incentiveAccess')
+function _incCanTargets(){ return !!_incAccessWhy(_incMyEmail(), currentUser && currentUser.role, 'targets'); }
+function _incAccessLoad(force, kind){
+  var T = kind === 'targets';
+  if ((T ? incTgtAccessLoading : incAccessLoading) || (_incAcc(kind) && !force)) return;
+  if (T) incTgtAccessLoading = true; else incAccessLoading = true;
+  fetch('/api/mongo-batch?action=incentiveAccess&kind=' + (T ? 'targets' : 'summary'))
     .then(function(r){ return r.json(); })
-    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Could not load access'); incAccess = { emails:d.emails || [], roles:d.roles || [], updatedBy:d.updatedBy, updatedAt:d.updatedAt }; incAccessErr = ''; })
-    .catch(function(e){ incAccessErr = e.message || String(e); if (!incAccess) incAccess = { emails:[], roles:[] }; })
-    .finally(function(){ incAccessLoading = false; if (state.page === 'incentive') render(); });
+    .then(function(d){
+      if (!d || !d.success) throw new Error((d && d.error) || 'Could not load access');
+      var v = { emails:d.emails || [], roles:d.roles || [], updatedBy:d.updatedBy, updatedAt:d.updatedAt };
+      if (T) { incTgtAccess = v; incTgtAccessErr = ''; } else { incAccess = v; incAccessErr = ''; }
+    })
+    .catch(function(e){
+      if (T) { incTgtAccessErr = e.message || String(e); if (!incTgtAccess) incTgtAccess = { emails:[], roles:[] }; }
+      else { incAccessErr = e.message || String(e); if (!incAccess) incAccess = { emails:[], roles:[] }; }
+    })
+    .finally(function(){ if (T) incTgtAccessLoading = false; else incAccessLoading = false; if (state.page === 'incentive') render(); });
 }
-// Save who sees the Summary; anything not given keeps its current value
-function _incAccessSave(emails, roles){
-  if (!emails) emails = incAccess ? incAccess.emails : [];
-  if (!roles) roles = incAccess ? incAccess.roles || [] : [];
+// Save who sees a tab; anything not given keeps its current value
+function _incAccessSave(emails, roles, kind){
+  var T = kind === 'targets', A = _incAcc(kind);
+  if (!emails) emails = A ? A.emails : [];
+  if (!roles) roles = A ? A.roles || [] : [];
   fetch('/api/mongo-batch?action=incentiveAccessSave', { method:'POST', headers:{ 'Content-Type':'application/json' },
-    body:JSON.stringify({ action:'incentiveAccessSave', emails:emails, roles:roles, by:_incMyEmail() }) })
+    body:JSON.stringify({ action:'incentiveAccessSave', kind:T ? 'targets' : 'summary', emails:emails, roles:roles, by:_incMyEmail() }) })
     .then(function(r){ return r.json(); })
-    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Save failed'); incAccess = { emails:d.emails, roles:d.roles || [], updatedBy:d.updatedBy, updatedAt:d.updatedAt }; incAccessErr = ''; })
-    .catch(function(e){ incAccessErr = e.message || String(e); })
+    .then(function(d){
+      if (!d || !d.success) throw new Error((d && d.error) || 'Save failed');
+      var v = { emails:d.emails, roles:d.roles || [], updatedBy:d.updatedBy, updatedAt:d.updatedAt };
+      if (T) { incTgtAccess = v; incTgtAccessErr = ''; } else { incAccess = v; incAccessErr = ''; }
+    })
+    .catch(function(e){ if (T) incTgtAccessErr = e.message || String(e); else incAccessErr = e.message || String(e); })
     .finally(function(){ render(); });
 }
 // Everyone in the org list, for the "grant access" picker
@@ -6581,27 +6609,326 @@ function _incPeople(){
   });
   return out.sort(function(a, b){ return a.name.localeCompare(b.name); });
 }
-function incAccessToggle(){ state.incAccessOpen = !state.incAccessOpen; if (state.incAccessOpen && !orgData) fetchOrgData(function(){ render(); }); render(); }
-function incAccessAdd(){
-  var el = document.getElementById('incAccessInput'); if (!el) return;
-  var v = String(el.value || '').trim(), m = /([^\s<>()]+@[^\s<>()]+)/.exec(v);
-  if (!m) { incAccessErr = 'Pick a person from the list, or type their e-mail.'; render(); return; }
-  var e = m[1].toLowerCase(), list = (incAccess ? incAccess.emails : []).slice();
-  if (list.indexOf(e) === -1) list.push(e);
-  _incAccessSave(list, null);
+function incAccessToggle(kind){
+  var k = kind === 'targets' ? 'incTgtAccessOpen' : 'incAccessOpen';
+  state[k] = !state[k]; if (state[k] && !orgData) fetchOrgData(function(){ render(); }); render();
 }
-function incAccessRole(role, on){
-  var cur = (incAccess ? incAccess.roles || [] : []).filter(function(r){ return _incRoleKey(r) !== _incRoleKey(role); });
+function _incAccErr(kind, msg){ if (kind === 'targets') incTgtAccessErr = msg; else incAccessErr = msg; }
+function incAccessAdd(kind){
+  var el = document.getElementById(kind === 'targets' ? 'incTgtAccessInput' : 'incAccessInput'); if (!el) return;
+  var v = String(el.value || '').trim(), m = /([^\s<>()]+@[^\s<>()]+)/.exec(v);
+  if (!m) { _incAccErr(kind, 'Pick a person from the list, or type their e-mail.'); render(); return; }
+  var A = _incAcc(kind), e = m[1].toLowerCase(), list = (A ? A.emails : []).slice();
+  if (list.indexOf(e) === -1) list.push(e);
+  _incAccessSave(list, null, kind);
+}
+function incAccessRole(role, on, kind){
+  var A = _incAcc(kind);
+  var cur = (A ? A.roles || [] : []).filter(function(r){ return _incRoleKey(r) !== _incRoleKey(role); });
   if (on) cur.push(role);
   else {
     var n = _incPeople().filter(function(p){ return _incRoleKey(p.role) === _incRoleKey(role); }).length;
-    if (!confirm('Take Summary access away from the ' + role + ' role' + (n ? ' (' + n + ' ' + (n === 1 ? 'person' : 'people') + ')' : '') + '? People added one by one keep it.')) { render(); return; }
+    if (!confirm('Take ' + (kind === 'targets' ? 'Targets' : 'Summary') + ' access away from the ' + role + ' role' + (n ? ' (' + n + ' ' + (n === 1 ? 'person' : 'people') + ')' : '') + '? People added one by one keep it.')) { render(); return; }
   }
-  _incAccessSave(null, cur);
+  _incAccessSave(null, cur, kind);
 }
-function incAccessRemove(e){
-  if (!confirm('Remove Summary access for ' + e + '?')) return;
-  _incAccessSave((incAccess ? incAccess.emails : []).filter(function(x){ return x !== e; }), null);
+function incAccessRemove(e, kind){
+  if (!confirm('Remove ' + (kind === 'targets' ? 'Targets' : 'Summary') + ' access for ' + e + '?')) return;
+  var A = _incAcc(kind);
+  _incAccessSave((A ? A.emails : []).filter(function(x){ return x !== e; }), null, kind);
+}
+function _incAccessCount(kind){
+  var A = _incAcc(kind);
+  return orgData ? _incPeople().filter(function(p){ return _incAccessWhy(p.email, p.role, kind); }).length : (A ? A.emails.length : 0);
+}
+// The "Who can see this" panel (Admins only)
+function _incAccessPanel(kind){
+  var T = kind === 'targets', A = _incAcc(kind), err = T ? incTgtAccessErr : incAccessErr;
+  var INK = '#14213D', SUB = '#5B6678', MUTED = '#8A9AB5', LINE = '#E3E9F2', NAVY = '#0D2B5E';
+  var card = 'background:#FFFFFF;border:1px solid #D5DCE6;border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.06);';
+  var people = _incPeople(), byE = {}; people.forEach(function(p){ byE[p.email] = p; });
+  var list = A ? A.emails : [], K = T ? "'targets'" : "'summary'", inId = T ? 'incTgtAccessInput' : 'incAccessInput', dlId = inId + 'People';
+  var openKey = T ? 'incTgtAccessWhoOpen' : 'incAccessWhoOpen';
+  var roleN = {}; people.forEach(function(p){ var k = _incRoleKey(p.role); roleN[k] = (roleN[k] || 0) + 1; });
+  var who = people.map(function(p){ return { p:p, why:_incAccessWhy(p.email, p.role, kind) }; }).filter(function(x){ return x.why; });
+  var WHY = { admin:['Admin','#1E3A66','#E6EDF9'], role:['By role','#6B3FA0','#F1ECF8'], person:['Added','#0B7A4B','#E7F6EE'] };
+  function roleChip(role, on, locked){
+    var n = roleN[_incRoleKey(role)] || 0;
+    return '<label style="display:inline-flex;align-items:center;gap:7px;border:1.5px solid '+(on ? '#B9A6DC' : '#D8E1F0')+';background:'+(on ? '#F6F2FC' : '#FFFFFF')+';border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:'+INK+';cursor:'+(locked ? 'default' : 'pointer')+';">'
+      + '<input type="checkbox"'+(on ? ' checked' : '')+(locked ? ' disabled' : ' data-r="'+esc(role)+'" onchange="incAccessRole(this.dataset.r, this.checked, '+K+')"')+' style="accent-color:#6B3FA0;margin:0;">'
+      + esc(role)+' <span style="font-weight:600;color:'+MUTED+';">'+(orgData ? n : '…')+'</span>'+(locked ? ' <span style="font-weight:600;color:'+MUTED+';font-size:10.5px;">always</span>' : '')+'</label>';
+  }
+  var roles = T ? ['Admin'].concat(INC_ACCESS_ROLES) : INC_ACCESS_ROLES;
+  return '<div style="'+card+'padding:14px 18px;margin-bottom:14px;">'
+    + '<div style="font-size:12.5px;font-weight:800;color:'+NAVY+';">Who can see the '+(T ? 'Targets' : 'Summary')+' tab</div>'
+    + '<div style="font-size:11px;color:'+SUB+';margin-top:3px;">Tick a role to give everyone with that role access (roles as set in the Admin Panel), or add people one by one.'+(T ? ' Admins don\'t see it unless the Admin role is ticked or they\'re added.' : '')+' Changes apply the next time they open the page.</div>'
+    + '<div style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:'+MUTED+';margin-top:12px;">By role</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">'
+      + (T ? '' : roleChip('Admin', true, true))
+      + roles.map(function(r){ return roleChip(r, _incRoleHas(r, kind), false); }).join('')
+    + '</div>'
+    + '<div style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:'+MUTED+';margin-top:14px;">Added one by one</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">'
+      + (list.length ? list.map(function(e){
+          var p = byE[e];
+          return '<span style="display:inline-flex;align-items:center;gap:6px;background:#F4F7FC;border:1px solid #D8E1F0;border-radius:999px;padding:4px 6px 4px 11px;font-size:11.5px;color:'+INK+';">'
+            + '<b style="font-weight:700;">'+esc(p ? p.name : e)+'</b>'+(p ? '<span style="color:'+MUTED+';">'+esc(e)+'</span>' : '')
+            + '<button data-e="'+esc(e)+'" onclick="incAccessRemove(this.dataset.e, '+K+')" class="btnq" title="Remove access" aria-label="Remove access for '+esc(e)+'" style="border:none;background:#E3E9F2;color:#475569;border-radius:50%;width:18px;height:18px;font-size:11px;line-height:1;cursor:pointer;">×</button></span>';
+        }).join('') : '<span style="font-size:11.5px;color:'+MUTED+';">Nobody added one by one.</span>')
+    + '</div>'
+    + '<div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap;">'
+      + '<input id="'+inId+'" list="'+dlId+'" placeholder="Type a name or e-mail" onkeydown="if(event.key===\'Enter\')incAccessAdd('+K+')" style="flex:1;min-width:220px;max-width:420px;border:1.5px solid #D8E1F0;border-radius:8px;padding:7px 10px;font-size:12px;color:'+INK+';">'
+      + '<datalist id="'+dlId+'">'+people.filter(function(p){ return !_incAccessWhy(p.email, p.role, kind); }).map(function(p){ return '<option value="'+esc(p.name+' <'+p.email+'>')+'">'+esc(p.role)+'</option>'; }).join('')+'</datalist>'
+      + '<button onclick="incAccessAdd('+K+')" class="btnq" style="border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');cursor:pointer;">Give access</button>'
+      + (!orgData ? '<span style="font-size:11px;color:'+MUTED+';">Loading people…</span>' : '')
+    + '</div>'
+    + (orgData ? '<details style="margin-top:14px;"'+(state[openKey] ? ' open' : '')+' ontoggle="state.'+openKey+'=this.open">'
+      + '<summary style="cursor:pointer;font-size:12px;font-weight:700;color:'+NAVY+';">'+who.length+' '+(who.length === 1 ? 'person sees' : 'people see')+' the '+(T ? 'Targets' : 'Summary')+'</summary>'
+      + '<div style="margin-top:8px;max-height:260px;overflow:auto;border:1px solid '+LINE+';border-radius:8px;">'
+        + '<table style="width:100%;border-collapse:collapse;font-size:11.5px;">'
+        + who.map(function(x){ var W = WHY[x.why];
+            return '<tr><td style="padding:6px 10px;border-bottom:1px solid #F0F3F8;color:'+INK+';font-weight:600;">'+esc(x.p.name)+'</td>'
+              + '<td style="padding:6px 10px;border-bottom:1px solid #F0F3F8;color:'+MUTED+';">'+esc(x.p.email)+'</td>'
+              + '<td style="padding:6px 10px;border-bottom:1px solid #F0F3F8;color:'+SUB+';">'+esc(x.p.role || '–')+'</td>'
+              + '<td style="padding:6px 10px;border-bottom:1px solid #F0F3F8;text-align:right;"><span style="font-size:10px;font-weight:800;color:'+W[1]+';background:'+W[2]+';border-radius:999px;padding:2px 8px;">'+W[0]+'</span></td></tr>';
+          }).join('')
+        + '</table></div></details>' : '')
+    + (err ? '<div style="font-size:11.5px;color:#B83A2B;font-weight:600;margin-top:8px;">'+esc(err)+'</div>' : '')
+    + (A && A.updatedBy ? '<div style="font-size:10.5px;color:'+MUTED+';margin-top:8px;">Last changed by '+esc(A.updatedBy)+(A.updatedAt ? ' on '+esc(new Date(A.updatedAt).toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })) : '')+'</div>' : '')
+  + '</div>';
+}
+
+/* ---------------------- Incentive: Targets tab ----------------------
+   GP targets set here are used ONLY by the Incentive pages (Calculation, Summary) and the payout runs; Sales
+   Performance and every other page keep their own targets. Per FY, per sales rep and per zone (zonal manager),
+   at any of three levels: year, quarter, month (INR on the server). For a quarter the incentive uses: its three
+   months (when all three are set), else the quarter, else year ÷ 4, else the Sales Performance target. One target
+   for both Core and Cross. Editable any time: the server redoes the payout of a quarter already paid out. */
+var incTargets = null, incTargetsLoading = false, incTargetsErr = '';
+var INC_FY_MON = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+function _incTargetsSet(list){ var m = {}; (list || []).forEach(function(d){ if (d && d.fy && d.kind && d.name) m[d.fy + '|' + d.kind + '|' + d.name] = d; }); incTargets = m; }
+function _incTargetsLoad(force){
+  if (incTargetsLoading || (incTargets && !force)) return;
+  incTargetsLoading = true;
+  fetch('/api/mongo-batch?action=incentiveTargets&t=' + Date.now())
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Targets failed to load'); _incTargetsSet(d.targets); incTargetsErr = ''; })
+    .catch(function(e){ incTargetsErr = e.message || String(e); })
+    .finally(function(){ incTargetsLoading = false; if (state.page === 'incentive') render(); });
+}
+function _incFyMonths(fy){ var y = 2000 + parseInt(String(fy).slice(2), 10); return INC_FY_MON.map(function(m, i){ return m + '-' + String(i < 9 ? y - 1 : y).slice(-2); }); }
+// The Incentive target of one rep / zone for one FY quarter (INR), or null = use the Sales Performance target
+function _incTargetFor(kind, name, fy, q){
+  var d = incTargets && incTargets[fy + '|' + kind + '|' + name]; if (!d) return null;
+  var ms = _incFyMonths(fy).slice((q - 1) * 3, q * 3), mv = ms.map(function(m){ return d.m && d.m[m] != null ? Number(d.m[m]) : null; });
+  if (mv.every(function(v){ return v !== null; })) return mv[0] + mv[1] + mv[2];
+  if (d.q && d.q['Q' + q] != null) return Number(d.q['Q' + q]);
+  if (d.year != null) return Number(d.year) / 4;
+  return null;
+}
+function _incFyQ(label){ var m = /^Q([1-4]) FY(\d\d)$/.exec(String(label || '')); return m ? { fy:'FY' + m[2], q:+m[1] } : null; }
+// Put the Incentive targets into captured Sales Performance rows (cols = { fy, q } per column)
+function _incApplyTargets(cap, cols){
+  if (!incTargets) return;
+  cap.forEach(function(c){
+    var kind = c.isZone ? 'zone' : c.isRep && !c.isBranch ? 'rep' : null; if (!kind) return;
+    cols.forEach(function(col, i){
+      if (!col) return;
+      var T = _incTargetFor(kind, c.name, col.fy, col.q); if (T === null) return;
+      c.tgt[i] = T; if (T > 0) c.noTarget = false;
+    });
+  });
+}
+
+// ── The tab ──
+function _incTgtState(){ return state.incTgt || (state.incTgt = { fy:'', view:'Q', draft:{}, msg:null, busy:false }); }
+function incTgtSet(k, v){ var S = _incTgtState(); if (k === 'fy' && Object.keys(S.draft).length && !confirm('Discard your unsaved target changes?')) { render(); return; } if (k === 'fy') S.draft = {}; S[k] = v; S.msg = null; render(); }
+function _incTgtParse(v){
+  v = String(v == null ? '' : v).trim().toLowerCase().replace(/[,₹$\s]/g, '');
+  if (v === '') return null;
+  var m = /^(\d+(?:\.\d+)?)(k|l|lac|lakh|lakhs|cr|crore|crores|m|mn)?$/.exec(v);
+  if (!m) return NaN;
+  var mul = { k:1e3, l:1e5, lac:1e5, lakh:1e5, lakhs:1e5, cr:1e7, crore:1e7, crores:1e7, m:1e6, mn:1e6 }[m[2]] || 1;
+  var n = parseFloat(m[1]) * mul;
+  if (state.currency === 'USD') n = n * state.rate;   // typed in the page's currency, kept in INR
+  return Math.round(n * 100) / 100;
+}
+function _incTgtShow(inr){
+  if (inr == null) return '';
+  var v = state.currency === 'USD' ? inr / state.rate : inr;
+  return (Math.round(v * 100) / 100).toLocaleString('en-IN', { maximumFractionDigits:2 });
+}
+function _incTgtSaved(kind, name, field){
+  var S = _incTgtState(), d = incTargets && incTargets[S.fy + '|' + kind + '|' + name]; if (!d) return null;
+  var v = field === 'year' ? d.year : /^Q/.test(field) ? (d.q || {})[field] : (d.m || {})[field];
+  return v == null ? null : Number(v);
+}
+function incTgtEdit(el){
+  var S = _incTgtState(), kind = el.getAttribute('data-k'), name = el.getAttribute('data-n'), field = el.getAttribute('data-f');
+  var key = kind + '|' + name + '|' + field, v = _incTgtParse(el.value);
+  if (v !== v) { el.style.borderColor = '#DC2626'; el.title = 'Type a number, e.g. 3000000, 30L, 3cr or 45k'; S.draft[key] = { bad:true }; }
+  else {
+    el.style.borderColor = ''; el.title = '';
+    var saved = _incTgtSaved(kind, name, field);
+    if ((saved === null && v === null) || (saved !== null && v !== null && Math.abs(saved - v) < 0.01)) delete S.draft[key];
+    else S.draft[key] = { kind:kind, name:name, field:field, value:v };
+    if (v !== null) el.value = _incTgtShow(v);
+  }
+  el.style.background = S.draft[key] ? '#FFF6DB' : '';
+  var n = Object.keys(S.draft).length, bad = Object.keys(S.draft).some(function(k){ return S.draft[k].bad; });
+  var bar = document.getElementById('incTgtBar');
+  if (bar) bar.innerHTML = _incTgtBar(n, bad);
+}
+function _incTgtBar(n, bad){
+  var S = _incTgtState();
+  if (!n) return '<span style="font-size:11.5px;color:#8A9AB5;">No unsaved changes</span>';
+  return '<span style="font-size:11.5px;font-weight:700;color:#7A4E00;">'+n+' unsaved change'+(n === 1 ? '' : 's')+(bad ? ' · fix the red boxes first' : '')+'</span>'
+    + '<button onclick="incTgtDiscard()" class="btnq" style="border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">Discard</button>'
+    + '<button onclick="incTgtSave()" class="btnq" '+(bad || S.busy ? 'disabled ' : '')+'style="border:none;border-radius:999px;padding:6px 14px;font-size:11.5px;font-weight:800;color:#fff;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');cursor:pointer;opacity:'+(bad || S.busy ? 0.5 : 1)+';">'+(S.busy ? 'Saving…' : 'Save targets')+'</button>';
+}
+function incTgtDiscard(){ var S = _incTgtState(); S.draft = {}; S.msg = null; render(); }
+function incTgtSave(){
+  var S = _incTgtState(), ch = Object.keys(S.draft).map(function(k){ return S.draft[k]; });
+  if (!ch.length || S.busy || ch.some(function(c){ return c.bad; })) return;
+  // Quarters touched that are already locked: their payout is redone
+  var months = _incFyMonths(S.fy), qs = {};
+  ch.forEach(function(c){
+    (c.field === 'year' ? [1, 2, 3, 4] : /^Q/.test(c.field) ? [+c.field[1]] : [Math.floor(months.indexOf(c.field) / 3) + 1]).forEach(function(q){ qs[S.fy + '-Q' + q] = true; });
+  });
+  var pk = _incPayQuarter().key, locked = Object.keys(qs).filter(function(k){ return k <= pk; }).sort();
+  if (locked.length && !confirm('These changes affect ' + locked.map(function(k){ return _incQuarterOf(k).label; }).join(', ') + ', already locked. The incentive is recalculated and the payout redone with the new targets. Continue?')) return;
+  S.busy = true; render();
+  fetch('/api/mongo-batch?action=incentiveTargetSave', { method:'POST', headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify({ action:'incentiveTargetSave', by:_incMyEmail(), fy:S.fy, changes:ch.map(function(c){ return { kind:c.kind, name:c.name, field:c.field, value:c.value }; }) }) })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d || !d.success) throw new Error((d && d.error) || 'Save failed');
+      S.draft = {};
+      var redo = d.redo || [], ok = redo.filter(function(x){ return x.success; }), bad = redo.filter(function(x){ return !x.success; });
+      S.msg = { ok:'Saved ' + d.saved + ' change' + (d.saved === 1 ? '' : 's') + '.'
+        + (ok.length ? ' Payout redone for ' + ok.map(function(x){ return _incQuarterOf(x.quarter).label; }).join(', ') + '.' : '')
+        + (bad.length ? ' Payout redo failed for ' + bad.map(function(x){ return _incQuarterOf(x.quarter).label + ' (' + (x.error || '?') + ')'; }).join(', ') + '; the nightly job tries again.' : '') };
+      _incTargetsLoad(true);
+    })
+    .catch(function(e){ S.msg = { err:e.message || String(e) }; })
+    .finally(function(){ S.busy = false; render(); });
+}
+// Sales Performance targets for a FY (live data), per month, plus the rep / zone list; kept until the data changes
+var _incTgtSpCache = null;
+function _incTgtSp(fy){
+  var all = _incFyMonths(fy), have = all.filter(function(m){ return months26.indexOf(m) > -1; });
+  var key = fy + '|' + months26.length + '|' + repsRawOriginal.length + '|' + (allDrillRows ? allDrillRows.length : 0);
+  if (_incTgtSpCache && _incTgtSpCache.key === key) return _incTgtSpCache;
+  var src = have.length ? have : months26.slice(-3);   // a future FY: today's reps and zones, no SP targets
+  var cap = _incCaptureQuarter(src), out = { key:key, zones:[], reps:[] };
+  cap.forEach(function(c){
+    var m = {}; if (have.length) src.forEach(function(mm, i){ m[mm] = c.tgt[i] || 0; });
+    if (c.isZone) out.zones.push({ kind:'zone', name:c.name, initials:c.initials, avatarBg:c.avatarBg, m:m });
+    else if (c.isRep && !c.isBranch) out.reps.push({ kind:'rep', name:c.name, zone:c.zone || 'Cross Sales', initials:c.initials, avatarBg:c.avatarBg, m:m });
+  });
+  return (_incTgtSpCache = out);
+}
+function incTgtSearch(v){
+  _incTgtState().q = v; var q = String(v || '').toLowerCase().trim();
+  var rows = [].slice.call(document.querySelectorAll('#incTgtTable tr[data-s]')), zoneHit = {};
+  rows.forEach(function(tr){ var hit = !q || tr.getAttribute('data-s').indexOf(q) > -1; tr.style.display = hit ? '' : 'none'; if (hit && tr.getAttribute('data-z')) zoneHit[tr.getAttribute('data-z')] = true; });
+  rows.forEach(function(tr){ if (tr.getAttribute('data-zr') && zoneHit[tr.getAttribute('data-zr')]) tr.style.display = ''; });
+}
+function incTargetsPage(){
+  _incAccessLoad(false, 'targets');
+  var admin = _incIsAdmin(), can = _incCanTargets(), S = _incTgtState();
+  var INK = '#14213D', SUB = '#5B6678', MUTED = '#8A9AB5', NAVY = '#0D2B5E', LINE = '#E3E9F2';
+  var pill = 'background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;';
+  function wait(msg){ return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div><div style="font-size:13px;color:#9AAFC8;font-weight:500;">'+msg+'</div></div>'; }
+  if (!incTgtAccess) return wait('Loading…');
+  var head = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">'
+    + '<span style="font-size:15px;font-weight:800;color:'+NAVY+';">Incentive targets</span>'
+    + '<span style="font-size:11px;color:'+SUB+';">Used only by the Incentive pages. Blank = the Sales Performance target.</span>'
+    + '<span style="flex:1;"></span>'
+    + (admin ? '<button onclick="incAccessToggle(\'targets\')" class="btnq" style="'+pill+(state.incTgtAccessOpen ? 'background:#E6EDF9;' : '')+'">Who can see this ('+_incAccessCount('targets')+')</button>' : '')
+  + '</div>' + (admin && state.incTgtAccessOpen ? _incAccessPanel('targets') : '');
+  var wrap = function(x){ return '<div style="padding:16px 24px 32px;">'+x+'</div>'; };
+  if (!can) return wrap(head + '<div style="background:#fff;border:1px solid #D5DCE6;border-radius:12px;padding:40px;text-align:center;font-size:12.5px;color:'+SUB+';">You can choose who sees the targets, but you aren\'t on the list yourself. Tick the Admin role or add yourself under "Who can see this".</div>');
+  if (!dataReady || !repsRawOriginal.length || !months26.length) return wrap(head + wait('Loading your data…'));
+  if (!incTargets) { if (incTargetsErr) return wrap(head + '<div style="padding:40px;text-align:center;color:#B83A2B;font-size:12px;font-weight:600;">Couldn’t load the targets: '+esc(incTargetsErr)+' <button onclick="incTargetsErr=\'\';_incTargetsLoad(true);render();" class="btnq" style="'+pill+'">Try again</button></div>'); _incTargetsLoad(); return wrap(head + wait('Loading targets…')); }
+
+  // FYs: the ones with data, plus the current and the next one
+  var fys = {}; months26.forEach(function(m){ var b = m.split('-'), mi = MONTH_NAME_TO_IDX[b[0]], yy = parseInt(b[1], 10); fys['FY' + String(mi >= 3 ? yy + 1 : yy).slice(-2)] = 1; });
+  var now = new Date(), cfy = now.getMonth() >= 3 ? now.getFullYear() + 1 : now.getFullYear();
+  fys['FY' + String(cfy).slice(-2)] = 1; fys['FY' + String(cfy + 1).slice(-2)] = 1;
+  var fyList = Object.keys(fys).sort();
+  if (!S.fy || fyList.indexOf(S.fy) === -1) S.fy = 'FY' + String(cfy).slice(-2);
+  var SP = _incTgtSp(S.fy), months = _incFyMonths(S.fy);
+  var fields = S.view === 'Y' ? ['year'] : S.view === 'M' ? months : ['Q1', 'Q2', 'Q3', 'Q4'];
+  function fieldLabel(f){ return f === 'year' ? S.fy : /^Q/.test(f) ? f + ' ' + S.fy : f; }
+  function spOf(e, f){
+    var ms = f === 'year' ? months : /^Q/.test(f) ? months.slice((+f[1] - 1) * 3, +f[1] * 3) : [f];
+    var have = ms.filter(function(m){ return e.m[m] != null; });
+    return have.length ? have.reduce(function(a, m){ return a + e.m[m]; }, 0) : null;
+  }
+  function warn(e){
+    var d = incTargets[S.fy + '|' + e.kind + '|' + e.name]; if (!d) return '';
+    var out = [], q = d.q || {}, m = d.m || {};
+    if (d.year != null && [1, 2, 3, 4].every(function(i){ return q['Q' + i] != null; })) {
+      var sq = [1, 2, 3, 4].reduce(function(a, i){ return a + Number(q['Q' + i]); }, 0);
+      if (Math.abs(sq - d.year) > 1) out.push('Quarters add up to ' + fmtCur(sq) + ', the year is ' + fmtCur(d.year));
+    }
+    [1, 2, 3, 4].forEach(function(i){
+      var ms = months.slice((i - 1) * 3, i * 3);
+      if (q['Q' + i] != null && ms.every(function(x){ return m[x] != null; })) {
+        var sm = ms.reduce(function(a, x){ return a + Number(m[x]); }, 0);
+        if (Math.abs(sm - q['Q' + i]) > 1) out.push('Q' + i + ' months add up to ' + fmtCur(sm) + ', Q' + i + ' is ' + fmtCur(q['Q' + i]) + ' (the months are used)');
+      }
+    });
+    return out.length ? ' <span title="'+esc(out.join('\n'))+'" style="color:#B45309;cursor:help;">⚠</span>' : '';
+  }
+  function cell(e, f){
+    var key = e.kind + '|' + e.name + '|' + f, dr = S.draft[key];
+    var v = dr && !dr.bad ? dr.value : dr ? null : _incTgtSaved(e.kind, e.name, f);
+    var sp = spOf(e, f);
+    return '<td style="padding:4px 6px;border-bottom:1px solid #EEF2F7;">'
+      + '<input data-k="'+e.kind+'" data-n="'+esc(e.name)+'" data-f="'+f+'" value="'+esc(_incTgtShow(v))+'" placeholder="'+esc(sp == null ? '–' : fmtCur(sp))+'" onchange="incTgtEdit(this)" '
+      + 'style="width:100%;box-sizing:border-box;text-align:right;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:'+INK+';border:1px solid #D8E1F0;border-radius:6px;padding:6px 8px;'+(dr ? 'background:#FFF6DB;' : '')+'"></td>';
+  }
+  function zoneParts(z){ var m = /^(\S+)\s*(.*)$/.exec(z || ''); return m ? [m[1], m[2]] : [z, '']; }
+  var byZone = {}; SP.reps.forEach(function(r){ (byZone[r.zone] || (byZone[r.zone] = [])).push(r); });
+  var zoneNames = SP.zones.map(function(z){ return z.name; });
+  Object.keys(byZone).forEach(function(z){ if (zoneNames.indexOf(z) === -1) zoneNames.push(z); });
+  var zByName = {}; SP.zones.forEach(function(z){ zByName[z.name] = z; });
+  var th = 'position:sticky;top:0;z-index:2;background:#F0F4FA;padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#475569;border-bottom:2px solid #B0BAC8;white-space:nowrap;';
+  var body = zoneNames.map(function(zn){
+    var z = zByName[zn], zp = zoneParts(zn), reps = byZone[zn] || [];
+    var zs = (zn + ' ' + reps.map(function(r){ return r.name; }).join(' ')).toLowerCase();
+    var zrow = z ? '<tr data-s="'+esc(zn.toLowerCase())+'" data-zr="'+esc(zn)+'" style="background:#F3F6FC;">'
+        + '<td style="position:sticky;left:0;z-index:1;background:#F3F6FC;padding:8px 12px;border-bottom:1px solid #E3E9F2;border-top:2px solid #8FA3C4;white-space:nowrap;">'
+          + '<span style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5678C2;">ZONE</span> <b style="font-size:12.5px;color:'+NAVY+';">'+esc(zp[0])+'</b> <span style="font-size:11px;color:'+SUB+';">'+esc(zp[1])+'</span>'
+          + ' <span style="font-size:9.5px;font-weight:700;color:#6B3FA0;background:#F1ECF8;border-radius:999px;padding:1px 7px;">Zonal manager</span>'+warn(z)+'</td>'
+        + fields.map(function(f){ return cell(z, f).replace('border-bottom:1px solid #EEF2F7;', 'border-bottom:1px solid #E3E9F2;border-top:2px solid #8FA3C4;'); }).join('') + '</tr>' : '';
+    return zrow + reps.map(function(r){
+      return '<tr data-s="'+esc((r.name + ' ' + zn).toLowerCase())+'" data-z="'+esc(zn)+'">'
+        + '<td style="position:sticky;left:0;z-index:1;background:#FFFFFF;padding:6px 12px 6px 26px;border-bottom:1px solid #EEF2F7;white-space:nowrap;font-size:12px;font-weight:600;color:'+INK+';">'+esc(r.name)+warn(r)+'</td>'
+        + fields.map(function(f){ return cell(r, f); }).join('') + '</tr>';
+    }).join('');
+  }).join('');
+  function seg(k, label){ var on = S.view === k; return '<button onclick="incTgtSet(\'view\',\''+k+'\')" class="btnq" style="border:none;border-radius:999px;padding:5px 13px;font-size:11px;font-weight:700;cursor:pointer;'+(on ? 'background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');color:#FFFFFF;' : 'background:transparent;color:#1E3A66;')+'">'+label+'</button>'; }
+  var nChanges = Object.keys(S.draft).length, bad = Object.keys(S.draft).some(function(k){ return S.draft[k].bad; });
+  var tools = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid '+LINE+';">'
+    + '<select onchange="incTgtSet(\'fy\', this.value)" class="btnq" style="'+pill+'">'+fyList.map(function(f){ return '<option value="'+f+'"'+(f === S.fy ? ' selected' : '')+'>'+f+'</option>'; }).join('')+'</select>'
+    + '<div style="display:inline-flex;gap:2px;padding:2px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;">'+seg('Y', 'Yearly')+seg('Q', 'Quarterly')+seg('M', 'Monthly')+'</div>'
+    + '<input placeholder="Search rep or zone" value="'+esc(S.q || '')+'" oninput="incTgtSearch(this.value)" style="border:1.5px solid #D8E1F0;border-radius:8px;padding:6px 10px;font-size:12px;min-width:200px;">'
+    + '<span style="font-size:11px;color:'+MUTED+';">Amounts in '+state.currency+' · type 3000000, 30L, 3cr or 45k · grey = Sales Performance target</span>'
+    + '<span style="flex:1;"></span>'
+    + '<span id="incTgtBar" style="display:inline-flex;align-items:center;gap:8px;">'+_incTgtBar(nChanges, bad)+'</span>'
+  + '</div>';
+  var msg = S.msg ? '<div style="padding:9px 16px;font-size:11.5px;font-weight:700;border-bottom:1px solid '+LINE+';color:'+(S.msg.err ? '#B83A2B' : '#0B7A4B')+';background:'+(S.msg.err ? '#FDECEC' : '#E7F6EE')+';">'+esc(S.msg.err || S.msg.ok)+'</div>' : '';
+  var table = '<style>#incTgtTable input::placeholder{color:#B4C0D1;font-weight:500;}#incTgtTable input:focus{outline:2px solid #6488D6;outline-offset:-1px;}</style>'
+    + '<div style="overflow:auto;max-height:calc(100vh - 250px);">'
+    + '<table id="incTgtTable" style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:'+(260 + fields.length * 120)+'px;">'
+    + '<thead><tr><th style="'+th+'left:0;z-index:3;text-align:left;min-width:260px;">Zone / sales rep</th>'+fields.map(function(f){ return '<th style="'+th+'text-align:right;">'+esc(fieldLabel(f))+'</th>'; }).join('')+'</tr></thead>'
+    + '<tbody>'+body+'</tbody></table></div>';
+  var out = wrap(head + '<div style="background:#FFFFFF;border:1px solid #D5DCE6;border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.06);overflow:hidden;">'+tools+msg+table+'</div>');
+  if (S.q) setTimeout(function(){ incTgtSearch(S.q); }, 0);
+  return out;
 }
 
 function _incSum(){ return state.incSum || (state.incSum = { part:'all', zone:'', elig:'elig', sort:'inc', dir:-1, q:'', quarter:'', open:{} }); }
@@ -6736,62 +7063,11 @@ function incSummaryPage(){
     + '</div>'
     + '<span style="flex:1;"></span>'
     + '<button onclick="incSumExport()" class="btnq" style="'+pill+'">Export CSV</button>'
-    + (_incIsAdmin() ? '<button onclick="incAccessToggle()" class="btnq" style="'+pill+(state.incAccessOpen ? 'background:#E6EDF9;' : '')+'">Who can see this ('+(orgData ? _incPeople().filter(function(p){ return _incAccessWhy(p.email, p.role); }).length : (incAccess ? incAccess.emails.length : 0))+')</button>' : '')
+    + (_incIsAdmin() ? '<button onclick="incAccessToggle()" class="btnq" style="'+pill+(state.incAccessOpen ? 'background:#E6EDF9;' : '')+'">Who can see this ('+_incAccessCount('summary')+')</button>' : '')
   + '</div>';
 
   // ── Access panel (Admins only) ──
-  var access = '';
-  if (_incIsAdmin() && state.incAccessOpen) {
-    var people = _incPeople(), byE = {}; people.forEach(function(p){ byE[p.email] = p; });
-    var list = incAccess ? incAccess.emails : [];
-    var roleN = {}; people.forEach(function(p){ var k = _incRoleKey(p.role); roleN[k] = (roleN[k] || 0) + 1; });
-    var who = people.map(function(p){ return { p:p, why:_incAccessWhy(p.email, p.role) }; }).filter(function(x){ return x.why; });
-    var WHY = { admin:['Admin','#1E3A66','#E6EDF9'], role:['By role','#6B3FA0','#F1ECF8'], person:['Added','#0B7A4B','#E7F6EE'] };
-    function roleChip(role, on, locked){
-      var n = roleN[_incRoleKey(role)] || 0;
-      return '<label style="display:inline-flex;align-items:center;gap:7px;border:1.5px solid '+(on ? '#B9A6DC' : '#D8E1F0')+';background:'+(on ? '#F6F2FC' : '#FFFFFF')+';border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:'+INK+';cursor:'+(locked ? 'default' : 'pointer')+';">'
-        + '<input type="checkbox"'+(on ? ' checked' : '')+(locked ? ' disabled' : ' data-r="'+esc(role)+'" onchange="incAccessRole(this.dataset.r, this.checked)"')+' style="accent-color:#6B3FA0;margin:0;">'
-        + esc(role)+' <span style="font-weight:600;color:'+MUTED+';">'+(orgData ? n : '…')+'</span>'+(locked ? ' <span style="font-weight:600;color:'+MUTED+';font-size:10.5px;">always</span>' : '')+'</label>';
-    }
-    access = '<div style="'+card+'padding:14px 18px;margin-bottom:14px;">'
-      + '<div style="font-size:12.5px;font-weight:800;color:'+NAVY+';">Who can see the Summary tab</div>'
-      + '<div style="font-size:11px;color:'+SUB+';margin-top:3px;">Tick a role to give everyone with that role access (roles as set in the Admin Panel), or add people one by one. Changes apply the next time they open the page.</div>'
-      + '<div style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:'+MUTED+';margin-top:12px;">By role</div>'
-      + '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">'
-        + roleChip('Admin', true, true)
-        + INC_ACCESS_ROLES.map(function(r){ return roleChip(r, _incRoleHas(r), false); }).join('')
-      + '</div>'
-      + '<div style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:'+MUTED+';margin-top:14px;">Added one by one</div>'
-      + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">'
-        + (list.length ? list.map(function(e){
-            var p = byE[e];
-            return '<span style="display:inline-flex;align-items:center;gap:6px;background:#F4F7FC;border:1px solid #D8E1F0;border-radius:999px;padding:4px 6px 4px 11px;font-size:11.5px;color:'+INK+';">'
-              + '<b style="font-weight:700;">'+esc(p ? p.name : e)+'</b>'+(p ? '<span style="color:'+MUTED+';">'+esc(e)+'</span>' : '')
-              + '<button data-e="'+esc(e)+'" onclick="incAccessRemove(this.dataset.e)" class="btnq" title="Remove access" aria-label="Remove access for '+esc(e)+'" style="border:none;background:#E3E9F2;color:#475569;border-radius:50%;width:18px;height:18px;font-size:11px;line-height:1;cursor:pointer;">×</button></span>';
-          }).join('') : '<span style="font-size:11.5px;color:'+MUTED+';">Nobody added one by one.</span>')
-      + '</div>'
-      + '<div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap;">'
-        + '<input id="incAccessInput" list="incAccessPeople" placeholder="Type a name or e-mail" onkeydown="if(event.key===\'Enter\')incAccessAdd()" style="flex:1;min-width:220px;max-width:420px;border:1.5px solid #D8E1F0;border-radius:8px;padding:7px 10px;font-size:12px;color:'+INK+';">'
-        + '<datalist id="incAccessPeople">'+people.filter(function(p){ return !_incAccessWhy(p.email, p.role); }).map(function(p){ return '<option value="'+esc(p.name+' <'+p.email+'>')+'">'+esc(p.role)+'</option>'; }).join('')+'</datalist>'
-        + '<button onclick="incAccessAdd()" class="btnq" style="border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');cursor:pointer;">Give access</button>'
-        + (!orgData ? '<span style="font-size:11px;color:'+MUTED+';">Loading people…</span>' : '')
-      + '</div>'
-      // Everyone who sees it now, and why
-      + (orgData ? '<details style="margin-top:14px;"'+(state.incAccessWhoOpen ? ' open' : '')+' ontoggle="state.incAccessWhoOpen=this.open">'
-        + '<summary style="cursor:pointer;font-size:12px;font-weight:700;color:'+NAVY+';">'+who.length+' '+(who.length === 1 ? 'person sees' : 'people see')+' the Summary</summary>'
-        + '<div style="margin-top:8px;max-height:260px;overflow:auto;border:1px solid '+LINE+';border-radius:8px;">'
-          + '<table style="width:100%;border-collapse:collapse;font-size:11.5px;">'
-          + who.map(function(x){ var W = WHY[x.why];
-              return '<tr><td style="padding:6px 10px;border-bottom:1px solid #F0F3F8;color:'+INK+';font-weight:600;">'+esc(x.p.name)+'</td>'
-                + '<td style="padding:6px 10px;border-bottom:1px solid #F0F3F8;color:'+MUTED+';">'+esc(x.p.email)+'</td>'
-                + '<td style="padding:6px 10px;border-bottom:1px solid #F0F3F8;color:'+SUB+';">'+esc(x.p.role || '–')+'</td>'
-                + '<td style="padding:6px 10px;border-bottom:1px solid #F0F3F8;text-align:right;"><span style="font-size:10px;font-weight:800;color:'+W[1]+';background:'+W[2]+';border-radius:999px;padding:2px 8px;">'+W[0]+'</span></td></tr>';
-            }).join('')
-          + '</table></div></details>' : '')
-      + (incAccessErr ? '<div style="font-size:11.5px;color:#B83A2B;font-weight:600;margin-top:8px;">'+esc(incAccessErr)+'</div>' : '')
-      + (incAccess && incAccess.updatedBy ? '<div style="font-size:10.5px;color:'+MUTED+';margin-top:8px;">Last changed by '+esc(incAccess.updatedBy)+(incAccess.updatedAt ? ' on '+esc(new Date(incAccess.updatedAt).toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })) : '')+'</div>' : '')
-    + '</div>';
-  }
+  var access = _incIsAdmin() && state.incAccessOpen ? _incAccessPanel('summary') : '';
 
   // Layout: 1) the total payout, 2) who is paid (rep list, one clean line each), 3) the working, one rep at a time.
   // Supporting figures sit a level down (smaller, muted) rather than competing with the total.
@@ -7122,8 +7398,11 @@ function _incBuildRun(q, held){
   var spGp = 0;
   var repsOut = reps.map(function(r){
     var gp = sum(r.gp), tgt = sum(r.tgt), c = core[r.name] || 0;
+    // Incentive Targets tab, when set for this quarter
+    var T = _incTargetFor('rep', r.name, q.key.slice(0, 4), +q.key.slice(-1));
+    if (T !== null) tgt = T;
     spGp += gp;
-    return { rep:r.name, zone:r.zone || 'Cross Sales', noTarget:!!r.noTarget, core:{ gp:c, tgt:tgt }, cross:{ gp:gp - c, tgt:tgt } };
+    return { rep:r.name, zone:r.zone || 'Cross Sales', noTarget:!!r.noTarget && !(T > 0), core:{ gp:c, tgt:tgt }, cross:{ gp:gp - c, tgt:tgt } };
   });
   return {
     action:'incentiveRunSave', quarter:q.key, label:q.label, months:q.months, mode:'trial',

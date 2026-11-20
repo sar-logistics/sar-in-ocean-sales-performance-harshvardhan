@@ -193,7 +193,7 @@ const qOk = (q) => /^FY\d{2}-Q[1-4]$/.test(String(q || ""));
 // quarters for a trial run
 async function priorEntries(db, quarter, mode) {
   const runs = await db.collection(RUNS)
-    .find(mode === "final" ? { final: true, quarter: { $lt: quarter } } : { quarter: { $lt: quarter } }, { projection: { _id: 1, quarter: 1, label: 1, final: 1 } })
+    .find(mode === "final" ? { final: true, superseded: { $ne: true }, quarter: { $lt: quarter } } : { superseded: { $ne: true }, quarter: { $lt: quarter } }, { projection: { _id: 1, quarter: 1, label: 1, final: 1 } })
     .sort({ quarter: 1 }).toArray();
   if (!runs.length) return { runs, byKey: {}, closedShip: {} };
   const runInfo = {};
@@ -242,7 +242,7 @@ async function incentiveRunSave(db, body) {
     if (!lk.frozen) return { status: 423, json: { success: false, error: quarter + " is locked; waiting for the server to freeze its data" } };
     if (!body.snapshotId || body.snapshotId !== lk.frozen.snapId)
       return { status: 423, json: { success: false, error: quarter + " is locked (frozen " + new Date(lk.frozen.frozenAt).toISOString() + "); its numbers can no longer be changed" } };
-    if (await db.collection(RUNS).findOne({ snapshotId: body.snapshotId }, { projection: { _id: 1 } }))
+    if (await db.collection(RUNS).findOne({ snapshotId: body.snapshotId, superseded: { $ne: true } }, { projection: { _id: 1 } }))
       return { status: 409, json: { success: false, error: "The run for this frozen quarter is already saved" } };
     mode = lockEnv() === "production" ? "final" : "trial";
   } else if (body.snapshotId) {
@@ -523,19 +523,23 @@ async function incentiveSnapshotDelete(db, body) {
 // One settings document holds the e-mails that were granted access. Admins always have access and are the
 // only ones who can change the list (checked against ocean_users, not what the browser says the role is).
 const SETTINGS = "incentive_settings", ACCESS_ID = "summaryAccess";
+// Who sees which Incentive tab: Summary (Admin always) and Targets (Admin only when ticked)
+const ACCESS_IDS = { summary: "summaryAccess", targets: "targetsAccess" };
+function _accessKind(k) { return k === "targets" ? "targets" : "summary"; }
 function _em(v) { return String(v || "").toLowerCase().trim(); }
 async function _isAdmin(db, email) {
   if (!email) return false;
   const u = await db.collection("ocean_users").findOne({ email: email, isActive: { $ne: false } }, { projection: { role: 1 } });
   return !!u && String(u.role || "").toLowerCase().trim() === "admin";
 }
-async function incentiveAccess(db) {
-  const d = await db.collection(SETTINGS).findOne({ _id: ACCESS_ID });
+async function incentiveAccess(db, kind) {
+  const d = await db.collection(SETTINGS).findOne({ _id: ACCESS_IDS[_accessKind(kind)] });
   return { status: 200, json: { success: true, emails: (d && d.emails) || [], roles: (d && d.roles) || [], updatedBy: (d && d.updatedBy) || null, updatedAt: (d && d.updatedAt) || null } };
 }
 async function incentiveAccessSave(db, body) {
   const by = _em(body && body.by);
-  if (!(await _isAdmin(db, by))) return { status: 403, json: { success: false, error: "Only an Admin can change who sees the Incentive Summary" } };
+  const kind = _accessKind(body && body.kind);
+  if (!(await _isAdmin(db, by))) return { status: 403, json: { success: false, error: "Only an Admin can change who sees this" } };
   const seen = {}, emails = [];
   (Array.isArray(body.emails) ? body.emails : []).forEach(function (e) {
     e = _em(e);
@@ -545,10 +549,10 @@ async function incentiveAccessSave(db, body) {
   const rSeen = {}, roles = [];
   (Array.isArray(body.roles) ? body.roles : []).forEach(function (r) {
     r = String(r == null ? "" : r).trim(); const k = r.toLowerCase();
-    if (r && r.length <= 40 && k !== "admin" && !rSeen[k]) { rSeen[k] = 1; roles.push(r); }
+    if (r && r.length <= 40 && (k !== "admin" || kind === "targets") && !rSeen[k]) { rSeen[k] = 1; roles.push(r); }
   });
   const updatedAt = new Date();
-  await db.collection(SETTINGS).updateOne({ _id: ACCESS_ID }, { $set: { emails: emails, roles: roles, updatedBy: by, updatedAt: updatedAt } }, { upsert: true });
+  await db.collection(SETTINGS).updateOne({ _id: ACCESS_IDS[kind] }, { $set: { emails: emails, roles: roles, updatedBy: by, updatedAt: updatedAt } }, { upsert: true });
   return { status: 200, json: { success: true, emails: emails, roles: roles, updatedBy: by, updatedAt: updatedAt } };
 }
 
@@ -558,7 +562,7 @@ async function incentiveAccessSave(db, body) {
 async function incentiveRunFromSnapshot(db, quarter, dryRun) {
   const st = await incentiveLockState(db, quarter);
   if (!st.frozen) return { status: 409, json: { success: false, error: quarter + " isn't frozen yet" } };
-  const done = await db.collection(RUNS).findOne({ snapshotId: st.frozen.snapId }, { projection: { _id: 1 } });
+  const done = await db.collection(RUNS).findOne({ snapshotId: st.frozen.snapId, superseded: { $ne: true } }, { projection: { _id: 1 } });
   if (done && !dryRun) return { status: 200, json: { success: true, already: true, runId: done._id } };
   const snapId = st.frozen.snapId;
   const part = async (kind, i) => {
@@ -571,11 +575,89 @@ async function incentiveRunFromSnapshot(db, quarter, dryRun) {
   for (let i = 0; i < (st.frozen.rowParts || 0); i++) rows = rows.concat(await part("rows", i));
   const mode = lockEnv() === "production" ? "final" : "trial";
   const h = await incentiveHeld(db, { quarter, mode });
-  const body = require("./_incentive_engine").buildRunFromFrozen(st, { sales, ar, rows }, h.json.held || []);
+  const targets = await db.collection(TARGETS).find({}).toArray();   // the Targets tab (today's, editable any time)
+  const body = require("./_incentive_engine").buildRunFromFrozen(st, { sales, ar, rows, targets }, h.json.held || []);
   body.mode = mode; body.snapshotId = snapId; body.by = { name: "Nightly server job", email: "" };
   if (dryRun) return { status: 200, json: { success: true, dryRun: true, quarter, snapshotId: snapId, reps: body.reps.length, ships: body.ships.length, checks: body.checks, asOn: body.asOn } };
   return incentiveRunSave(db, body);
 }
 
+// ── Targets tab ──────────────────────────────────────────────────
+// GP targets set on the Incentive Targets tab, used ONLY by the Incentive pages and payout runs (Sales Performance
+// keeps its own). One document per FY + rep / zone: { year, q:{Q1..Q4}, m:{"Apr-26":…} } in INR, any level may be
+// blank (blank = the Sales Performance target). Editable any time; a change to a quarter that already has its payout
+// run redoes that run and every later one (the earlier ones are kept, marked superseded).
+const TARGETS = "incentive_targets", TARGET_LOG = "incentive_target_log";
+async function _canTargets(db, email) {
+  if (!email) return false;
+  const u = await db.collection("ocean_users").findOne({ email: email, isActive: { $ne: false } }, { projection: { role: 1 } });
+  const d = await db.collection(SETTINGS).findOne({ _id: ACCESS_IDS.targets });
+  if (!d) return false;
+  const role = String((u && u.role) || "").toLowerCase().trim();
+  return (d.emails || []).indexOf(email) > -1 || (!!role && (d.roles || []).some((r) => String(r).toLowerCase().trim() === role));
+}
+async function incentiveTargets(db) {
+  const targets = await db.collection(TARGETS).find({}).toArray();
+  return { status: 200, json: { success: true, targets } };
+}
+function _fyMonths(fy) {
+  const y = 2000 + parseInt(fy.slice(2), 10);
+  return ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"].map((m, i) => m + "-" + String(i < 9 ? y - 1 : y).slice(-2));
+}
+// POST action=incentiveTargetSave { by, fy:"FY27", changes:[{ kind:"rep"|"zone", name, field:"year"|"Q1".."Q4"|"Apr-26"…, value:number|null }] }
+async function incentiveTargetSave(db, body) {
+  const by = _em(body && body.by);
+  if (!(await _canTargets(db, by))) return { status: 403, json: { success: false, error: "You don't have access to the Targets tab" } };
+  const fy = String((body && body.fy) || "");
+  if (!/^FY\d\d$/.test(fy)) return { status: 400, json: { success: false, error: "fy like FY27 required" } };
+  const months = _fyMonths(fy), changes = Array.isArray(body.changes) ? body.changes : [];
+  if (!changes.length) return { status: 400, json: { success: false, error: "No changes" } };
+  const qOfField = (f) => (f === "year" ? [1, 2, 3, 4] : /^Q[1-4]$/.test(f) ? [+f[1]] : months.indexOf(f) > -1 ? [Math.floor(months.indexOf(f) / 3) + 1] : null);
+  const now = new Date(), touched = {}, log = [];
+  for (const c of changes) {
+    const kind = c && c.kind === "zone" ? "zone" : c && c.kind === "rep" ? "rep" : null;
+    const name = String((c && c.name) || "").trim(), field = String((c && c.field) || "");
+    const v = c && c.value == null ? null : Number(c.value);
+    const qs = qOfField(field);
+    if (!kind || !name || name.length > 160 || !qs || (v !== null && !(isFinite(v) && v >= 0)))
+      return { status: 400, json: { success: false, error: "Bad change: " + JSON.stringify(c).slice(0, 200) } };
+    const id = fy + "|" + kind + "|" + name;
+    const path = field === "year" ? "year" : /^Q/.test(field) ? "q." + field : "m." + field;
+    const old = await db.collection(TARGETS).findOne({ _id: id });
+    const from = !old ? null : field === "year" ? old.year : /^Q/.test(field) ? (old.q || {})[field] : (old.m || {})[field];
+    const upd = v === null ? { $unset: { [path]: "" }, $set: { fy, kind, name, updatedBy: by, updatedAt: now } }
+      : { $set: { [path]: Math.round(v * 100) / 100, fy, kind, name, updatedBy: by, updatedAt: now } };
+    await db.collection(TARGETS).updateOne({ _id: id }, upd, { upsert: true });
+    log.push({ at: now, by, fy, kind, name, field, from: from == null ? null : from, to: v === null ? null : Math.round(v * 100) / 100 });
+    qs.forEach((q) => { touched[fy + "-Q" + q] = true; });
+  }
+  if (log.length) await db.collection(TARGET_LOG).insertMany(log);
+  // Payout runs already made for a changed quarter (and every one after it) are redone with the new targets
+  const first = Object.keys(touched).sort()[0];
+  const redo = await incentiveRedoRuns(db, first, "Targets changed by " + by);
+  return { status: 200, json: { success: true, saved: log.length, quarters: Object.keys(touched).sort(), redo } };
+}
+// Redo the payout runs of fromQuarter and every later frozen quarter that already has one (quarter order, stops at
+// the first failure; the nightly job finishes any left without a run)
+async function incentiveRedoRuns(db, fromQuarter, why) {
+  const out = [];
+  const due = incentiveDueQuarters().filter((q) => q >= fromQuarter);
+  let started = false;
+  for (const quarter of due) {
+    const st = await incentiveLockState(db, quarter);
+    if (!st.frozen) break;
+    const active = await db.collection(RUNS).find({ quarter, superseded: { $ne: true } }, { projection: { _id: 1 } }).toArray();
+    if (!active.length && !started) continue;   // never paid out: nothing to redo
+    started = true;
+    if (active.length) await db.collection(RUNS).updateMany({ _id: { $in: active.map((r) => r._id) } }, { $set: { superseded: true, supersededAt: new Date(), supersededWhy: why } });
+    try {
+      const r = await incentiveRunFromSnapshot(db, quarter);
+      out.push({ quarter, success: !!r.json.success, runId: r.json.runId, error: r.json.error });
+      if (!r.json.success) break;
+    } catch (e) { out.push({ quarter, success: false, error: e.message || String(e) }); break; }
+  }
+  return out;
+}
+
 module.exports = { incentiveOutstanding, incentiveHeld, incentiveRunSave, incentiveRuns, incentiveRun, incentiveShipment, incentiveRunDelete, incentiveAccess, incentiveAccessSave,
-  incentiveLock, incentiveLockState, incentiveDueQuarters, incentiveHeldShips, incentiveSnapshotFreeze, incentiveSnapshotPart, incentiveSnapshotDelete, incentiveRunFromSnapshot, INC_LOCK };
+  incentiveLock, incentiveLockState, incentiveDueQuarters, incentiveHeldShips, incentiveSnapshotFreeze, incentiveSnapshotPart, incentiveSnapshotDelete, incentiveRunFromSnapshot, incentiveTargets, incentiveTargetSave, incentiveRedoRuns, INC_LOCK };
