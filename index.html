@@ -2858,6 +2858,7 @@ function sidebarNav(){
       +navItem('Finance Pendency',state.page==='finance',IC.dollar,'page','finance')
       +navItem('Accounts Receivable',state.page==='ar',IC.clip,'page','ar')
       +navItem('Incentive',state.page==='incentive',IC.award,'page','incentive')
+      +navItem('Incentive Demo',state.page==='incdemo',IC.award,'page','incdemo')
       +'<div style="height:1px;background:rgba(255,255,255,0.07);margin:7px 6px;"></div>'
       +crmNavItem()
     +'</div>'
@@ -2919,7 +2920,7 @@ function topbar(){
     // ── SINGLE ROW: View / Dates / Currency / Rate / Filters / Refresh → Feedback / Sign Out ──
     +'<div style="display:flex;align-items:center;gap:10px;padding:7px 16px 7px;overflow:visible;background:linear-gradient(180deg,#F9FBFE,#F2F6FB);">'
       // Report View dropdown — hidden on non-data pages
-      +(['usage','teams','admin','org','ar'].indexOf(state.page) >= 0 ? '' : '<div style="position:relative;display:inline-block;flex-shrink:0;">'
+      +(['usage','teams','admin','org','ar','incdemo'].indexOf(state.page) >= 0 ? '' : '<div style="position:relative;display:inline-block;flex-shrink:0;">'
         +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;transition:box-shadow 0.15s;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';'+(state.viewDropOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+pillShadow+';':'')+'">'
           +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="'+(state.viewDropOpen?'#1D5FCC':'#7C93B8')+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>'
           +(state.page==='incentive' ? (state.incView==='Yearly' ? 'Yearly' : 'Quarterly') : state.reportView)+' View'
@@ -2939,7 +2940,7 @@ function topbar(){
           : '')
       +'</div>')
       // ── View-specific date selector ──────────────────────────────────────
-      +(['usage','teams','admin','org','ar','incentive'].indexOf(state.page) >= 0 ? '' : (function(){
+      +(['usage','teams','admin','org','ar','incentive','incdemo'].indexOf(state.page) >= 0 ? '' : (function(){
         var v = (state.page === 'incentive' && state.reportView === 'Quarterly') ? 'Monthly' : state.reportView; // Incentive Quarterly: FY quarters of the picked months
         var ps = pillShadow;
 
@@ -5867,10 +5868,11 @@ function incToggleGp(k){ state.incGpOpen = state.incGpOpen || {}; state.incGpOpe
 // Click on a GP / GP removed number: the same shipment drill-through as Sales Performance.
 // data-rm = 'all' (every removed job) or one INC_RM reason: only those jobs are listed.
 function incDrill(el){
-  var F = _incFrozenFor(el.getAttribute('data-q') || (state.incTab === 'summary' ? _incSumQuarter().q.key : _incPayQuarter().key));
-  if (!F) return _incDrillOne(el);
+  var demo = el.getAttribute('data-q') === 'DEMO';
+  var F = demo ? null : _incFrozenFor(el.getAttribute('data-q') || (state.incTab === 'summary' ? _incSumQuarter().q.key : _incPayQuarter().key));
+  if (!F && !demo) return _incDrillOne(el);
   var R = window.render; window.render = function(){};   // draw once, after today's data is back
-  try { _incWithData(F, function(){ _incDrillOne(el); }); } finally { window.render = R; }
+  try { if (demo) _incDemoRun(function(){ _incDrillOne(el); }); else _incWithData(F, function(){ _incDrillOne(el); }); } finally { window.render = R; }
   render();
 }
 function _incDrillOne(el){
@@ -5899,12 +5901,12 @@ function _incKeepScroll(name){
   var orig = window[name];
   if (typeof orig !== 'function' || orig._incKeep) return;
   var w = function(){
-    if (state.page !== 'incentive') return orig.apply(this, arguments);
+    if (state.page !== 'incentive' && state.page !== 'incdemo') return orig.apply(this, arguments);
     var sc = document.getElementById('incScroll'), ms = document.getElementById('main-slot');
     var pos = { t:sc ? sc.scrollTop : 0, l:sc ? sc.scrollLeft : 0, m:ms ? ms.scrollTop : 0 };
     var out = orig.apply(this, arguments);
     function put(){
-      if (state.page !== 'incentive') return;
+      if (state.page !== 'incentive' && state.page !== 'incdemo') return;
       var sc2 = document.getElementById('incScroll'), ms2 = document.getElementById('main-slot');
       // render() clears main-slot's overflow (style.overflow = '' also wipes the overflow-y:auto it is declared
       // with), so the page area stops being a scroll box: it grows to the page's full height inside the
@@ -6474,7 +6476,8 @@ function _incFrozenFor(q){ return incLock[q] && incLock[q].frozen ? incFrozen[q]
 function _incWithData(F, fn){
   if (!F || _incWithData.active) return fn();
   var keep = { ro:repsRawOriginal, rr:repsRaw, z:zonesRaw, m:months26, d:allDrillRows, o:incOutRefs, l:incLateRefs, om:incOutMeta,
-               zr:window._zoneRegionMap, dm:_drillMapping, dc:_drillResultCache, lf:_lobDataFetched };
+               zr:window._zoneRegionMap, dm:_drillMapping, dc:_drillResultCache, lf:_lobDataFetched,
+               za:_zoneAgg, zk:_zoneAggKey, zf:_zoneAggRowsRef };
   _incWithData.active = F;
   try {
     repsRawOriginal = F.repsRawOriginal; zonesRaw = F.zonesRaw; months26 = F.months26;
@@ -6483,11 +6486,14 @@ function _incWithData(F, fn){
     rebuildZoneRegionMap(); computeFilteredRepsRaw();
     if (!F.allDrillRows) { F.allDrillRows = dedupDrillRows(F.rawRows); _patchTgOnDrillRows(F.allDrillRows); F.rawRows = null; }
     allDrillRows = F.allDrillRows;
+    // Zone GP (zonal managers) comes from the zone totals of these shipments, not the ones built for today's data
+    buildZoneAggregates();
     return fn();
   } finally {
     repsRawOriginal = keep.ro; zonesRaw = keep.z; months26 = keep.m; allDrillRows = keep.d;
     incOutRefs = keep.o; incLateRefs = keep.l; incOutMeta = keep.om;
     window._zoneRegionMap = keep.zr; _drillMapping = keep.dm; _drillResultCache = keep.dc; _lobDataFetched = keep.lf;
+    _zoneAgg = keep.za; _zoneAggKey = keep.zk; _zoneAggRowsRef = keep.zf;
     computeFilteredRepsRaw();
     _incWithData.active = null;
   }
@@ -6696,6 +6702,127 @@ function _incAccessPanel(kind){
     + (err ? '<div style="font-size:11.5px;color:#B83A2B;font-weight:600;margin-top:8px;">'+esc(err)+'</div>' : '')
     + (A && A.updatedBy ? '<div style="font-size:10.5px;color:'+MUTED+';margin-top:8px;">Last changed by '+esc(A.updatedBy)+(A.updatedAt ? ' on '+esc(new Date(A.updatedAt).toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })) : '')+'</div>' : '')
   + '</div>';
+}
+
+/* ---------------------- Incentive Demo (sidebar page) ----------------------
+   Shows everyone how the incentive is worked out, on made-up data: 4 zones with 2 sales reps each, one zone per
+   scenario (ZM paid + both reps paid / nobody paid / reps paid but not the ZM / ZM paid but not the reps). The data
+   has the same shape as the real Sales Performance and shipment data, so the page runs the real calculation, table
+   and shipment drill-down on it, exactly like the Calculation tab. Filters, per-rep visibility and the Incentive
+   Targets tab never apply here. Nothing is saved anywhere. */
+var _incDemoF = null;
+var INC_DEMO_Q = { key:'DEMO', label:'Q1 FY27', months:['Apr-26', 'May-26', 'Jun-26'], payLabel:'Q3 FY27' };
+var INC_DEMO_ZONES = [
+  { zone:'DZ01 (Arjun Mehta)', region:'North', tgt:1500000, scen:1, reps:[{ n:'Rohan Kapoor', tgt:1000000, core:1150000, cross:120000 }, { n:'Sneha Iyer', tgt:800000, core:700000, cross:80000 }] },
+  { zone:'DZ02 (Kavita Rao)', region:'West', tgt:2500000, scen:2, reps:[{ n:'Vikram Joshi', tgt:1000000, core:450000, cross:60000 }, { n:'Neha Kulkarni', tgt:900000, core:500000, cross:40000 }] },
+  { zone:'DZ03 (Imran Qureshi)', region:'South', tgt:2000000, scen:3, reps:[{ n:'Aditya Menon', tgt:600000, core:660000, cross:50000 }, { n:'Priya Nambiar', tgt:700000, core:560000, cross:30000 }] },
+  { zone:'DZ04 (Pooja Nair)', region:'East', tgt:1600000, scen:4, reps:[{ n:'Karan Malhotra', tgt:1200000, core:720000, cross:90000 }, { n:'Ananya Das', tgt:1100000, core:770000, cross:100000 }] }
+];
+var INC_DEMO_SCEN = {
+  1:{ t:'Zonal manager paid, both sales reps paid', zm:true, reps:true },
+  2:{ t:'Nobody paid: zonal manager and both sales reps below 75%', zm:false, reps:false },
+  3:{ t:'Both sales reps paid, zonal manager not paid', zm:false, reps:true },
+  4:{ t:'Zonal manager paid, both sales reps not paid', zm:true, reps:false }
+};
+function _incDemoData(){
+  if (_incDemoF) return _incDemoF;
+  var months = INC_DEMO_Q.months, rows = [], reps = [], zones = [], refs = {}, late = {}, n = 0;
+  var CUST = ['Apex Polymers Pvt Ltd', 'Bluewave Textiles', 'Coastal Agro Exports', 'Delta Pharma Ltd', 'Everest Auto Parts', 'Fusion Chemicals', 'Greenleaf Foods', 'Horizon Steel Works'];
+  var PORTS = [['Port Jawaharlal Nehru', 'Jebel Ali'], ['Mundra', 'Rotterdam'], ['Chennai', 'Singapore'], ['Kolkata', 'Colombo']];
+  var W = [0.22, 0.18, 0.16, 0.15, 0.15, 0.14];   // how a rep's Core GP is spread over 6 shipments
+  function iso(m, day){ var b = m.split('-'), mi = MONTH_NAME_TO_IDX[b[0]], y = 2000 + parseInt(b[1], 10); return new Date(Date.UTC(y, mi, day, 6, 0)).toISOString(); }
+  function wk(m, day){ var d = new Date(iso(m, day)), j = new Date(Date.UTC(d.getUTCFullYear(), 0, 1)); return d.getUTCFullYear() + '-W' + String(Math.ceil(((d - j) / 864e5 + j.getUTCDay() + 1) / 7)).padStart(2, '0'); }
+  function zero(){ return months.map(function(){ return 0; }); }
+  INC_DEMO_ZONES.forEach(function(Z, zi){
+    var code = Z.zone.split(' ')[0], zgp = zero(), zship = zero();
+    Z.reps.forEach(function(R, ri){
+      var name = R.n + ' | ' + code, gp = zero(), prov = zero(), ship = zero(), rev = zero(), lobData = {};
+      function add(lob, g, k, kind){
+        var mi = k % 3, m = months[mi], day = 3 + (k * 4) % 24; n++;
+        var sno = 'DEMO' + String(n).padStart(5, '0'), port = PORTS[(zi + k) % PORTS.length], r = Math.round(g * 6.5), isProv = kind === 'fl';
+        if (kind === 'unpaid') refs[sno] = true;
+        if (kind === 'late') late[sno] = 45;
+        var dir = /IMPORT/.test(lob) ? 'IMPORT' : 'EXPORT', sea = /^SEA/.test(lob);
+        rows.push({ _sp:name.toLowerCase(), _ml:m, _d:iso(m, day), _wk:wk(m, day), _cl:(sea ? 'jobs_sea_' : 'jobs_air_') + dir.toLowerCase(), _cls:{ kind:sea ? 'SEA' : 'AIR', direction:dir },
+          shipmentNo:sno, jobDate:iso(m, day), lob:lob, masterNo:'', houseNo:'', consolNo:sno, cargoType:sea ? 'FCL' : 'LOOSE', carrier:sea ? 'Demo Line' : 'Demo Air',
+          provRevenue:r, billedRevenue:isProv ? 0 : r, unbilledRevenue:isProv ? r : 0, provCost:r - g, postedCost:isProv ? 0 : r - g, unpostedCost:isProv ? r - g : 0,
+          provisionalProfit:g, actualProfit:isProv ? 0 : g, customer:CUST[(zi * 2 + ri + k) % CUST.length], ataDischarge:'', atdLoading:iso(m, day),
+          dischargePort:dir === 'EXPORT' ? port[1] : port[0], loadingPort:dir === 'EXPORT' ? port[0] : port[1], location:'Mumbai', consignee:'Demo Consignee', consolType:'Direct',
+          teu:sea ? 2 : 0, destAgent:'', etaDischarge:'', etdLoading:iso(m, day), jobOwner:'Demo Ops', jobRevRecogDate:iso(m, day), originAgent:'', salesPerson:name,
+          shipper:CUST[(zi * 2 + ri + k) % CUST.length], volume:0, volumeUnit:'CBM', operationLock:iso(m, day), financialLock:isProv ? '' : iso(m, day + 3),
+          g:g, r:r, x:r - g, t:sea ? 2 : 0, chargeableWeight:sea ? 0 : 850, chargeableWeightUnit:'KGS', tons:sea ? 0 : 0.85, vol:0, prov:isProv ? 1 : 0,
+          _zone:Z.zone, _dn:name, _tg:'', dischargeCountry:'', srrLoadingCountry:'' });
+        gp[mi] += g; ship[mi] += 1; rev[mi] += r; if (isProv) prov[mi] += g; zgp[mi] += g; zship[mi] += 1;
+        var L = lobData[lob] || (lobData[lob] = {}), c = L[m] || (L[m] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0, rev:0, revBilled:0, revProv:0 });
+        c.gp += g; c.ship += 1; c.rev += r; if (isProv) { c.gpProv += g; c.revProv += r; } else { c.gpActual += g; c.revBilled += r; }
+      }
+      // Core: 6 shipments, one each with FL not done, O/S amount and paid late; Cross: one air shipment
+      W.forEach(function(w, k){ add(k % 2 ? 'SEA IMPORT' : 'SEA EXPORT', Math.round(R.core * w), k, k === 1 ? 'fl' : k === 3 ? 'unpaid' : k === 5 ? 'late' : ''); });
+      add('AIR EXPORT', R.cross, 6, '');
+      var core = W.reduce(function(a, w){ return a + Math.round(R.core * w); }, 0);
+      R.core = core;   // the exact rounded total
+      var t = R.tgt / 3;
+      reps.push({ name:name, zone:Z.zone, region:Z.region, lob:'Ocean', email:R.n.toLowerCase().replace(/\s+/g, '.') + '@demo.local', hue:(zi * 90 + ri * 40) % 360,
+        gp:gp, gpProv:prov, gpActual:gp.map(function(v, i){ return v - prov[i]; }), ship:ship, tons:zero(), teu:zero(), lcl:zero(), rev:rev,
+        revBilled:rev, revProv:zero(), tank:zero(), tgt:t, weeklyTgt:t / 4, yearlyTgt:t * 12, fy26YearlyTgt:t * 12, fy27YearlyTgt:t * 12, dailyTgt:t / 30,
+        tgtUSD:t / 94, weeklyTgtUSD:t / 376, yearlyTgtUSD:t * 12 / 94, dailyTgtUSD:t / 2820, joinDate:'2021-04-01', exitDate:null, lobData:lobData });
+    });
+    var zt = Z.tgt / 3;
+    zones.push({ zone:Z.zone, monthlyTarget:zt, yearlyTarget:zt * 12, weeklyTarget:zt / 4, dailyTarget:zt / 30, zonalManager:Z.zone.replace(/^\S+\s*\(|\)$/g, ''),
+      fy26MonthlyTarget:zt, fy26YearlyTarget:zt * 12, fy26WeeklyTarget:zt / 4, fy27MonthlyTarget:zt, fy27YearlyTarget:zt * 12, fy27WeeklyTarget:zt / 4,
+      gp:zgp, ship:zship, tons:zero(), teu:zero(), lcl:zero() });
+  });
+  return (_incDemoF = { meta:{ demo:true }, rawRows:rows, allDrillRows:null, repsRawOriginal:reps, zonesRaw:zones, months26:months.slice(),
+    incOutRefs:refs, incLateRefs:late, incOutMeta:{ asOn:'30-Jun-2026 (demo)', docsWithRef:1, fields:null, paidDocs:1, lateDays:30, pushedAt:null } });
+}
+// Run fn on the demo data: no filters, no per-rep visibility (everyone sees all 8 demo reps, whatever their role),
+// no Incentive Targets (all put back after)
+function _incDemoRun(fn){
+  var keep = { fl:state.filterLobs, fz:state.filterZones, fr:state.filterReps, fg:state.filterRegions, fgl:state.filterGl,
+               rls:window._getRLSReps, tg:incTargets, cu:currentUser };
+  try {
+    state.filterLobs = []; state.filterZones = []; state.filterReps = []; state.filterRegions = []; state.filterGl = [];
+    window._getRLSReps = function(){ return []; }; incTargets = null;
+    currentUser = Object.assign({}, currentUser || {}, { role:'Admin', region:'' });
+    return _incWithData(_incDemoData(), fn);
+  } finally {
+    state.filterLobs = keep.fl; state.filterZones = keep.fz; state.filterReps = keep.fr; state.filterRegions = keep.fg; state.filterGl = keep.fgl;
+    window._getRLSReps = keep.rls; incTargets = keep.tg; currentUser = keep.cu;
+  }
+}
+function incDemoPage(){
+  var Q = INC_DEMO_Q;
+  if (!state.incDemoInit) { state.incDemoInit = true; state.incZoneOpen = state.incZoneOpen || {}; INC_DEMO_ZONES.forEach(function(z){ state.incZoneOpen[z.zone] = true; }); }
+  var keep = { reportView:state.reportView, dateFrom:state.dateFrom, dateTo:state.dateTo, pay:window._incPay, ys:window._incYearSel }, html;
+  try {
+    html = _incDemoRun(function(){
+      state.reportView = 'Monthly'; state.dateFrom = Q.months[0]; state.dateTo = Q.months[2];
+      window._incCollect = true;
+      var m; try { m = _incentivePageInner(true); } finally { window._incCollect = false; }
+      if (typeof m === 'string') return m;
+      window._incPay = { key:Q.key, label:Q.label, months:Q.months, payLabel:Q.payLabel, text:'for ' + Q.label + ' · demo data' };
+      window._incYearSel = '';
+      return _incentivePageInner(true, _incMergeQuarters([m], [Q]));
+    });
+  } finally { state.reportView = keep.reportView; state.dateFrom = keep.dateFrom; state.dateTo = keep.dateTo; window._incPay = keep.pay; window._incYearSel = keep.ys; }
+  var NAVY = '#0D2B5E', SUB = '#5B6678';
+  function chip(ok, who){ return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:'+(ok ? '#15875A' : '#B4541A')+';background:'+(ok ? '#E9F6EF' : '#FCF0E8')+';border-radius:999px;padding:2px 9px;">'+(ok ? '✓' : '✕')+' '+who+'</span>'; }
+  var cards = INC_DEMO_ZONES.map(function(Z){
+    var S = INC_DEMO_SCEN[Z.scen], zp = /^(\S+)\s*\((.*)\)$/.exec(Z.zone);
+    return '<div style="flex:1 1 230px;min-width:0;background:#FFFFFF;border:1px solid #D5DCE6;border-radius:10px;padding:12px 14px;">'
+      + '<div style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#7A8AA3;">Scenario '+Z.scen+'</div>'
+      + '<div style="font-size:12.5px;font-weight:700;color:'+NAVY+';margin-top:3px;line-height:1.35;">'+esc(S.t)+'</div>'
+      + '<div style="font-size:11.5px;color:'+SUB+';margin-top:6px;">Zone <b style="color:'+NAVY+';">'+esc(zp[1])+'</b> · ZM '+esc(zp[2])+' · '+Z.reps.map(function(r){ return esc(r.n); }).join(', ')+'</div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">'+chip(S.zm, 'Zonal manager')+chip(S.reps, 'Sales reps')+'</div></div>';
+  }).join('');
+  var intro = '<div style="padding:20px 24px 0;">'
+    + '<div style="background:#FFF8E6;border:1px solid #EED9A4;border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:12px;color:#7A4E00;line-height:1.5;">'
+      + '<b>Demo with made-up data.</b> This is the real Incentive calculation, table and shipment drill-down, run on 4 made-up zones with 2 sales reps each. '
+      + 'Open ▶ Eligibility and ▶ Final GP after Deductions, and click any amount to see its shipments. Every rep has one shipment with FL not done, one with an O/S amount and one paid 45 days late, so each deduction shows up. Nothing here is real or saved.</div>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+cards+'</div>'
+    + '<div style="font-size:11.5px;color:'+SUB+';margin-top:10px;">How it works: a sales rep or zone is eligible when GP ÷ Target GP is at least 75% (Core and Cross separately). Then the jobs with FL not done, an O/S amount or paid more than 30 days late are taken off, 15% management fees come off what\'s left, and the rate is applied: sales reps 3% (75–99.99%) or 7% (100%+), zonal managers 2% or 3%, on the zone\'s GP.</div>'
+  + '</div>';
+  return intro + html;
 }
 
 /* ---------------------- Incentive: Targets tab ----------------------
@@ -10854,7 +10981,7 @@ function render(){
   computeFilteredRepsRaw();
   buildZoneAggregates(); // pre-compute once per render, used by grandEntity/zoneEntity
   // Skip model() on insight pages — they don't use it, saves CPU
-  var M = (state.page==='customers'||state.page==='agents'||state.page==='tradelane'||state.page==='usage'||state.page==='teams'||state.page==='admin'||state.page==='finance'||state.page==='op'||state.page==='ar'||state.page==='incentive') ? null : model();
+  var M = (state.page==='customers'||state.page==='agents'||state.page==='tradelane'||state.page==='usage'||state.page==='teams'||state.page==='admin'||state.page==='finance'||state.page==='op'||state.page==='ar'||state.page==='incentive'||state.page==='incdemo') ? null : model();
   var app=document.getElementById('app');
   if(!app.querySelector('aside')){
     app.innerHTML = sidebar()
@@ -10889,6 +11016,7 @@ function render(){
     : state.page==='op' ? opPage()
     : state.page==='ar' ? arPage()
     : state.page==='incentive' ? incentivePage()
+    : state.page==='incdemo' ? incDemoPage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
   if(state.page==='teams'){ mainEl.style.overflow='hidden'; mainEl.style.padding='0'; mainEl.style.display='flex'; mainEl.style.flexDirection='column'; }
   else if(state.page==='ar'){ mainEl.style.overflow='hidden'; mainEl.style.padding='4px 18px 14px'; mainEl.style.display=''; mainEl.style.flexDirection=''; } else { mainEl.style.overflow=''; mainEl.style.padding=''; mainEl.style.display=''; mainEl.style.flexDirection=''; }
@@ -10917,6 +11045,7 @@ function renderKeepTopbar(){
     : state.page==='op' ? opPage()
     : state.page==='ar' ? arPage()
     : state.page==='incentive' ? incentivePage()
+    : state.page==='incdemo' ? incDemoPage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
   var drawerEl=document.getElementById('drawer-slot');
   if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal();
