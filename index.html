@@ -6270,14 +6270,18 @@ function _incentivePageInner(foldQ, pre){
       { label:'Management Fees (15%)', sub:true, ded:true, type:'cur', color:'#475569', vals:P.fee, total:P.feeT }
     ]);
     rows.push({ label:'Total Incentive', type:'inc', bold:true, primary:true, shade:true, color:'#6B3FA0', vals:P.inc, total:P.incT, rates:P.rate, rateT:P.rateT,
-      // Which rate applies when: the lower one from 75% to 99.99% GP, the higher one from 100%
-      note:ent.isGrand ? '' : (ent.isZone ? 'ZM: '+INC_RATES.zm.t1 : 'Sales: '+INC_RATES.sales.t1)+'% at 75–99.99% GP · '+(ent.isZone ? INC_RATES.zm.t2 : INC_RATES.sales.t2)+'% at 100%+ GP' });
+      // The rate rules are shown once, in the table's header (rate legend); the rate badge says why it applies
+      isZone:!!ent.isZone });
     return rows;
   }
   function fmtVal(v, p, r){
     if (p.type === 'na' || v === null || v === undefined) return { t:'–', c:'#CBD3DF', dash:true };
     // Total Incentive: the rate applied, then the amount
-    if (p.type === 'inc') return { t:(r != null ? '<span style="font-size:9.5px;font-weight:600;color:#9A86C0;">'+r+'% · </span>' : '')+fmtCur(v), c:'#6B3FA0' };
+    if (p.type === 'inc') {
+      var RT = p.isZone ? INC_RATES.zm : INC_RATES.sales;
+      var why = r == null ? '' : (p.isZone ? 'Zonal manager' : 'Sales rep') + ' rate ' + r + '%: GP% ' + (r === RT.t2 ? 'is 100% or more' : 'is 75–99.99%');
+      return { t:(r != null ? '<span title="'+esc(why)+'" style="font-size:9.5px;font-weight:700;color:#7C5BB0;background:#F1ECF8;border-radius:999px;padding:1px 6px;margin-right:6px;cursor:help;">'+r+'%</span>' : '')+fmtCur(v), c:'#6B3FA0' };
+    }
     if (p.type === 'yn') return v ? { t:'✓ Yes', c:'#15875A' } : { t:'✕ No', c:'#C2410C' };
     if (p.ded) return { t:v > 0 ? '−' + fmtCur(v) : v < 0 ? '+' + fmtCur(-v) : fmtCur(0), c:v < 0 ? '#15875A' : '#475569' };
     if (p.type === 'pct') return { t:v+'%', c: v >= 100 ? '#15875A' : v >= 75 ? '#A8720E' : '#DC2626' };
@@ -6413,6 +6417,15 @@ function _incentivePageInner(foldQ, pre){
             + '<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+(cur === 'cross' ? 'Cross: every LOB except Sea Export / Sea Import' : 'Core: Sea Export + Sea Import')+'</span>';
         })()
         +(zones.length ? '<button onclick="incToggleAllZones('+(allOpen ? 'false' : 'true')+')" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+(allOpen ? 'Collapse All' : 'Expand All')+'</button>' : '')
+        // Rate legend: which rate applies at which GP%, for sales reps and zonal managers
+        +(function(){
+          var R = INC_RATES, chip = 'display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:600;color:#5B4A7A;background:#F6F2FC;border:1px solid #E4DAF3;border-radius:999px;padding:3px 10px;white-space:nowrap;';
+          function b(t){ return '<b style="color:#6B3FA0;font-weight:800;">'+t+'</b>'; }
+          return '<span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;" title="Incentive rate by GP% (GP ÷ Target GP). Below 75%: not eligible.">'
+            + '<span style="font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#8A9AB5;">Rates</span>'
+            + '<span style="'+chip+'">75–99.99% GP <span style="color:#C9BCE0;">|</span> Sales '+b(R.sales.t1+'%')+' · ZM '+b(R.zm.t1+'%')+'</span>'
+            + '<span style="'+chip+'">100%+ GP <span style="color:#C9BCE0;">|</span> Sales '+b(R.sales.t2+'%')+' · ZM '+b(R.zm.t2+'%')+'</span></span>';
+        })()
         +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+zones.length+' zones · '+reps.length+' sales reps</span>'
         +(incOutMeta && !incOutMeta.paidDocs ? '<span style="font-size:11px;color:#A8720E;font-weight:700;">· Paid 30+ days overdue: no paid invoices in ar_outstanding yet. The AR sync that ran'+(incOutMeta.pushedAt ? ' (last push '+esc(new Date(incOutMeta.pushedAt).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }))+')' : '')+' is an old copy: paste apps-script/arSync.gs into the Apps Script project and run it</span>' : '')
         +(incOutMeta && !incOutMeta.docsWithRef ? '<span style="font-size:11px;color:#B83A2B;font-weight:700;">· No Ref No (refNo) found in ar_outstanding'+(incOutMeta.fields ? ' (fields: '+esc(incOutMeta.fields.join(', '))+')' : '')+'</span>' : '')
