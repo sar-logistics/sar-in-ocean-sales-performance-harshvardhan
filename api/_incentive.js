@@ -531,7 +531,7 @@ async function _isAdmin(db, email) {
 }
 async function incentiveAccess(db) {
   const d = await db.collection(SETTINGS).findOne({ _id: ACCESS_ID });
-  return { status: 200, json: { success: true, emails: (d && d.emails) || [], updatedBy: (d && d.updatedBy) || null, updatedAt: (d && d.updatedAt) || null } };
+  return { status: 200, json: { success: true, emails: (d && d.emails) || [], roles: (d && d.roles) || [], updatedBy: (d && d.updatedBy) || null, updatedAt: (d && d.updatedAt) || null } };
 }
 async function incentiveAccessSave(db, body) {
   const by = _em(body && body.by);
@@ -541,9 +541,15 @@ async function incentiveAccessSave(db, body) {
     e = _em(e);
     if (e && /^[^@\s]+@[^@\s]+$/.test(e) && !seen[e]) { seen[e] = 1; emails.push(e); }
   });
+  // Roles (as set in the Admin Panel): everyone with one of these roles sees the Summary. Admin always does.
+  const rSeen = {}, roles = [];
+  (Array.isArray(body.roles) ? body.roles : []).forEach(function (r) {
+    r = String(r == null ? "" : r).trim(); const k = r.toLowerCase();
+    if (r && r.length <= 40 && k !== "admin" && !rSeen[k]) { rSeen[k] = 1; roles.push(r); }
+  });
   const updatedAt = new Date();
-  await db.collection(SETTINGS).updateOne({ _id: ACCESS_ID }, { $set: { emails: emails, updatedBy: by, updatedAt: updatedAt } }, { upsert: true });
-  return { status: 200, json: { success: true, emails: emails, updatedBy: by, updatedAt: updatedAt } };
+  await db.collection(SETTINGS).updateOne({ _id: ACCESS_ID }, { $set: { emails: emails, roles: roles, updatedBy: by, updatedAt: updatedAt } }, { upsert: true });
+  return { status: 200, json: { success: true, emails: emails, roles: roles, updatedBy: by, updatedAt: updatedAt } };
 }
 
 // The one payout run of a frozen quarter, worked out on the server (nightly job, straight after the freeze) from

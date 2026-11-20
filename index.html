@@ -6535,25 +6535,41 @@ function _incTabs(){
 var incAccess = null, incAccessLoading = false, incAccessErr = '';
 function _incIsAdmin(){ return !!currentUser && String(currentUser.role || '').toLowerCase().trim() === 'admin'; }
 function _incMyEmail(){ return currentUser && currentUser.email ? String(currentUser.email).toLowerCase().trim() : ''; }
+// Roles that can be given the Summary (Admin always has it); the same roles as the Admin Panel
+var INC_ACCESS_ROLES = ['HR', 'Regional Manager', 'Zonal Manager', 'Sales Rep'];
+function _incRoleKey(r){ return String(r || '').toLowerCase().trim(); }
+function _incRoleHas(role){
+  var k = _incRoleKey(role);
+  return !!incAccess && (incAccess.roles || []).some(function(r){ return _incRoleKey(r) === k; });
+}
+// Why a person sees the Summary: 'admin', 'role', 'person' or '' (doesn't)
+function _incAccessWhy(email, role){
+  if (_incRoleKey(role) === 'admin') return 'admin';
+  if (role && _incRoleHas(role)) return 'role';
+  var e = String(email || '').toLowerCase().trim();
+  return e && incAccess && incAccess.emails.indexOf(e) > -1 ? 'person' : '';
+}
 function _incCanSummary(){
   if (_incIsAdmin()) return true;
-  var me = _incMyEmail();
-  return !!me && !!incAccess && incAccess.emails.indexOf(me) > -1;
+  return !!_incAccessWhy(_incMyEmail(), currentUser && currentUser.role);
 }
 function _incAccessLoad(force){
   if (incAccessLoading || (incAccess && !force)) return;
   incAccessLoading = true;
   fetch('/api/mongo-batch?action=incentiveAccess')
     .then(function(r){ return r.json(); })
-    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Could not load access'); incAccess = { emails:d.emails || [], updatedBy:d.updatedBy, updatedAt:d.updatedAt }; incAccessErr = ''; })
-    .catch(function(e){ incAccessErr = e.message || String(e); if (!incAccess) incAccess = { emails:[] }; })
+    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Could not load access'); incAccess = { emails:d.emails || [], roles:d.roles || [], updatedBy:d.updatedBy, updatedAt:d.updatedAt }; incAccessErr = ''; })
+    .catch(function(e){ incAccessErr = e.message || String(e); if (!incAccess) incAccess = { emails:[], roles:[] }; })
     .finally(function(){ incAccessLoading = false; if (state.page === 'incentive') render(); });
 }
-function _incAccessSave(emails){
+// Save who sees the Summary; anything not given keeps its current value
+function _incAccessSave(emails, roles){
+  if (!emails) emails = incAccess ? incAccess.emails : [];
+  if (!roles) roles = incAccess ? incAccess.roles || [] : [];
   fetch('/api/mongo-batch?action=incentiveAccessSave', { method:'POST', headers:{ 'Content-Type':'application/json' },
-    body:JSON.stringify({ action:'incentiveAccessSave', emails:emails, by:_incMyEmail() }) })
+    body:JSON.stringify({ action:'incentiveAccessSave', emails:emails, roles:roles, by:_incMyEmail() }) })
     .then(function(r){ return r.json(); })
-    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Save failed'); incAccess = { emails:d.emails, updatedBy:d.updatedBy, updatedAt:d.updatedAt }; incAccessErr = ''; })
+    .then(function(d){ if (!d || !d.success) throw new Error((d && d.error) || 'Save failed'); incAccess = { emails:d.emails, roles:d.roles || [], updatedBy:d.updatedBy, updatedAt:d.updatedAt }; incAccessErr = ''; })
     .catch(function(e){ incAccessErr = e.message || String(e); })
     .finally(function(){ render(); });
 }
@@ -6572,11 +6588,20 @@ function incAccessAdd(){
   if (!m) { incAccessErr = 'Pick a person from the list, or type their e-mail.'; render(); return; }
   var e = m[1].toLowerCase(), list = (incAccess ? incAccess.emails : []).slice();
   if (list.indexOf(e) === -1) list.push(e);
-  _incAccessSave(list);
+  _incAccessSave(list, null);
+}
+function incAccessRole(role, on){
+  var cur = (incAccess ? incAccess.roles || [] : []).filter(function(r){ return _incRoleKey(r) !== _incRoleKey(role); });
+  if (on) cur.push(role);
+  else {
+    var n = _incPeople().filter(function(p){ return _incRoleKey(p.role) === _incRoleKey(role); }).length;
+    if (!confirm('Take Summary access away from the ' + role + ' role' + (n ? ' (' + n + ' ' + (n === 1 ? 'person' : 'people') + ')' : '') + '? People added one by one keep it.')) { render(); return; }
+  }
+  _incAccessSave(null, cur);
 }
 function incAccessRemove(e){
   if (!confirm('Remove Summary access for ' + e + '?')) return;
-  _incAccessSave((incAccess ? incAccess.emails : []).filter(function(x){ return x !== e; }));
+  _incAccessSave((incAccess ? incAccess.emails : []).filter(function(x){ return x !== e; }), null);
 }
 
 function _incSum(){ return state.incSum || (state.incSum = { part:'all', zone:'', elig:'elig', sort:'inc', dir:-1, q:'', quarter:'', open:{} }); }
@@ -6711,7 +6736,7 @@ function incSummaryPage(){
     + '</div>'
     + '<span style="flex:1;"></span>'
     + '<button onclick="incSumExport()" class="btnq" style="'+pill+'">Export CSV</button>'
-    + (_incIsAdmin() ? '<button onclick="incAccessToggle()" class="btnq" style="'+pill+(state.incAccessOpen ? 'background:#E6EDF9;' : '')+'">Who can see this ('+(incAccess ? incAccess.emails.length : 0)+')</button>' : '')
+    + (_incIsAdmin() ? '<button onclick="incAccessToggle()" class="btnq" style="'+pill+(state.incAccessOpen ? 'background:#E6EDF9;' : '')+'">Who can see this ('+(orgData ? _incPeople().filter(function(p){ return _incAccessWhy(p.email, p.role); }).length : (incAccess ? incAccess.emails.length : 0))+')</button>' : '')
   + '</div>';
 
   // ── Access panel (Admins only) ──
@@ -6719,23 +6744,50 @@ function incSummaryPage(){
   if (_incIsAdmin() && state.incAccessOpen) {
     var people = _incPeople(), byE = {}; people.forEach(function(p){ byE[p.email] = p; });
     var list = incAccess ? incAccess.emails : [];
+    var roleN = {}; people.forEach(function(p){ var k = _incRoleKey(p.role); roleN[k] = (roleN[k] || 0) + 1; });
+    var who = people.map(function(p){ return { p:p, why:_incAccessWhy(p.email, p.role) }; }).filter(function(x){ return x.why; });
+    var WHY = { admin:['Admin','#1E3A66','#E6EDF9'], role:['By role','#6B3FA0','#F1ECF8'], person:['Added','#0B7A4B','#E7F6EE'] };
+    function roleChip(role, on, locked){
+      var n = roleN[_incRoleKey(role)] || 0;
+      return '<label style="display:inline-flex;align-items:center;gap:7px;border:1.5px solid '+(on ? '#B9A6DC' : '#D8E1F0')+';background:'+(on ? '#F6F2FC' : '#FFFFFF')+';border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:'+INK+';cursor:'+(locked ? 'default' : 'pointer')+';">'
+        + '<input type="checkbox"'+(on ? ' checked' : '')+(locked ? ' disabled' : ' data-r="'+esc(role)+'" onchange="incAccessRole(this.dataset.r, this.checked)"')+' style="accent-color:#6B3FA0;margin:0;">'
+        + esc(role)+' <span style="font-weight:600;color:'+MUTED+';">'+(orgData ? n : '…')+'</span>'+(locked ? ' <span style="font-weight:600;color:'+MUTED+';font-size:10.5px;">always</span>' : '')+'</label>';
+    }
     access = '<div style="'+card+'padding:14px 18px;margin-bottom:14px;">'
       + '<div style="font-size:12.5px;font-weight:800;color:'+NAVY+';">Who can see the Summary tab</div>'
-      + '<div style="font-size:11px;color:'+SUB+';margin-top:3px;">Admins always can. Everyone else needs to be added here (e.g. Management and Strategy). Changes apply the next time they open the page.</div>'
-      + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">'
+      + '<div style="font-size:11px;color:'+SUB+';margin-top:3px;">Tick a role to give everyone with that role access (roles as set in the Admin Panel), or add people one by one. Changes apply the next time they open the page.</div>'
+      + '<div style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:'+MUTED+';margin-top:12px;">By role</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">'
+        + roleChip('Admin', true, true)
+        + INC_ACCESS_ROLES.map(function(r){ return roleChip(r, _incRoleHas(r), false); }).join('')
+      + '</div>'
+      + '<div style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:'+MUTED+';margin-top:14px;">Added one by one</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">'
         + (list.length ? list.map(function(e){
             var p = byE[e];
             return '<span style="display:inline-flex;align-items:center;gap:6px;background:#F4F7FC;border:1px solid #D8E1F0;border-radius:999px;padding:4px 6px 4px 11px;font-size:11.5px;color:'+INK+';">'
               + '<b style="font-weight:700;">'+esc(p ? p.name : e)+'</b>'+(p ? '<span style="color:'+MUTED+';">'+esc(e)+'</span>' : '')
               + '<button data-e="'+esc(e)+'" onclick="incAccessRemove(this.dataset.e)" class="btnq" title="Remove access" aria-label="Remove access for '+esc(e)+'" style="border:none;background:#E3E9F2;color:#475569;border-radius:50%;width:18px;height:18px;font-size:11px;line-height:1;cursor:pointer;">×</button></span>';
-          }).join('') : '<span style="font-size:11.5px;color:'+MUTED+';">Nobody added yet. Only Admins see the Summary.</span>')
+          }).join('') : '<span style="font-size:11.5px;color:'+MUTED+';">Nobody added one by one.</span>')
       + '</div>'
-      + '<div style="display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap;">'
+      + '<div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap;">'
         + '<input id="incAccessInput" list="incAccessPeople" placeholder="Type a name or e-mail" onkeydown="if(event.key===\'Enter\')incAccessAdd()" style="flex:1;min-width:220px;max-width:420px;border:1.5px solid #D8E1F0;border-radius:8px;padding:7px 10px;font-size:12px;color:'+INK+';">'
-        + '<datalist id="incAccessPeople">'+people.filter(function(p){ return list.indexOf(p.email) === -1; }).map(function(p){ return '<option value="'+esc(p.name+' <'+p.email+'>')+'">'+esc(p.role)+'</option>'; }).join('')+'</datalist>'
+        + '<datalist id="incAccessPeople">'+people.filter(function(p){ return !_incAccessWhy(p.email, p.role); }).map(function(p){ return '<option value="'+esc(p.name+' <'+p.email+'>')+'">'+esc(p.role)+'</option>'; }).join('')+'</datalist>'
         + '<button onclick="incAccessAdd()" class="btnq" style="border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');cursor:pointer;">Give access</button>'
         + (!orgData ? '<span style="font-size:11px;color:'+MUTED+';">Loading people…</span>' : '')
       + '</div>'
+      // Everyone who sees it now, and why
+      + (orgData ? '<details style="margin-top:14px;"'+(state.incAccessWhoOpen ? ' open' : '')+' ontoggle="state.incAccessWhoOpen=this.open">'
+        + '<summary style="cursor:pointer;font-size:12px;font-weight:700;color:'+NAVY+';">'+who.length+' '+(who.length === 1 ? 'person sees' : 'people see')+' the Summary</summary>'
+        + '<div style="margin-top:8px;max-height:260px;overflow:auto;border:1px solid '+LINE+';border-radius:8px;">'
+          + '<table style="width:100%;border-collapse:collapse;font-size:11.5px;">'
+          + who.map(function(x){ var W = WHY[x.why];
+              return '<tr><td style="padding:6px 10px;border-bottom:1px solid #F0F3F8;color:'+INK+';font-weight:600;">'+esc(x.p.name)+'</td>'
+                + '<td style="padding:6px 10px;border-bottom:1px solid #F0F3F8;color:'+MUTED+';">'+esc(x.p.email)+'</td>'
+                + '<td style="padding:6px 10px;border-bottom:1px solid #F0F3F8;color:'+SUB+';">'+esc(x.p.role || '–')+'</td>'
+                + '<td style="padding:6px 10px;border-bottom:1px solid #F0F3F8;text-align:right;"><span style="font-size:10px;font-weight:800;color:'+W[1]+';background:'+W[2]+';border-radius:999px;padding:2px 8px;">'+W[0]+'</span></td></tr>';
+            }).join('')
+          + '</table></div></details>' : '')
       + (incAccessErr ? '<div style="font-size:11.5px;color:#B83A2B;font-weight:600;margin-top:8px;">'+esc(incAccessErr)+'</div>' : '')
       + (incAccess && incAccess.updatedBy ? '<div style="font-size:10.5px;color:'+MUTED+';margin-top:8px;">Last changed by '+esc(incAccess.updatedBy)+(incAccess.updatedAt ? ' on '+esc(new Date(incAccess.updatedAt).toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })) : '')+'</div>' : '')
     + '</div>';
