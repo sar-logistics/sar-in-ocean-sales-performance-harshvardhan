@@ -6270,17 +6270,19 @@ function _incentivePageInner(foldQ, pre){
       { label:'Management Fees (15%)', sub:true, ded:true, type:'cur', color:'#475569', vals:P.fee, total:P.feeT }
     ]);
     rows.push({ label:'Total Incentive', type:'inc', bold:true, primary:true, shade:true, color:'#6B3FA0', vals:P.inc, total:P.incT, rates:P.rate, rateT:P.rateT,
-      // The rate rules are shown once, in the table's header (rate legend); the rate badge says why it applies
-      isZone:!!ent.isZone });
+      // Each amount says why: this person's GP% and the rate it gives (rate table above the table)
+      isZone:!!ent.isZone, ach:P.ach, noTgt:!!noT });
     return rows;
   }
-  function fmtVal(v, p, r){
+  function fmtVal(v, p, r, a){
+    // Total Incentive, not eligible: say why instead of a bare dash
+    if (p.type === 'inc' && (v === null || v === undefined) && a != null && !p.noTgt)
+      return { t:'<span style="font-size:10.5px;font-weight:600;color:#A0AEC0;">'+a+'% GP · below 75%</span>', c:'#A0AEC0', dash:true };
     if (p.type === 'na' || v === null || v === undefined) return { t:'–', c:'#CBD3DF', dash:true };
-    // Total Incentive: the rate applied, then the amount
+    // Total Incentive: this person's GP% → the rate it gives, then the amount
     if (p.type === 'inc') {
-      var RT = p.isZone ? INC_RATES.zm : INC_RATES.sales;
-      var why = r == null ? '' : (p.isZone ? 'Zonal manager' : 'Sales rep') + ' rate ' + r + '%: GP% ' + (r === RT.t2 ? 'is 100% or more' : 'is 75–99.99%');
-      return { t:(r != null ? '<span title="'+esc(why)+'" style="font-size:9.5px;font-weight:600;color:#9A86C0;cursor:help;">'+r+'% · </span>' : '')+fmtCur(v), c:'#6B3FA0' };
+      var why = r == null ? '' : (a != null ? a + '% GP → ' : '') + r + '%';
+      return { t:(r != null ? '<span style="font-size:10.5px;font-weight:600;color:#8E7BB5;">'+why+' · </span>' : '')+fmtCur(v), c:'#6B3FA0' };
     }
     if (p.type === 'yn') return v ? { t:'✓ Yes', c:'#15875A' } : { t:'✕ No', c:'#C2410C' };
     if (p.ded) return { t:v > 0 ? '−' + fmtCur(v) : v < 0 ? '+' + fmtCur(-v) : fmtCur(0), c:v < 0 ? '#15875A' : '#475569' };
@@ -6294,9 +6296,7 @@ function _incentivePageInner(foldQ, pre){
   var head = '<tr>'
     + '<th style="position:sticky;left:0;z-index:3;background:#F0F4FA;text-align:left;color:#475569;'+thBase+'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';width:'+NAME_W+'px;min-width:'+NAME_W+'px;">Sales Rep</th>'
     + '<th style="position:sticky;left:'+NAME_W+'px;z-index:3;background:#F0F4FA;text-align:left;color:#475569;'+thBase+'box-shadow:inset -2px 0 0 '+BORDER_STRONG+';">Particulars'
-        // The incentive rate rules, once (each Total Incentive shows the rate it got)
-        +'<div title="Below 75% GP: not eligible" style="font-size:9px;font-weight:500;color:#8B97A8;margin-top:2px;text-transform:none;letter-spacing:0;white-space:normal;">'
-          +'Incentive rate: 75–99.99% GP · Sales '+INC_RATES.sales.t1+'%, ZM '+INC_RATES.zm.t1+'%  ·  100%+ GP · Sales '+INC_RATES.sales.t2+'%, ZM '+INC_RATES.zm.t2+'%</div></th>'
+        +'</th>'
     + heads.map(function(h){
         return '<th style="text-align:right;background:'+(groups ? '#FCF3DA' : '#F0F4FA')+';color:#475569;'+thBase+'border-right:1px solid '+BORDER+';">'
           +'<div style="font-size:11px;font-weight:800;color:'+(groups ? '#A8720E' : '#0D2B5E')+';">'+esc(h.top)+'</div>'
@@ -6370,7 +6370,7 @@ function _incentivePageInner(foldQ, pre){
       function wt(f){ return f.dash ? 400 : p.primary ? 800 : p.bold ? 700 : p.ded ? 500 : 600; }
       var fyCell = '<td'+drillAttrs(p.total, tot, 0)+' style="position:sticky;left:'+FY_LEFT+'px;z-index:2;'+cell+'background:'+(p.shade ? '#F5EDD3' : totBg)+';font-weight:'+wt(tot)+';color:'+tot.c+';box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">'+tot.t+'</td>';
       var mCells = p.vals.map(function(v, vi){
-        var f = B.blank && B.blank[vi] ? { t:'–', c:'#CBD3DF', dash:true } : fmtVal(v, p, p.rates ? p.rates[vi] : null);   // quarter not paid yet
+        var f = B.blank && B.blank[vi] ? { t:'–', c:'#CBD3DF', dash:true } : fmtVal(v, p, p.rates ? p.rates[vi] : null, p.ach ? p.ach[vi] : null);   // quarter not paid yet
         return '<td'+drillAttrs(v, f, vi + 1)+' style="'+cell+'background:'+bg+';border-right:1px solid '+BORDER+';font-weight:'+wt(f)+';color:'+f.c+';">'+f.t+'</td>';
       }).join('');
       return '<tr style="background:'+bg+';'+topBorder+'">'+nameCell+partCell+mCells+'</tr>';   // no Grand Total column
@@ -6396,7 +6396,20 @@ function _incentivePageInner(foldQ, pre){
   // The Summary tab reads these results; it never works the numbers out again
   window._incModel = { reps:reps, zones:zEnts, calc:calc, heads:heads };
   var allOpen = zones.length > 0 && zones.every(function(z){ return state.incZoneOpen && state.incZoneOpen[z.name]; });
-  return '<div style="padding:20px 24px 32px;">'
+  // How the incentive rate is decided: one small table, read across (GP% band) and down (who)
+  var rateCard = (function(){
+    var R = INC_RATES, td = 'padding:7px 18px;font-size:12px;border-top:1px solid #EEF1F6;text-align:center;';
+    function pc(v){ return '<b style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:800;color:#6B3FA0;">'+v+'%</b>'; }
+    var no = '<span style="color:#A0AEC0;font-weight:600;">Not eligible</span>';
+    return '<div style="display:inline-block;background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.06);margin-bottom:14px;overflow:hidden;">'
+      + '<table style="border-collapse:collapse;">'
+      + '<tr style="background:#F6F8FC;"><th style="padding:8px 18px;font-size:10.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#7A8AA3;text-align:left;">Incentive rate · GP achieved</th>'
+        + ['Below 75%', '75% – 99.99%', '100% or more'].map(function(h){ return '<th style="padding:8px 18px;font-size:11px;font-weight:700;color:#1E3A66;text-align:center;white-space:nowrap;">'+h+'</th>'; }).join('') + '</tr>'
+      + '<tr><td style="'+td+'text-align:left;font-weight:700;color:#14213D;">Sales rep</td><td style="'+td+'">'+no+'</td><td style="'+td+'">'+pc(R.sales.t1)+'</td><td style="'+td+'">'+pc(R.sales.t2)+'</td></tr>'
+      + '<tr><td style="'+td+'text-align:left;font-weight:700;color:#14213D;">Zonal manager <span style="font-weight:500;color:#8A9AB5;">(on the zone\'s GP)</span></td><td style="'+td+'">'+no+'</td><td style="'+td+'">'+pc(R.zm.t1)+'</td><td style="'+td+'">'+pc(R.zm.t2)+'</td></tr>'
+      + '</table></div>';
+  })();
+  return '<div style="padding:20px 24px 32px;">' + rateCard
     +'<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);width:100%;box-sizing:border-box;">'
       +'<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid '+BORDER+';flex-wrap:wrap;border-radius:12px 12px 0 0;">'
         +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Incentive</span>'
