@@ -3132,7 +3132,7 @@ function topbar(){
       // Filters — only on Sales Performance (sales page). Hidden entirely
       // for Sales Rep, since RLS already locks them to only their own
       // data — no filter selection could ever change what they see.
-      +(['admin','usage','org','teams','ar','incdemo'].indexOf(state.page) >= 0 || (currentUser && (currentUser.role||'').toLowerCase().trim()==='sales rep') ? '' : (function(){
+      +(state.page === 'incdemo' ? _incDemoFilterBar() : ['admin','usage','org','teams','ar','incdemo'].indexOf(state.page) >= 0 || (currentUser && (currentUser.role||'').toLowerCase().trim()==='sales rep') ? '' : (function(){
         var _isInsightPg = ['customers','agents','tradelane'].indexOf(state.page) >= 0;
         var activeCount = (_isInsightPg ? 0 : state.filterLobs.length) + state.filterReps.length + (state.filterZones||[]).length + (state.filterRegions||[]).length;
         var isFOpen = state.filtersOpen;
@@ -6809,7 +6809,7 @@ function incDemoFilter(k, v){
 }
 function _incDemoFilterBar(){
   var F = state.incDemoF || {}, any = F.region || F.zone || F.rep;
-  var sel = 'border:1.5px solid #D8E1F0;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;color:#1E3A66;background:#FFFFFF;cursor:pointer;';
+  var sel = 'border:1.5px solid #D8E1F0;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:700;font-family:inherit;color:#0D2B5E;background:#FFFFFF;cursor:pointer;box-shadow:0 1px 2px rgba(13,43,94,0.06),0 1px 1px rgba(13,43,94,0.04);';
   var regions = []; INC_DEMO_ZONES.forEach(function(z){ if (regions.indexOf(z.region) === -1) regions.push(z.region); });
   var zones = INC_DEMO_ZONES.filter(function(z){ return !F.region || z.region === F.region; });
   var reps = []; zones.filter(function(z){ return !F.zone || z.zone === F.zone; }).forEach(function(z){ z.reps.forEach(function(r){ reps.push(r.n + ' | ' + z.zone.split(' ')[0]); }); });
@@ -6817,12 +6817,11 @@ function _incDemoFilterBar(){
     return '<select aria-label="'+label+'" onchange="incDemoFilter(\''+k+'\', this.value)" style="'+sel+(F[k] ? 'border-color:#6488D6;background:#EEF3FC;' : '')+'">'
       + '<option value="">'+all+'</option>' + list.map(function(o){ var v = o.v || o, t = o.t || o; return '<option value="'+esc(v)+'"'+(F[k] === v ? ' selected' : '')+'>'+esc(t)+'</option>'; }).join('') + '</select>';
   }
-  return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:14px 24px 0;">'
-    + '<span style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#7A8AA3;">Filters</span>'
+  return '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">'
     + box('region', 'All regions', regions, 'Region')
     + box('zone', 'All zones', zones.map(function(z){ return { v:z.zone, t:z.zone }; }), 'Zone')
     + box('rep', 'All sales reps', reps, 'Sales rep')
-    + (any ? '<button onclick="state.incDemoF={region:\'\',zone:\'\',rep:\'\'};render();" class="btnq" style="border:none;background:transparent;color:#2C4E82;font-size:11.5px;font-weight:700;cursor:pointer;">Clear filters</button>' : '')
+    + (any ? '<button onclick="state.incDemoF={region:\'\',zone:\'\',rep:\'\'};render();" class="btnq" style="border:none;background:transparent;color:#2C4E82;font-size:11.5px;font-weight:700;cursor:pointer;">Clear</button>' : '')
   + '</div>';
 }
 function incDemoSetTab(t){ state.incDemoTab = t === 'summary' ? 'summary' : 'calc'; render(); }
@@ -6847,7 +6846,7 @@ function incDemoPage(){
       return _incentivePageInner(true, _incMergeQuarters([m], [Q]));
     });
   } finally { state.reportView = keep.reportView; state.dateFrom = keep.dateFrom; state.dateTo = keep.dateTo; window._incPay = keep.pay; window._incYearSel = keep.ys; }
-  return tabs + _incDemoFilterBar() + html;
+  return tabs + html;   // the demo's filters are in the top bar
 }
 
 /* ---------------------- Incentive: Targets tab ----------------------
@@ -10921,7 +10920,7 @@ function topbarHash(){
     state.weeklyDropOpen+'|'+state.quarterDropOpen+'|'+state.qyrDropOpen+'|'+state.yearTypeDropOpen+'|'+
     state.filtersOpen+'|'+state.filterLobDropOpen+'|'+state.filterRepDropOpen+'|'+state.filterZoneDropOpen+'|'+
     state.rateEditing+'|'+JSON.stringify(state.filterLobs)+'|'+JSON.stringify(state.filterReps)+'|'+JSON.stringify(state.filterZones||[])+'|'+
-    state.selectedQuarter+(state.page==='incentive' ? '|inc:'+state.incView : '');
+    state.selectedQuarter+(state.page==='incentive' ? '|inc:'+state.incView : '')+(state.page==='incdemo' ? '|demo:'+JSON.stringify(state.incDemoF||{}) : '');
 }
 
 var _renderScheduled = false;
