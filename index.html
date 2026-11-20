@@ -7061,8 +7061,9 @@ function incSummaryPage(){
     + '.incs-n{text-align:right;font-family:\'DM Mono\',monospace;font-variant-numeric:tabular-nums;}'
     + '.incs-th{position:sticky;top:0;z-index:2;background:#FFFFFF;padding:10px 16px;font-size:10.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#7A8AA3;border-bottom:1px solid #DCE3EE;white-space:nowrap;}'
     + '.incs-th.s{cursor:pointer;}.incs-th.s:hover{color:#1E3A66;}'
-    + '.incs-kv{display:flex;justify-content:space-between;gap:16px;padding:4px 0;font-size:12px;}'
-    + '.incs-kv span:first-child{color:#5B6678;flex-shrink:0;}.incs-kv > span:last-child{text-align:right;}.incs-kv span:last-child{font-family:\'DM Mono\',monospace;font-variant-numeric:tabular-nums;color:#14213D;}'
+    // Label wraps inside its own column; an amount never breaks; a text value (e.g. "Not eligible: …") may wrap
+    + '.incs-kv{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:4px 0;font-size:12px;}'
+    + '.incs-kv > span:first-child{color:#5B6678;flex:1 1 auto;min-width:0;overflow-wrap:anywhere;}.incs-kv > span:last-child{text-align:right;flex:0 0 auto;white-space:nowrap;}.incs-kv > span.w:last-child{flex:0 1 auto;max-width:65%;white-space:normal;}.incs-kv span:last-child{font-family:\'DM Mono\',monospace;font-variant-numeric:tabular-nums;color:#14213D;}'
     + '.incs-grp{font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#7A8AA3;margin-bottom:6px;}'
     + '.incs-z td{padding:11px 16px;border-bottom:1px solid #EEF2F7;font-size:12px;white-space:nowrap;}.incs-z{cursor:pointer;}.incs-z:hover{background:#F8FAFD;}'
     + '</style>';
@@ -7147,7 +7148,7 @@ function incSummaryPage(){
   function detail(r, Z){
     var RT = Z ? INC_RATES.zm : INC_RATES.sales;
     var ks = Object.keys(r.parts), two = ks.length > 1;
-    function kv(l, v, c, b){ return '<div class="incs-kv"><span'+(b ? ' style="color:'+INK+';font-weight:600;"' : '')+'>'+l+'</span><span style="'+(c ? 'color:'+c+';' : '')+(b ? 'font-weight:700;' : '')+'">'+v+'</span></div>'; }
+    function kv(l, v, c, b){ return '<div class="incs-kv"><span'+(b ? ' style="color:'+INK+';font-weight:600;"' : '')+'>'+l+'</span><span'+(/^<span/.test(v) ? ' class="w"' : '')+' style="'+(c ? 'color:'+c+';' : '')+(b ? 'font-weight:700;' : '')+'">'+v+'</span></div>'; }
     function why(k){ var P = r.parts[k]; return r.noTarget ? 'no target set' : P.ach == null ? 'no GP%' : 'GP% '+P.ach+'% is below 75%'; }
     var perf = kv('Target GP', r.noTarget ? '–' : fmtCur(r.tgt))
       + ks.map(function(k){ var P = r.parts[k]; return kv(partLabel(k)+' GP achieved', fmtCur(P.gp)) + kv(partLabel(k)+' GP%', P.ach == null ? '–' : P.ach+'%', achC(P.ach)); }).join('');
@@ -7173,10 +7174,11 @@ function incSummaryPage(){
         + (Z ? '<button data-z="'+esc(r.zone)+'" onclick="incSumZone(this.dataset.z)" class="btnq" style="border:none;background:transparent;color:#2C4E82;font-size:11.5px;font-weight:600;cursor:pointer;padding:0;">Show this zone\'s reps ↑</button>' : '')
         + '</div>'
       : '<div style="font-size:11px;color:'+MUTED+';margin-top:12px;">The Calculation tab shows the quarter being paid now ('+esc(pq.label)+'), so this quarter can\'t be opened there.</div>';
-    function grp(t, body){ return '<div style="min-width:0;"><div class="incs-grp">'+t+'</div>'+body+'</div>'; }
+    // Groups flow side by side and wrap to the next line when there isn't room; Final calculation gets the most
+    function grp(t, body, wide){ return '<div style="min-width:0;flex:'+(wide ? '2 1 340px' : '1 1 220px')+';"><div class="incs-grp">'+t+'</div>'+body+'</div>'; }
     return '<div style="margin:0 16px 14px 34px;padding:16px 20px;background:#FAFBFD;border:1px solid #E8EDF5;border-left:3px solid #C4B2E0;border-radius:0 8px 8px 0;">'
-      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px 36px;">'
-        + grp('Performance', perf) + grp('Incentive breakdown', brk) + grp('Final calculation', fin)
+      + '<div style="display:flex;flex-wrap:wrap;gap:18px 36px;">'
+        + grp('Performance', perf) + grp('Incentive breakdown', brk) + grp('Final calculation', fin, true)
         + (Z ? grp('Team', kv('Sales reps', String(Z.reps)) + kv('Eligible', String(Z.elig), '#15875A') + kv('Not eligible', String(Z.reps - Z.elig), MUTED)
               + kv('Sales reps\' incentive', fmtCur(Z.pay)) + kv('Avg per eligible rep', Z.elig ? fmtCur(Z.pay / Z.elig) : '–')
               + '<div style="border-top:1px solid '+LINE+';margin-top:6px;padding-top:4px;">' + kv('Zone total (reps + ZM)', fmtCur(Z.pay + Z.zm), PURPLE, true)
