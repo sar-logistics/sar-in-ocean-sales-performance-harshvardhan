@@ -8670,10 +8670,10 @@ function arDrillDrawer(){
     +       '</div>'
     +     '</div>'
     +     (dr.col === 'oa'
-            ? '<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:14px;">'
+            ? '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:6px;margin-top:14px;">'
               + card('On Account', _arFull(-agg.oa), '#946312', rows.length.toLocaleString('en-IN') + ' line' + (rows.length === 1 ? '' : 's') + ' · received, not yet adjusted')
               + '</div>'
-            : '<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:14px;">'
+            : '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:6px;margin-top:14px;">'
     +       card('Total Outstanding', _arFull(agg.total), '#2C4E82', agg.inv.toLocaleString('en-IN') + ' open invoice' + (agg.inv === 1 ? '' : 's'))
     +       card('Overdue', _arFull(overdue), '#D9534F', agg.total ? Math.round(overdue / agg.total * 100) + '% of outstanding' : '')
     +       card('Not Due', _arFull(agg.nd), '#15875A', 'within credit days')
