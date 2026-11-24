@@ -77,6 +77,16 @@ async function arPush(db, body) {
   return { status: 200, json: { success: true, inserted } };
 }
 
+// AR report spellings of a sales person that differ from their dashboard / mapping name (user, 24-Nov-2026).
+// Key: the AR name in lower case (as arNameKey gives it); value: the mapping / login name. Add more here.
+const AR_NAME_ALIASES = {
+  "estefani aguilar- nom": "Estefani Aguilar",
+  "mukesh jadeja - kae": "Jadeja Mukeshsinh",
+};
+function arAlias(salesPerson) {
+  return AR_NAME_ALIASES[arNameKey(salesPerson)] || salesPerson;
+}
+
 // Sales person → { zone, display } from the Ocean mapping sheet, the same
 // lookup the rest of the dashboard uses (FY27 row preferred; a zone of
 // "Unassigned" doesn't count). Not on the mapping → zone "Cross Sales".
@@ -96,6 +106,7 @@ async function loadRepLookup(db) {
     };
   }
   return function (salesPerson) {
+    salesPerson = arAlias(salesPerson);
     const norm = arNameKey(salesPerson);
     const a = byFy.FY27[norm], b = byFy.FY26[norm];
     const hit = (a && a.zone && a.zone !== "Unassigned") ? a : (b && b.zone && b.zone !== "Unassigned") ? b : null;
@@ -153,7 +164,7 @@ function buildArPayload(rows, repLookup, meta) {
       const rp = repLookup(r.salesPerson);
       dso.push([
         code("customer", r.customer),
-        code("sp", rp ? rp.display : String(r.salesPerson || "").split("|")[0].replace(/\.+\s*$/, "").trim()),
+        code("sp", rp ? rp.display : String(arAlias(r.salesPerson) || "").split("|")[0].replace(/\.+\s*$/, "").trim()),
         code("zone", rp ? rp.zone : "Cross Sales"),
         code("lob", arLobKey(r.lob, r.location)),
         num(r.dsoBill), num(r.dsoBillDays),
@@ -166,7 +177,7 @@ function buildArPayload(rows, repLookup, meta) {
     // Less than ₹1 left (e.g. 0.21 after rounding on a receipt) counts as settled
     if (Math.abs(o) < 1) continue;
     const rep = repLookup(r.salesPerson);
-    const spName = rep ? rep.display : String(r.salesPerson || "").split("|")[0].replace(/\.+\s*$/, "").trim();
+    const spName = rep ? rep.display : String(arAlias(r.salesPerson) || "").split("|")[0].replace(/\.+\s*$/, "").trim();
     const rcpt = day(r["Receipt Date"]);
     const endDay = o > 0 || rcpt === null ? asOnDay : rcpt;
     let od = r.overdueDays;
