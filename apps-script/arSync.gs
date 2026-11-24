@@ -27,7 +27,7 @@ const AR_SUMMARY_TAB = 'Ageing Receivable - Summary';
 const AR_MAP_TAB = 'GL Type Org Mapping';   // Organization → GL Type (Overseas Agent / Sub Agent / Shipper / Vendor)
 const AR_DEFAULT_API = 'https://sar-in-ocean-sales-performance.vercel.app/api/mongo-batch';
 // Shown in the execution log, so it's easy to tell which copy of this script ran
-const AR_SYNC_VERSION = '2026-11-24 (Logic tab: start date by LOB + GL Type Org Mapping; paid invoices for the Incentive page unchanged)';
+const AR_SYNC_VERSION = '2026-11-24b (Logic tab start dates; as-on date read from the data; paid invoices for the Incentive page unchanged)';
 const AR_CHUNK = 1000; // every column goes up, so keep each request well under Vercel's 4.5 MB body limit
 
 // sheet header → pushed field
@@ -159,7 +159,7 @@ function pushArToDashboard() {
   }
   Logger.log('Read ' + (values.length - 1) + ' rows, ' + rows.length + ' with outstanding; net total ' + total.toFixed(2));
 
-  const asOn = arAsOnDate_(src);
+  const asOn = arAsOnDate_(src, values, col);
 
   // DSO (simple average), paid invoices included (per customer / rep / LOB / location / GL group). Per invoice: days =
   //   (the LAST Receipt Date — incl. the no-Organization receipt lines under the invoice —
@@ -333,12 +333,34 @@ function arLob_(v) {
   return parts.filter(function (s, i) { return parts.indexOf(s) === i; }).join(' / ');
 }
 
-// TEMPORARY (user, 12-Nov-2026): the Summary tab title was not refreshed (still says 02-Nov-2026)
-// while the Accounts Receivable data is newer, so the as-on date is fixed to 11-Nov-2026 for now.
-const AR_AS_ON_OVERRIDE = '11-Nov-2026';
+// As-on date (24-Nov-2026): read from the AR data itself. The report counts Overdue Days up to its own
+// as-on date, so on each open invoice Trans. Date + Credit Days + Overdue Days = that date; the most
+// common answer wins. (The Summary tab title isn't always refreshed, and a fixed date goes stale.)
+// AR_AS_ON_OVERRIDE: put a 'dd-MMM-yyyy' date here only to force one by hand.
+const AR_AS_ON_OVERRIDE = '';
 
-function arAsOnDate_(src) {
+function arAsOnDate_(src, values, col) {
   if (AR_AS_ON_OVERRIDE) return AR_AS_ON_OVERRIDE;
+  const tz = Session.getScriptTimeZone();
+  if (values && col && col.transDate > -1 && col.creditDays > -1 && col.overdueDays > -1) {
+    const count = {};
+    let best = '', bestN = 0, n = 0;
+    for (let r = 1; r < values.length; r++) {
+      const row = values[r];
+      const td = row[col.transDate];
+      if (!(td instanceof Date) || isNaN(td.getTime()) || !(arNum_(row[col.outstanding]) > 0)) continue;
+      const cd = row[col.creditDays], od = row[col.overdueDays];
+      if (String(cd == null ? '' : cd).trim() === '' || String(od == null ? '' : od).trim() === '') continue;
+      const k = Utilities.formatDate(new Date(td.getFullYear(), td.getMonth(), td.getDate() + arNum_(cd) + arNum_(od)), tz, 'dd-MMM-yyyy');
+      count[k] = (count[k] || 0) + 1; n++;
+      if (count[k] > bestN) { bestN = count[k]; best = k; }
+    }
+    if (best && bestN >= n / 2) {
+      Logger.log('As-on date from the data: ' + best + ' (' + bestN + ' of ' + n + ' open invoices agree)');
+      return best;
+    }
+    Logger.log('As-on date: the data gives no clear answer (' + bestN + ' of ' + n + '), using the Summary tab title');
+  }
   const sum = src.getSheetByName(AR_SUMMARY_TAB);
   const title = sum ? String(sum.getRange(1, 1).getDisplayValue() || '') : '';
   const m = title.match(/as on(?: date)?\s+(\d{1,2}-[A-Za-z]{3}-\d{4})/i);

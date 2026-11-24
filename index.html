@@ -8477,6 +8477,25 @@ function _arDrillRerender(){
   if (inp && state.arDrill && state.arDrill.q) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
 }
 
+// Summarized LOB View (and its Excel sheet): the drill's lines per LOB, plus Average DSO per LOB
+// from the DSO totals of the same customer (or zone) in the same zone, paid invoices included
+// (same numbers as the main table's Avg DSO column)
+function _arDrillLobSummary(rows){
+  var dr = state.arDrill, isZone = !dr.customer;
+  var byLob = {}, order = [], tot = _arEmptyAgg();
+  var lobAgg = function(k){ if (!byLob[k]) { byLob[k] = _arEmptyAgg(); order.push(k); } return byLob[k]; };
+  rows.forEach(function(r){ _arAdd(lobAgg(r.lob || ''), r); _arAdd(tot, r); });
+  // Narrowed (opened from a slab / Due / Not Due column, or column filters on): only the LOBs shown get DSO.
+  // Otherwise a LOB with only paid invoices still gets its row for the Average DSO.
+  var narrowed = !!dr.col || _arDrillFilterCount() > 0;
+  _arVisibleRows(arDso || []).forEach(function(x){
+    if (x.z !== dr.zone || (!isZone && x.c !== dr.customer)) return;
+    if (narrowed && !byLob[x.lob || '']) return;
+    var a = lobAgg(x.lob || ''); a.dsoN += x.n; a.dsoD += x.days; tot.dsoN += x.n; tot.dsoD += x.days;
+  });
+  order.sort(function(a, b){ return (byLob[b].total - byLob[b].oa) - (byLob[a].total - byLob[a].oa); });
+  return { byLob:byLob, order:order, tot:tot };
+}
 function arDrillDrawer(){
   var dr = state.arDrill;
   if (!dr) return '';
@@ -8588,17 +8607,7 @@ function arDrillDrawer(){
   var view = dr.col === 'oa' ? 'inv' : (dr.view || 'lob');
   var lobTable = '';
   if (view === 'lob') {
-    var byLob = {}, lobOrder = [];
-    var lobAgg = function(k){ if (!byLob[k]) { byLob[k] = _arEmptyAgg(); lobOrder.push(k); } return byLob[k]; };
-    rows.forEach(function(r){ _arAdd(lobAgg(r.lob || ''), r); });
-    // Average DSO per LOB: the customer's (or zone's) own DSO totals, paid invoices included
-    var tot = _arEmptyAgg();
-    rows.forEach(function(r){ _arAdd(tot, r); });
-    _arVisibleRows(arDso || []).forEach(function(x){
-      if (isZone ? x.z !== dr.zone : x.c !== dr.customer) return;
-      var a = lobAgg(x.lob || ''); a.dsoN += x.n; a.dsoD += x.days; tot.dsoN += x.n; tot.dsoD += x.days;
-    });
-    lobOrder.sort(function(a, b){ return (byLob[b].total - byLob[b].oa) - (byLob[a].total - byLob[a].oa); });
+    var LS = _arDrillLobSummary(rows), byLob = LS.byLob, lobOrder = LS.order, tot = LS.tot;
     var lth = th.replace('position:sticky;top:0;z-index:2;', 'position:sticky;top:0;z-index:2;') + 'text-align:right;';
     var ltd = td + 'text-align:right;font-family:\'DM Mono\',monospace;';
     var amt = function(v){ return v ? _arFull(v) : '<span style="color:#C3CDDC;">–</span>'; };
@@ -8651,7 +8660,7 @@ function arDrillDrawer(){
     +         '<div style="font-size:11.5px;color:#6B82A0;font-weight:600;margin-top:3px;">'+sub.join(' · ')+'</div>'
     +       '</div>'
     +       viewSwitch
-    +       (nF && view === 'inv' ? '<button data-act="arPgDFReset" class="btnq" title="Remove every column filter" style="display:flex;align-items:center;gap:6px;border:1.5px solid #B7C8EA;background:#EEF3FC;border-radius:999px;padding:7px 13px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
+    +       (nF ? '<button data-act="arPgDFReset" class="btnq" title="Remove every column filter" style="display:flex;align-items:center;gap:6px;border:1.5px solid #B7C8EA;background:#EEF3FC;border-radius:999px;padding:7px 13px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
     +         nF + ' column filter' + (nF === 1 ? '' : 's') + ' <span style="color:#6B82A0;">· Clear</span></button>' : '')
     +       '<button data-act="arPgDrillExport" class="btnq" style="display:flex;align-items:center;gap:6px;border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:7px 13px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
     +         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Excel</button>'
@@ -8709,6 +8718,7 @@ function arExportDrill(){
     if (!dr.customer) o['Customer'] = r.c;
     o['Invoice No'] = r.txn || (isOa ? String(r.ty || 'On Account').replace(/\n/g, ' ') : '');
     o['Invoice Date'] = r.d || ''; o['Due Date'] = isOa ? '' : _arDueDate(r.bd || r.d, r.cd);
+    o['Ageing From'] = isOa ? '' : (r.bk ? r.bk + ' ' + r.bd : 'Trans. Date');
     AR_DETAIL_COLS.forEach(function(c){ o[c[0]] = String(_arDetVal(r, c)).replace(/\n/g, ', '); });
     o['LOB'] = r.lob;
     o['Bill Amount (INR)'] = Math.round(r.bill || 0); o['Outstanding (INR)'] = Math.round(r.o);
@@ -8716,6 +8726,20 @@ function arExportDrill(){
     return o;
   });
   var wb = XLSX.utils.book_new();
+  if (dr.col !== 'oa') {
+    // same numbers as the Summarized LOB View
+    var LS = _arDrillLobSummary(_arDrillRows());
+    var lobRow = function(label, a){
+      var o = { 'LOB': label, 'Net Outstanding': Math.round(a.total - a.oa) };
+      AR_BUCKETS.forEach(function(b){ o[b.label + ' days'] = Math.round(a[b.key]); });
+      o['Outstanding Due'] = Math.round(_arOverdue(a)); o['Not Due'] = Math.round(a.nd); o['On Account'] = -Math.round(a.oa);
+      o['Open Invoices'] = a.inv; o['Avg DSO (days)'] = a.dsoN ? Math.round(a.dsoD / a.dsoN * 100) / 100 : '';
+      return o;
+    };
+    var sum = LS.order.map(function(k){ return lobRow(AR_LOB_SHORT[k] || k || '(no LOB)', LS.byLob[k]); });
+    sum.push(lobRow('Total', LS.tot));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sum), 'LOB Summary');
+  }
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Invoices');
   XLSX.writeFile(wb, ('AR_' + (dr.col ? _arColTitle(dr.col).replace(/ days overdue$/, 'd') + '_' : '') + (dr.customer || dr.zone)).replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '_').slice(0, 60) + (arMeta && arMeta.asOn ? '_' + arMeta.asOn : '') + '.xlsx');
 }
