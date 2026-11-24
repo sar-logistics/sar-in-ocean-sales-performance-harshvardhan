@@ -27,7 +27,7 @@ const AR_SUMMARY_TAB = 'Ageing Receivable - Summary';
 const AR_MAP_TAB = 'GL Type Org Mapping';   // Organization → GL Type (Overseas Agent / Sub Agent / Shipper / Vendor)
 const AR_DEFAULT_API = 'https://sar-in-ocean-sales-performance.vercel.app/api/mongo-batch';
 // Shown in the execution log, so it's easy to tell which copy of this script ran
-const AR_SYNC_VERSION = '2026-11-24f (Logic tab start dates; writes the applied rule into the mapping Rule column; as-on from data; under Rs 1 settled; SEA+AIR = AIR; Incentive paid rows unchanged)';
+const AR_SYNC_VERSION = '2026-11-24g (Logic tab start dates; writes the applied rule into the mapping Rule column; as-on from data; under Rs 1 settled; SEA+AIR = AIR; Incentive paid rows unchanged)';
 const AR_CHUNK = 1000; // every column goes up, so keep each request well under Vercel's 4.5 MB body limit
 
 // sheet header → pushed field
@@ -321,18 +321,33 @@ function arReadOrgTypes_(src) {
   return out;
 }
 
-// Rule column text per organization, from the Logic tab's "Ageing Condition" column (C5:C8):
-//   Air: Overseas Agent / Sub Agent → C8 (ATD/ETD), other GL Types → C7 (Trans Date)
-//   Sea: OVR Receivable invoices → C6 (ATA/ETA), other GL groups → C5 (Trans Date)
+// Rule column text per organization, from the Logic tab's ageing table (found by content, not fixed cells):
+// each row whose first cell starts with SEA / AIR, its "Ageing Condition" text decides which rule it is
+//   Air: Overseas Agent / Sub Agent → the AIR row with ATD/ETD, other GL Types → the other AIR row (Trans Date)
+//   Sea: OVR Receivable invoices → the SEA row with ATA/ETA, other GL groups → the other SEA row (Trans Date)
 // Writes plain values, only the cells whose text changed.
 function arWriteOrgRules_(src, sh, v, ri, oi, ti) {
   if (ri < 0) { Logger.log('"' + AR_MAP_TAB + '" has no Rule column - nothing written'); return; }
   const lg = src.getSheetByName('Logic');
-  const c = lg ? lg.getRange('C5:C8').getDisplayValues().map(function (x) { return String(x[0] || '').trim(); }) : [];
-  const seaOther = c[0] || 'Receipt Date - (Trans Date + Credit Days)';
-  const seaOvr = c[1] || 'Receipt Date - (ATA/ETA + Credit Days)';
-  const airOther = c[2] || 'Receipt Date - (Trans Date + Credit Days)';
-  const airAgent = c[3] || 'Receipt Date - (ATD/ETD + Credit Days)';
+  const found = {};
+  if (lg) {
+    const lv = lg.getDataRange().getDisplayValues();
+    let ac = -1;
+    lv.forEach(function (row) {
+      const k = row.map(function (x) { return String(x).trim().toLowerCase(); }).indexOf('ageing condition');
+      if (k > -1 && ac < 0) ac = k;
+    });
+    if (ac > -1) lv.forEach(function (row) {
+      const lob = String(row[0] || '').trim().toUpperCase(), txt = String(row[ac] || '').trim();
+      if (!txt) return;
+      if (/^SEA/.test(lob)) found[/\bATA\b|\bETA\b/i.test(txt) ? 'seaOvr' : 'seaOther'] = txt;
+      else if (/^AIR/.test(lob)) found[/\bATD\b|\bETD\b/i.test(txt) ? 'airAgent' : 'airOther'] = txt;
+    });
+  }
+  const seaOther = found.seaOther || 'Receipt Date - (Trans Date + Credit Days)';
+  const seaOvr = found.seaOvr || 'Receipt Date - (ATA/ETA + Credit Days)';
+  const airOther = found.airOther || 'Receipt Date - (Trans Date + Credit Days)';
+  const airAgent = found.airAgent || 'Receipt Date - (ATD/ETD + Credit Days)';
   const out = [];
   let changed = 0;
   for (let r = 1; r < v.length; r++) {
@@ -344,7 +359,7 @@ function arWriteOrgRules_(src, sh, v, ri, oi, ti) {
     out.push([text]);
   }
   if (changed && out.length) sh.getRange(2, ri + 1, out.length, 1).setValues(out);
-  Logger.log('Rule column: ' + changed + ' of ' + out.length + ' rows updated' + (lg ? '' : ' (Logic tab not found, built-in text used)'));
+  Logger.log('Rule column: ' + changed + ' of ' + out.length + ' rows updated (Logic rows found: ' + Object.keys(found).length + ' of 4' + (Object.keys(found).length < 4 ? ', built-in text for the rest' : '') + ')');
 }
 
 // "1,234.00", "(456.00)", " ", -456, "(1)" → number
