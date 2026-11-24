@@ -98,7 +98,7 @@ function pushArToDashboard() {
     if (!org || org.toLowerCase() === 'total') continue;
     const u = usual[org] || (usual[org] = { sp: {}, lob: {} });
     const sp = col.salesPerson > -1 ? String(values[r][col.salesPerson] || '').trim() : '';
-    const lob = col.lob > -1 ? String(values[r][col.lob] || '').split('\n')[0].trim() : '';
+    const lob = col.lob > -1 ? arLob_(values[r][col.lob]).split(' / ')[0] : '';
     if (sp) u.sp[sp] = (u.sp[sp] || 0) + 1;
     if (lob) u.lob[lob] = (u.lob[lob] || 0) + 1;
   }
@@ -329,8 +329,11 @@ function arNum_(v) {
 
 // LOB cells sometimes repeat the same value on several lines ("AIR EXPORT\nAIR EXPORT");
 // keep each value once so they group as one LOB
+// A cell with both a SEA and an AIR LOB counts as AIR (user, 24-Nov-2026)
 function arLob_(v) {
   const parts = String(v == null ? '' : v).split(/\s*\n\s*/).map(function (s) { return s.trim(); }).filter(Boolean);
+  const air = parts.filter(function (s) { return /^AIR/i.test(s); })[0];
+  if (air && parts.some(function (s) { return /^SEA/i.test(s); })) return air;
   return parts.filter(function (s, i) { return parts.indexOf(s) === i; }).join(' / ');
 }
 

@@ -31,7 +31,10 @@ function arNameKey(name) {
 // Dashboard LOB keys (same as the LOB filter): SEA/AIR/ISOTANK EXPORT/IMPORT,
 // GENERAL for GEN invoices and rows with no LOB.
 function arLobKey(lob, location) {
-  const first = String(lob || "").split("\n")[0].trim().toUpperCase();
+  // a cell with both a SEA and an AIR LOB counts as AIR (user, 24-Nov-2026)
+  const parts = String(lob || "").split(/\s*\n\s*|\s+\/\s+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
+  const air = parts.find((s) => s.startsWith("AIR"));
+  const first = air && parts.some((s) => s.startsWith("SEA")) ? air : (parts[0] || "");
   if (String(location || "").trim().toLowerCase() === "iso tank") {
     return first.indexOf("IMPORT") > -1 ? "ISOTANK IMPORT" : "ISOTANK EXPORT";
   }
