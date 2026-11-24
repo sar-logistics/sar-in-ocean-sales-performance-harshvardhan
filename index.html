@@ -7582,6 +7582,19 @@ function _incBuildRun(q, held){
 //                           sheet's "On Account Total" lines, so either sign counts.
 // Total Outstanding = invoices · Net = Total − On Account.
 function _arIsOa(r){ return !String(r.txn || '').trim(); }
+// customer → { rep (normalized): { sp, z } } from invoice lines; rebuilt when the AR data reloads
+var _arRepOaCache = { rows:null, map:null };
+function _arRepOaMap(){
+  if (_arRepOaCache.rows === arRows) return _arRepOaCache.map;
+  var m = {};
+  (arRows || []).forEach(function(r){
+    if (_arIsOa(r) || !r.sp) return;
+    var c = m[r.c] || (m[r.c] = {}), k = normalizeName(r.sp);
+    if (!c[k]) c[k] = { sp: r.sp, z: r.z };
+  });
+  _arRepOaCache = { rows: arRows, map: m };
+  return m;
+}
 var arRows = null, arDso = [], arMeta = null, arDataReady = false, arDataLoading = false, arDataError = '';
 // fg = text / bar colour, bg = header tint
 var AR_COLORS = {
@@ -7717,6 +7730,18 @@ function _arVisibleRows(list, skipLob, skipType){
   var fgl = state.filterGl || [];
   var fty = skipType ? [] : (state.arTypes || []);
   var regionMap = window._zoneRegionMap || {};
+  // Sales Rep view: On Account lines have no Sales Person in the AR report (the sync gives them the customer's
+  // most frequent rep), so every rep with an invoice of that customer sees the customer's On Account too,
+  // under that rep's own zone (user, 24-Nov-2026). Managers / Admin still see each On Account line once.
+  if (scope && scope.reps && list === arRows) {
+    var oaFor = _arRepOaMap();
+    list = list.map(function(r){
+      if (!_arIsOa(r) || scope.reps.indexOf(normalizeName(r.sp)) > -1) return r;
+      var mine = null;
+      scope.reps.some(function(rep){ var x = (oaFor[r.c] || {})[rep]; if (x) { mine = x; return true; } return false; });
+      return mine ? Object.assign({}, r, { sp: mine.sp, z: mine.z }) : r;
+    });
+  }
   return list.filter(function(r){
     if (scope) {
       if (scope.reps && scope.reps.indexOf(normalizeName(r.sp)) === -1) return false;
