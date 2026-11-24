@@ -220,14 +220,15 @@ function pushArToDashboard() {
     if (rd && (!x.rd || rd > x.rd)) x.rd = rd;
     const os = arNum_(row[col.outstanding]);
     if (os > 0) x.open = true;
-    if (os < 0) x.neg = true;
+    if (os >= 1) x.dsoOpen = true;   // less than ₹1 left counts as settled for DSO
+    if (os <= -1) x.neg = true;
     last = x;
   }
   const dsoGroups = {};
   const paidRows = [];
   Object.keys(inv).forEach(function (k) {
     const x = inv[k];
-    const end = x.open || !x.rd ? asOnDate : x.rd;
+    const end = x.dsoOpen || !x.rd ? asOnDate : x.rd;
     // days from invoice (OVR: arrival) to receipt — no credit days; a receipt before that date → 0
     const days = Math.max(0, Math.round((end.getTime() - x.td.getTime()) / 86400000));
     const oldDays = Math.max(0, Math.round((end.getTime() - x.tdOld.getTime()) / 86400000));   // Incentive page only
@@ -238,7 +239,7 @@ function pushArToDashboard() {
     if (!x.open && x.rd && x.ref) paidRows.push({ customer: x.org, txnNo: x.txn, refNo: x.ref, outstanding: 0, _paid: true, payDays: oldDays,
       creditDays: x.cd, paidOverdueDays: Math.max(0, Math.round((x.rd.getTime() - x.tdOld.getTime()) / 86400000) - (x.cd || 0)),
       receiptDate: Utilities.formatDate(x.rd, tz, 'dd-MMM-yyyy') });
-    if (x.neg && !x.open) return;   // Logic tab: O/S < 0 → ignore for DSO
+    if (x.neg && !x.dsoOpen) return;   // Logic tab: O/S < 0 → ignore for DSO
     const gk = [x.org, x.sp, x.lob, x.loc, x.gl].join('\u0001');
     const g = dsoGroups[gk] || (dsoGroups[gk] = { customer: x.org, salesPerson: x.sp, lob: x.lob, location: x.loc, glGroup: x.gl,
       outstanding: 0, _dso: true, dsoBill: 0, dsoBillDays: 0, dsoDays: 0, dsoCount: 0 });

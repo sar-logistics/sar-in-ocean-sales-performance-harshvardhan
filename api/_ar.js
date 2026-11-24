@@ -160,17 +160,21 @@ function buildArPayload(rows, repLookup, meta) {
       continue;
     }
     const o = num(r.outstanding);
-    if (!o) continue;
+    // Less than ₹1 left (e.g. 0.21 after rounding on a receipt) counts as settled
+    if (Math.abs(o) < 1) continue;
     const rep = repLookup(r.salesPerson);
     const spName = rep ? rep.display : String(r.salesPerson || "").split("|")[0].replace(/\.+\s*$/, "").trim();
+    const rcpt = day(r["Receipt Date"]);
+    const endDay = o > 0 || rcpt === null ? asOnDay : rcpt;
     let od = r.overdueDays;
     if (od === null || od === undefined || od === "") {
-      od = (r.ageingDays !== null && r.ageingDays !== undefined && r.ageingDays !== "") ? num(r.ageingDays) - num(r.creditDays) : 0;
+      const td = day(r.transDate);
+      // report left Overdue Days blank: Ageing Days − Credit Days, or (both blank) end − (Trans. Date + Credit Days)
+      od = (r.ageingDays !== null && r.ageingDays !== undefined && r.ageingDays !== "") ? num(r.ageingDays) - num(r.creditDays)
+        : (td !== null && endDay !== null && String(r.txnNo || "").trim() ? endDay - td - num(r.creditDays) : 0);
     }
     const gl = String(r["GL Group Name"] || "").trim();
     let baseDate = "", baseKind = "";
-    const rcpt = day(r["Receipt Date"]);
-    const endDay = o > 0 || rcpt === null ? asOnDay : rcpt;
     if (r.arStartKind !== undefined && r.arStartKind !== null) {
       // Sync of 24-Nov-2026 on: the start date comes from the AR sheet's "Logic" tab rules (Sea OVR Receivable
       // in "GL Type Org Mapping" → ATA/ETA; Air Overseas/Sub Agents in the mapping → ATD/ETD; else Trans. Date).
