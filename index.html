@@ -7656,7 +7656,7 @@ function fetchArData(callback, force){
       arRows = (d.rows || []).map(function(r){
         return { c:D.customer[r[0]], sp:D.sp[r[1]], z:D.zone[r[2]], lob:D.lob[r[3]], br:D.branch[r[4]],
                  loc:D.location[r[5]], ty:D.type[r[6]], txn:r[7], d:r[8], bill:r[9], o:r[10],
-                 od:r[11], cd:r[12], h:r[13], jo:r[14], gl:(D.gl || [])[r[15]] || '', bd:r[16] || '' };
+                 od:r[11], cd:r[12], h:r[13], jo:r[14], gl:(D.gl || [])[r[15]] || '', bd:r[16] || '', bk:r[17] || '' };
       });
       // DSO totals per customer / rep / LOB (paid invoices included): Σ days and invoice count
       arDso = (d.dso || []).map(function(x){
@@ -7808,8 +7808,9 @@ function _arFull(v){
   var s = Math.abs(val).toLocaleString(state.currency === 'USD' ? 'en-US' : 'en-IN', { maximumFractionDigits:0 });
   return val < 0 ? '(' + sym + s + ')' : sym + s;
 }
-// Average DSO = Σ days ÷ number of invoices; days = last receipt (as-on while outstanding) − invoice date
-// (OVR Receivable: ATA, else ETA) — no credit days
+// Average DSO = Σ days ÷ number of invoices; days = last receipt (as-on while outstanding) − start date
+// (AR sheet "Logic" tab: Sea OVR Receivable in the GL Type Org Mapping → ATA/ETA, Air Overseas/Sub Agents
+// in the mapping → ATD/ETD, else Trans. Date) — no credit days; invoices with negative outstanding left out
 function _arDsoTxt(a){
   if (!a.dsoN) return '<span style="color:#D5DCE6;">–</span>';
   var v = a.dsoD / a.dsoN;
@@ -8562,7 +8563,7 @@ function arDrillDrawer(){
           + (isZone ? '<td'+fz(0)+' style="'+td+cb+'color:#15233B;font-weight:600;white-space:normal;min-width:180px;max-width:240px;">'+esc(r.c)+'</td>' : '')
           + '<td'+fz(k)+' style="'+td+cb+'font-weight:700;color:#15233B;">'+esc(r.txn || (isOa ? (r.ty || 'On Account').replace(/\n/g, ' · ') : '–'))+'</td>'
           + '<td'+fz(k + 1)+' style="'+td+cb+'color:#3C5275;">'+esc(r.d || '–')+'</td>'
-          + '<td'+fz(k + 2)+' style="'+td+cb+'color:#3C5275;"'+(r.bd ? ' title="OVR Receivable: due from arrival ('+esc(r.bd)+') + credit days"' : '')+'>'+(isOa ? '–' : esc(_arDueDate(r.bd || r.d, r.cd) || '–'))+'</td>'
+          + '<td'+fz(k + 2)+' style="'+td+cb+'color:#3C5275;"'+(r.bd ? ' title="Due from '+esc(r.bk || 'ATA/ETA')+' ('+esc(r.bd)+') + credit days"' : '')+'>'+(isOa ? '–' : esc(_arDueDate(r.bd || r.d, r.cd) || '–'))+'</td>'
           + AR_DETAIL_COLS.map(function(c, j){
               var v = _arDetVal(r, c);
               return '<td'+fz(k + 3 + j)+' style="'+td+(k + 3 + j < nFrozen ? cb : '')+'color:#3C5275;'+(c[2] ? 'white-space:normal;min-width:150px;max-width:230px;' : '')+(c[3] ? num : '')+'">'
@@ -8582,12 +8583,63 @@ function arDrillDrawer(){
     + '<td style="position:sticky;bottom:0;background:#E4ECF8;border-top:2px solid #C9D6E8;"></td>'
     + '</tr></tfoot></table>';
 
+  // Two views (AR sheet "Logic" tab): Summarized LOB View (default) and Invoice Level View.
+  // On Account drills only have the line list.
+  var view = dr.col === 'oa' ? 'inv' : (dr.view || 'lob');
+  var lobTable = '';
+  if (view === 'lob') {
+    var byLob = {}, lobOrder = [];
+    var lobAgg = function(k){ if (!byLob[k]) { byLob[k] = _arEmptyAgg(); lobOrder.push(k); } return byLob[k]; };
+    rows.forEach(function(r){ _arAdd(lobAgg(r.lob || ''), r); });
+    // Average DSO per LOB: the customer's (or zone's) own DSO totals, paid invoices included
+    var tot = _arEmptyAgg();
+    rows.forEach(function(r){ _arAdd(tot, r); });
+    _arVisibleRows(arDso || []).forEach(function(x){
+      if (isZone ? x.z !== dr.zone : x.c !== dr.customer) return;
+      var a = lobAgg(x.lob || ''); a.dsoN += x.n; a.dsoD += x.days; tot.dsoN += x.n; tot.dsoD += x.days;
+    });
+    lobOrder.sort(function(a, b){ return (byLob[b].total - byLob[b].oa) - (byLob[a].total - byLob[a].oa); });
+    var lth = th.replace('position:sticky;top:0;z-index:2;', 'position:sticky;top:0;z-index:2;') + 'text-align:right;';
+    var ltd = td + 'text-align:right;font-family:\'DM Mono\',monospace;';
+    var amt = function(v){ return v ? _arFull(v) : '<span style="color:#C3CDDC;">–</span>'; };
+    var lobRow = function(label, a, bold){
+      var bgc = bold ? 'background:#E4ECF8;font-weight:800;color:#0D2B5E;' : 'color:#15233B;';
+      return '<tr>'
+        + '<td style="'+td+bgc+'font-weight:'+(bold ? 800 : 700)+';">'+label+'</td>'
+        + '<td style="'+ltd+bgc+'font-weight:700;">'+amt(a.total - a.oa)+'</td>'
+        + AR_BUCKETS.map(function(b){ return '<td style="'+ltd+bgc+'">'+amt(a[b.key])+'</td>'; }).join('')
+        + '<td style="'+ltd+bgc+'">'+amt(_arOverdue(a))+'</td>'
+        + '<td style="'+ltd+bgc+'">'+amt(a.nd)+'</td>'
+        + '<td style="'+ltd+bgc+'">'+(a.oa ? _arFull(-a.oa) : '<span style="color:#C3CDDC;">–</span>')+'</td>'
+        + '<td style="'+ltd+bgc+'">'+(a.inv ? a.inv.toLocaleString('en-IN') : '<span style="color:#C3CDDC;">–</span>')+'</td>'
+        + '<td style="'+ltd+bgc+'">'+_arDsoTxt(a)+'</td>'
+        + '</tr>';
+    };
+    lobTable = '<table id="ard-lob" style="width:100%;border-collapse:separate;border-spacing:0;"><thead><tr>'
+      + '<th style="'+th+'text-align:left;">LOB</th>'
+      + '<th style="'+lth+'">Net Outstanding</th>'
+      + AR_BUCKETS.map(function(b){ return '<th style="'+lth+'">'+esc(b.label)+' days</th>'; }).join('')
+      + '<th style="'+lth+'">Outstanding Due</th><th style="'+lth+'">Not Due</th><th style="'+lth+'">On Account</th>'
+      + '<th style="'+lth+'">Open Invoices</th><th style="'+lth+'" title="Average DSO = Σ days ÷ invoices (paid invoices included)">Avg DSO (days)</th>'
+      + '</tr></thead><tbody>'
+      + (lobOrder.length ? lobOrder.map(function(k){ return lobRow(esc(lobLbl[k] || k || '(no LOB)'), byLob[k], false); }).join('')
+         : '<tr><td colspan="'+(AR_BUCKETS.length + 7)+'" style="padding:28px 16px;font-size:12.5px;font-weight:600;color:#8A9AB5;">No lines match the column filters.</td></tr>')
+      + '</tbody><tfoot>' + lobRow('Total', tot, true) + '</tfoot></table>';
+  }
+  var viewBtn = function(k, label){
+    var on = view === k;
+    return '<button data-act="arPgDView" data-val="'+k+'" style="border:none;padding:7px 13px;font-size:11.5px;font-weight:700;cursor:pointer;'
+      + (on ? 'background:'+BRAND_A1+';color:#fff;' : 'background:#fff;color:#2C4E82;')+'">'+label+'</button>';
+  };
+  var viewSwitch = dr.col === 'oa' ? '' : '<div style="display:flex;border:1.5px solid #D8E1F0;border-radius:999px;overflow:hidden;flex-shrink:0;">'
+    + viewBtn('lob', 'Summarized LOB View') + viewBtn('inv', 'Invoice Level View') + '</div>';
+
   var sub = isZone ? [custList.length.toLocaleString('en-IN') + ' customer' + (custList.length === 1 ? '' : 's')] : [esc(dr.zone)];
   var repList = Object.keys(reps);
   if (repList.length) sub.push(esc(repList.slice(0, 3).join(', ')) + (repList.length > 3 ? ' +' + (repList.length - 3) : ''));
   if (!isZone && creditDays !== undefined) sub.push('Credit ' + esc(creditDays) + ' days');
   if (arMeta && arMeta.asOn) sub.push('as on ' + esc(arMeta.asOn));
-  requestAnimationFrame(_arFreezeDrill);
+  if (view === 'inv') requestAnimationFrame(_arFreezeDrill);
 
   return '<div data-act="arPgDrillClose" style="position:fixed;inset:0;background:rgba(13,43,94,0.28);z-index:900;"></div>'
     + '<div data-stop="1" style="position:fixed;top:0;right:0;bottom:0;width:min(1440px,96vw);background:#F7F9FC;z-index:901;box-shadow:-12px 0 40px rgba(13,43,94,0.18);display:flex;flex-direction:column;">'
@@ -8598,7 +8650,8 @@ function arDrillDrawer(){
     +         '<div style="font-size:17px;font-weight:800;color:#15233B;">'+esc(isZone ? dr.zone : dr.customer)+'</div>'
     +         '<div style="font-size:11.5px;color:#6B82A0;font-weight:600;margin-top:3px;">'+sub.join(' · ')+'</div>'
     +       '</div>'
-    +       (nF ? '<button data-act="arPgDFReset" class="btnq" title="Remove every column filter" style="display:flex;align-items:center;gap:6px;border:1.5px solid #B7C8EA;background:#EEF3FC;border-radius:999px;padding:7px 13px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
+    +       viewSwitch
+    +       (nF && view === 'inv' ? '<button data-act="arPgDFReset" class="btnq" title="Remove every column filter" style="display:flex;align-items:center;gap:6px;border:1.5px solid #B7C8EA;background:#EEF3FC;border-radius:999px;padding:7px 13px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
     +         nF + ' column filter' + (nF === 1 ? '' : 's') + ' <span style="color:#6B82A0;">· Clear</span></button>' : '')
     +       '<button data-act="arPgDrillExport" class="btnq" style="display:flex;align-items:center;gap:6px;border:1.5px solid #D8E1F0;background:#fff;border-radius:999px;padding:7px 13px;font-size:11.5px;font-weight:700;color:#2C4E82;cursor:pointer;">'
     +         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Excel</button>'
@@ -8617,7 +8670,7 @@ function arDrillDrawer(){
     +     '</div>')
     +   '</div>'
     +   '<div style="flex:1;min-height:0;padding:12px 16px 16px;display:flex;flex-direction:column;">'
-    +     '<div id="ard-box" style="max-height:100%;overflow:auto;background:#FFFFFF;border:1px solid #E3EAF4;border-radius:12px;">'+table+'</div>'
+    +     '<div id="ard-box" style="max-height:100%;overflow:auto;background:#FFFFFF;border:1px solid #E3EAF4;border-radius:12px;">'+(view === 'lob' ? lobTable : table)+'</div>'
     +   '</div>'
     +   _arDrillMenu(cols)
     + '</div>';
@@ -8731,6 +8784,8 @@ function arHandleAct(act, el){
   } else if (act === 'arPgCust') {
     var c = (window._arCustIndex || [])[+v];
     if (c) { state.arDrill = { zone:c.zone, customer:c.customer, col:el.getAttribute('data-col') || '' }; render(); }
+  } else if (act === 'arPgDView') {
+    if (state.arDrill) { state.arDrill.view = v === 'inv' ? 'inv' : 'lob'; render(); }
   } else if (act === 'arPgDrillClose') {
     state.arDrill = null; render();
   } else if (act === 'arPgDSort') {

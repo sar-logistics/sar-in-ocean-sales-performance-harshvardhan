@@ -24,9 +24,10 @@
 const AR_SOURCE_ID = '1NQbaSffJzMZS6lNHjR6w7xQTCLQ_1X583b5PJ6bWcFI'; // Accounts Receivable sheet (read only)
 const AR_TAB = 'Accounts Receivable';
 const AR_SUMMARY_TAB = 'Ageing Receivable - Summary';
+const AR_MAP_TAB = 'GL Type Org Mapping';   // Organization → GL Type (Overseas Agent / Sub Agent / Shipper / Vendor)
 const AR_DEFAULT_API = 'https://sar-in-ocean-sales-performance.vercel.app/api/mongo-batch';
 // Shown in the execution log, so it's easy to tell which copy of this script ran
-const AR_SYNC_VERSION = '2026-11-17 (sends paid invoices for the Incentive page)';
+const AR_SYNC_VERSION = '2026-11-24 (Logic tab: start date by LOB + GL Type Org Mapping; paid invoices for the Incentive page unchanged)';
 const AR_CHUNK = 1000; // every column goes up, so keep each request well under Vercel's 4.5 MB body limit
 
 // sheet header → pushed field
@@ -108,6 +109,16 @@ function pushArToDashboard() {
   };
 
   const tz = Session.getScriptTimeZone();
+  // Start date for ageing / DSO (AR sheet "Logic" tab) — see arStartDate_
+  const orgType = arReadOrgTypes_(src);
+  const hx = function (h) { return headers.indexOf(h); };
+  const dIdx = { ATA: hx('ATA'), ETA: hx('ETA'), ATD: hx('ATD'), ETD: hx('ETD') };
+  const glIdx = hx('GL Group Name');
+  const asDate0 = function (v) { return v instanceof Date && !isNaN(v.getTime()) ? v : arParseDate_(v); };
+  const startOf = function (row, lob, org) {
+    const td = col.transDate > -1 ? asDate0(row[col.transDate]) : null;
+    return arStartDate_(lob, glIdx > -1 ? row[glIdx] : '', org, orgType, td, function (k) { return dIdx[k] > -1 ? asDate0(row[dIdx[k]]) : null; });
+  };
   const rows = [];
   let total = 0;
   for (let r = 1; r < values.length; r++) {
@@ -137,6 +148,12 @@ function pushArToDashboard() {
       if (!doc.lob) doc.lob = top(u.lob);
       doc.inherited = true;
     }
+    // invoices only (On Account lines have no Transaction No): the date ageing counts from
+    if (doc.txnNo) {
+      const st = startOf(row, doc.lob, org);
+      doc.arStart = st.date ? Utilities.formatDate(st.date, tz, 'dd-MMM-yyyy') : '';
+      doc.arStartKind = st.kind;
+    }
     rows.push(doc);
     total += outstanding;
   }
@@ -147,8 +164,9 @@ function pushArToDashboard() {
   // DSO (simple average), paid invoices included (per customer / rep / LOB / location / GL group). Per invoice: days =
   //   (the LAST Receipt Date — incl. the no-Organization receipt lines under the invoice —
   //    or the "as on" date while anything is still outstanding)
-  //   − Invoice Date (OVR Receivable: ATA, else ETA)
+  //   − the start date (arStartDate_: Trans. Date, or ATA/ETA / ATD/ETD per the Logic tab)
   // Credit days are NOT taken off (they only decide Outstanding Due / Not Due); 0 if negative.
+  // An invoice whose outstanding is negative (and nothing positive) is left out of DSO ("O/S < 0: Ignore").
   // Paid invoices have no outstanding so they aren't pushed as rows; instead one
   // small row per customer / sales person / LOB / location carries the totals
   // (_dso: true, outstanding 0 — pages that read outstanding rows skip it):
@@ -156,6 +174,7 @@ function pushArToDashboard() {
   //   (dsoBill = Σ Bill Amount, dsoBillDays = Σ (Bill Amount × days) are still sent, not shown)
   const asOnDate = arParseDate_(asOn) || new Date();
   const rdCol = headers.indexOf('Receipt Date');
+  // Paid invoices for the Incentive page keep the OLD rule (not part of the AR Logic tab change):
   // "OVR Receivable" (GL Group Name) counts from arrival: ATA, else ETA, else Trans. Date
   const glCol = headers.indexOf('GL Group Name'), ataCol = headers.indexOf('ATA'), etaCol = headers.indexOf('ETA');
   const ref2Col = headers.indexOf('Ref No.') > -1 ? headers.indexOf('Ref No.') : headers.indexOf('Ref No');
@@ -183,21 +202,25 @@ function pushArToDashboard() {
     if (!x) {
       const u = usual[org] || { sp: {}, lob: {} };
       const gl = glCol > -1 ? String(row[glCol] || '').trim() : '';
-      const base = gl.toLowerCase() === 'ovr receivable'
+      const oldBase = gl.toLowerCase() === 'ovr receivable'
         ? ((ataCol > -1 && asDate(row[ataCol])) || (etaCol > -1 && asDate(row[etaCol])) || td) : td;
+      const lobV = (col.lob > -1 ? arLob_(row[col.lob]) : '') || top(u.lob);
+      const st = startOf(row, lobV, org);
       x = inv[key] = {
-        org: org, txn: txn, bill: bill, td: base, rd: null, open: false, gl: gl,
+        org: org, txn: txn, bill: bill, td: st.date || td, tdOld: oldBase, rd: null, open: false, neg: false, gl: gl,
         ref: [col.refNo > -1 ? row[col.refNo] : '', ref2Col > -1 ? row[ref2Col] : '']
           .map(function (v) { return String(v == null ? '' : v).trim(); }).filter(Boolean).join('\n'),
         cd: col.creditDays > -1 ? arNum_(row[col.creditDays]) : 0,
         sp: (col.salesPerson > -1 ? String(row[col.salesPerson] || '').trim() : '') || top(u.sp),
-        lob: (col.lob > -1 ? arLob_(row[col.lob]) : '') || top(u.lob),
+        lob: lobV,
         loc: col.location > -1 ? String(row[col.location] || '').trim() : '',
       };
     }
     const rd = rdCol > -1 ? asDate(row[rdCol]) : null;
     if (rd && (!x.rd || rd > x.rd)) x.rd = rd;
-    if (arNum_(row[col.outstanding]) > 0) x.open = true;
+    const os = arNum_(row[col.outstanding]);
+    if (os > 0) x.open = true;
+    if (os < 0) x.neg = true;
     last = x;
   }
   const dsoGroups = {};
@@ -207,13 +230,15 @@ function pushArToDashboard() {
     const end = x.open || !x.rd ? asOnDate : x.rd;
     // days from invoice (OVR: arrival) to receipt — no credit days; a receipt before that date → 0
     const days = Math.max(0, Math.round((end.getTime() - x.td.getTime()) / 86400000));
+    const oldDays = Math.max(0, Math.round((end.getTime() - x.tdOld.getTime()) / 86400000));   // Incentive page only
     // Incentive page: a fully paid invoice with its shipment Ref No, how many days it took to be paid, and how
     // many days overdue it was when paid = last Receipt Date − (Trans. Date + Credit Days); for OVR Receivable
     // the base is the arrival (ATA, else ETA, else Trans. Date) — the same rule as the AR page; 0 if paid on time
     // (_paid: true, outstanding 0 — pages that read outstanding rows skip it)
-    if (!x.open && x.rd && x.ref) paidRows.push({ customer: x.org, txnNo: x.txn, refNo: x.ref, outstanding: 0, _paid: true, payDays: days,
-      creditDays: x.cd, paidOverdueDays: Math.max(0, Math.round((x.rd.getTime() - x.td.getTime()) / 86400000) - (x.cd || 0)),
+    if (!x.open && x.rd && x.ref) paidRows.push({ customer: x.org, txnNo: x.txn, refNo: x.ref, outstanding: 0, _paid: true, payDays: oldDays,
+      creditDays: x.cd, paidOverdueDays: Math.max(0, Math.round((x.rd.getTime() - x.tdOld.getTime()) / 86400000) - (x.cd || 0)),
       receiptDate: Utilities.formatDate(x.rd, tz, 'dd-MMM-yyyy') });
+    if (x.neg && !x.open) return;   // Logic tab: O/S < 0 → ignore for DSO
     const gk = [x.org, x.sp, x.lob, x.loc, x.gl].join('\u0001');
     const g = dsoGroups[gk] || (dsoGroups[gk] = { customer: x.org, salesPerson: x.sp, lob: x.lob, location: x.loc, glGroup: x.gl,
       outstanding: 0, _dso: true, dsoBill: 0, dsoBillDays: 0, dsoDays: 0, dsoCount: 0 });
@@ -253,6 +278,42 @@ function arParseDate_(s) {
   m = /^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/.exec(t);
   if (m && +m[2] >= 1 && +m[2] <= 12 && +m[1] >= 1 && +m[1] <= 31) return new Date(+m[3], +m[2] - 1, +m[1]);
   return null;
+}
+
+// Start date for ageing (Receipt/as-on − (start + Credit Days)) and DSO (Receipt/as-on − start),
+// from the AR sheet's "Logic" tab (24-Nov-2026):
+//   SEA EXPORT / SEA IMPORT: GL Group "OVR Receivable" AND the organization is in "GL Type Org Mapping" → ATA, else ETA
+//   AIR EXPORT / AIR IMPORT: the organization is in "GL Type Org Mapping" as Overseas Agent / Sub Agent → ATD, else ETD
+//   everything else (other LOBs, blank dates) → Trans. Date
+// get(k) returns the row's 'ATA' / 'ETA' / 'ATD' / 'ETD' as a Date (or null). Returns { date, kind }.
+function arStartDate_(lob, gl, org, orgType, transDate, get) {
+  const L = String(lob || '').split(/\s*\n\s*|\s+\/\s+/)[0].trim().toUpperCase();
+  const t = orgType[String(org || '').trim().toLowerCase()];
+  if (/^SEA/.test(L) && String(gl || '').trim().toLowerCase() === 'ovr receivable' && t) {
+    const ata = get('ATA'); if (ata) return { date: ata, kind: 'ATA' };
+    const eta = get('ETA'); if (eta) return { date: eta, kind: 'ETA' };
+  } else if (/^AIR/.test(L) && (t === 'overseas agent' || t === 'sub agent')) {
+    const atd = get('ATD'); if (atd) return { date: atd, kind: 'ATD' };
+    const etd = get('ETD'); if (etd) return { date: etd, kind: 'ETD' };
+  }
+  return { date: transDate, kind: 'Trans. Date' };
+}
+
+// "GL Type Org Mapping" tab → { organization (lower case): GL Type (lower case) }
+function arReadOrgTypes_(src) {
+  const sh = src.getSheetByName(AR_MAP_TAB);
+  if (!sh) { Logger.log('Tab "' + AR_MAP_TAB + '" not found - every invoice counts from Trans. Date'); return {}; }
+  const v = sh.getDataRange().getValues();
+  const h = v[0].map(function (x) { return String(x).trim().toLowerCase(); });
+  const oi = h.indexOf('organization'), ti = h.indexOf('gl type');
+  const out = {};
+  if (oi < 0 || ti < 0) { Logger.log('"' + AR_MAP_TAB + '" needs Organization and GL Type columns'); return out; }
+  for (let r = 1; r < v.length; r++) {
+    const o = String(v[r][oi] || '').trim().toLowerCase();
+    if (o) out[o] = String(v[r][ti] || '').trim().toLowerCase();
+  }
+  Logger.log(AR_MAP_TAB + ': ' + Object.keys(out).length + ' organizations');
+  return out;
 }
 
 // "1,234.00", "(456.00)", " ", -456, "(1)" → number

@@ -134,7 +134,8 @@ function buildArPayload(rows, repLookup, meta) {
 
   // [customer, salesPerson(display), zone, lob, branch, location, type,
   //  txnNo, transDate, billAmt, outstanding, overdueDays, creditDays, houseNo, jobOwner,
-  //  glGroup, baseDate (OVR Receivable: the ATA/ETA used instead of Trans. Date, else "")]
+  //  glGroup, baseDate (the ATA/ETA/ATD/ETD ageing counts from instead of Trans. Date, else ""),
+  //  baseKind ("ATA" / "ETA" / "ATD" / "ETD", else "")]
   // A sales person missing from the mapping keeps their report name, minus the "| INZ05" tag
   const out = [];
   // DSO totals (rows the sync marks _dso): [customer, sp, zone, lob, Σ bill, Σ bill × days, gl, Σ days, invoices]
@@ -167,14 +168,24 @@ function buildArPayload(rows, repLookup, meta) {
       od = (r.ageingDays !== null && r.ageingDays !== undefined && r.ageingDays !== "") ? num(r.ageingDays) - num(r.creditDays) : 0;
     }
     const gl = String(r["GL Group Name"] || "").trim();
-    let baseDate = "";
-    if (gl.toLowerCase() === "ovr receivable") {
+    let baseDate = "", baseKind = "";
+    const rcpt = day(r["Receipt Date"]);
+    const endDay = o > 0 || rcpt === null ? asOnDay : rcpt;
+    if (r.arStartKind !== undefined && r.arStartKind !== null) {
+      // Sync of 24-Nov-2026 on: the start date comes from the AR sheet's "Logic" tab rules (Sea OVR Receivable
+      // in "GL Type Org Mapping" → ATA/ETA; Air Overseas/Sub Agents in the mapping → ATD/ETD; else Trans. Date).
+      // Trans. Date lines keep the report's own Overdue Days; the others = end − (start + Credit Days)
+      if (r.arStartKind !== "Trans. Date" && day(r.arStart) !== null) {
+        baseDate = fmt(r.arStart); baseKind = String(r.arStartKind);
+        if (endDay !== null) od = endDay - day(baseDate) - num(r.creditDays);
+      }
+    } else if (gl.toLowerCase() === "ovr receivable") {
+      // rows pushed before that sync: the old rule (every OVR Receivable line counts from ATA/ETA)
       const ata = String(r.ATA || "").trim(), eta = String(r.eta || "").trim();
       baseDate = day(ata) !== null ? fmt(ata) : day(eta) !== null ? fmt(eta) : "";
+      baseKind = day(ata) !== null ? "ATA" : day(eta) !== null ? "ETA" : "";
       // Overdue days = end − (ATA/ETA + Credit Days); end = the "as on" date while anything is
       // still outstanding (part-paid too), else the Receipt Date
-      const rcpt = day(r["Receipt Date"]);
-      const endDay = o > 0 || rcpt === null ? asOnDay : rcpt;
       if (baseDate && endDay !== null) od = endDay - day(baseDate) - num(r.creditDays);
     }
     out.push([
@@ -195,6 +206,7 @@ function buildArPayload(rows, repLookup, meta) {
       String(r.jobOwner || ""),
       code("gl", gl),
       baseDate,
+      baseKind,
     ]);
   }
   return {
@@ -218,7 +230,7 @@ async function arGet(db, force, deployTs) {
   const key = meta.currentBatch + "|" + deployTs;
   if (!force && arCache && arCache.key === key) return arCache.data;
   const [rows, repLookup] = await Promise.all([
-    db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch, _paid: { $ne: true } }, { projection: { _id: 0, customer: 1, salesPerson: 1, lob: 1, location: 1, branch: 1, type: 1, txnNo: 1, transDate: 1, billAmt: 1, outstanding: 1, overdueDays: 1, ageingDays: 1, creditDays: 1, houseNo: 1, jobOwner: 1, _dso: 1, dsoBill: 1, dsoBillDays: 1, dsoDays: 1, dsoCount: 1, glGroup: 1, "GL Group Name": 1, ATA: 1, eta: 1, "Receipt Date": 1 } }).toArray(),
+    db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch, _paid: { $ne: true } }, { projection: { _id: 0, customer: 1, salesPerson: 1, lob: 1, location: 1, branch: 1, type: 1, txnNo: 1, transDate: 1, billAmt: 1, outstanding: 1, overdueDays: 1, ageingDays: 1, creditDays: 1, houseNo: 1, jobOwner: 1, _dso: 1, dsoBill: 1, dsoBillDays: 1, dsoDays: 1, dsoCount: 1, glGroup: 1, "GL Group Name": 1, ATA: 1, eta: 1, "Receipt Date": 1, arStart: 1, arStartKind: 1 } }).toArray(),
     loadRepLookup(db),
   ]);
   const data = buildArPayload(rows, repLookup, meta);
