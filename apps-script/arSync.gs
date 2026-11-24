@@ -27,7 +27,7 @@ const AR_SUMMARY_TAB = 'Ageing Receivable - Summary';
 const AR_MAP_TAB = 'GL Type Org Mapping';   // Organization → GL Type (Overseas Agent / Sub Agent / Shipper / Vendor)
 const AR_DEFAULT_API = 'https://sar-in-ocean-sales-performance.vercel.app/api/mongo-batch';
 // Shown in the execution log, so it's easy to tell which copy of this script ran
-const AR_SYNC_VERSION = '2026-11-24b (Logic tab start dates; as-on date read from the data; paid invoices for the Incentive page unchanged)';
+const AR_SYNC_VERSION = '2026-11-24e (Logic tab start dates + mapping Rule column; as-on from data; under Rs 1 settled; SEA+AIR = AIR; Incentive paid rows unchanged)';
 const AR_CHUNK = 1000; // every column goes up, so keep each request well under Vercel's 4.5 MB body limit
 
 // sheet header → pushed field
@@ -286,34 +286,51 @@ function arParseDate_(s) {
 //   SEA EXPORT / SEA IMPORT: GL Group "OVR Receivable" AND the organization is in "GL Type Org Mapping" → ATA, else ETA
 //   AIR EXPORT / AIR IMPORT: the organization is in "GL Type Org Mapping" as Overseas Agent / Sub Agent → ATD, else ETD
 //   everything else (other LOBs, blank dates) → Trans. Date
+// When the mapping's "Rule" column is filled for the organization (the user's lookup of the Logic tab's Ageing
+// text, e.g. "Receipt Date - (ATA/ETA + Credit Days)"), it decides instead, for its own LOB only:
+//   ATA/ETA → Sea lines, ATD/ETD → Air lines; anything else (e.g. Trans Date) → Trans. Date
 // get(k) returns the row's 'ATA' / 'ETA' / 'ATD' / 'ETD' as a Date (or null). Returns { date, kind }.
 function arStartDate_(lob, gl, org, orgType, transDate, get) {
   const L = String(lob || '').split(/\s*\n\s*|\s+\/\s+/)[0].trim().toUpperCase();
-  const t = orgType[String(org || '').trim().toLowerCase()];
-  if (/^SEA/.test(L) && String(gl || '').trim().toLowerCase() === 'ovr receivable' && t) {
+  const key = String(org || '').trim().toLowerCase();
+  const t = orgType[key];
+  const rule = (orgType._rules || {})[key] || '';
+  const sea = /^SEA/.test(L), air = /^AIR/.test(L);
+  let use = '';
+  if (rule) {
+    if (sea && /\bATA\b|\bETA\b/i.test(rule)) use = 'SEA';
+    else if (air && /\bATD\b|\bETD\b/i.test(rule)) use = 'AIR';
+  } else if (sea && String(gl || '').trim().toLowerCase() === 'ovr receivable' && t) use = 'SEA';
+  else if (air && (t === 'overseas agent' || t === 'sub agent')) use = 'AIR';
+  if (use === 'SEA') {
     const ata = get('ATA'); if (ata) return { date: ata, kind: 'ATA' };
     const eta = get('ETA'); if (eta) return { date: eta, kind: 'ETA' };
-  } else if (/^AIR/.test(L) && (t === 'overseas agent' || t === 'sub agent')) {
+  } else if (use === 'AIR') {
     const atd = get('ATD'); if (atd) return { date: atd, kind: 'ATD' };
     const etd = get('ETD'); if (etd) return { date: etd, kind: 'ETD' };
   }
   return { date: transDate, kind: 'Trans. Date' };
 }
 
-// "GL Type Org Mapping" tab → { organization (lower case): GL Type (lower case) }
+// "GL Type Org Mapping" tab → { organization (lower case): GL Type (lower case) }, plus a hidden ._rules
+// { organization (lower case): Rule text } for the organizations whose "Rule" column is filled
 function arReadOrgTypes_(src) {
+  const out = {}, rules = {};
+  Object.defineProperty(out, '_rules', { value: rules, enumerable: false });
   const sh = src.getSheetByName(AR_MAP_TAB);
-  if (!sh) { Logger.log('Tab "' + AR_MAP_TAB + '" not found - every invoice counts from Trans. Date'); return {}; }
+  if (!sh) { Logger.log('Tab "' + AR_MAP_TAB + '" not found - every invoice counts from Trans. Date'); return out; }
   const v = sh.getDataRange().getValues();
   const h = v[0].map(function (x) { return String(x).trim().toLowerCase(); });
-  const oi = h.indexOf('organization'), ti = h.indexOf('gl type');
-  const out = {};
+  const oi = h.indexOf('organization'), ti = h.indexOf('gl type'), ri = h.indexOf('rule');
   if (oi < 0 || ti < 0) { Logger.log('"' + AR_MAP_TAB + '" needs Organization and GL Type columns'); return out; }
   for (let r = 1; r < v.length; r++) {
     const o = String(v[r][oi] || '').trim().toLowerCase();
-    if (o) out[o] = String(v[r][ti] || '').trim().toLowerCase();
+    if (!o) continue;
+    out[o] = String(v[r][ti] || '').trim().toLowerCase();
+    const rule = ri > -1 ? String(v[r][ri] == null ? '' : v[r][ri]).trim() : '';
+    if (rule && !/^#/.test(rule)) rules[o] = rule;   // skips formula errors like #N/A
   }
-  Logger.log(AR_MAP_TAB + ': ' + Object.keys(out).length + ' organizations');
+  Logger.log(AR_MAP_TAB + ': ' + Object.keys(out).length + ' organizations, ' + Object.keys(rules).length + ' with a Rule');
   return out;
 }
 
