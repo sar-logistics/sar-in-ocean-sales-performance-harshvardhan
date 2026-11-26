@@ -6256,6 +6256,9 @@ function _incentivePageInner(foldQ, pre){
         rate: rate, rateT: rateT, surplus: sur, noFee: noFee,
         sur: surC, surT: surT,
         bar: sur ? gp.map(function(g, i){ return okC[i] ? barOf(g, e.tgt[i]) : null; }) : null, barT: sur && okT ? barOf(sum(gp), sum(e.tgt)) : null,
+        // which bar applies (75 or 100, % of Target GP), per column and for the total
+        barPct: sur ? gp.map(function(g, i){ return okC[i] && e.tgt[i] > 0 ? (g / e.tgt[i] >= 1 ? 100 : 75) : null; }) : null,
+        barPctT: sur && okT && sum(e.tgt) > 0 ? (sum(gp) / sum(e.tgt) >= 1 ? 100 : 75) : null,
         inc: net.map(function(g, i){ return okC[i] ? (sur ? payOf(surC[i], rate[i]) : incOf(g, rate[i])) : null; }), incT: okT ? (sur ? payOf(surT, rateT) : incOf(N, rateT)) : null,
         gp: gp, ach: ach, achT: achT, elig: ach.map(yn), eligT: yn(achT),
         rm: rm, rmT: rmT, ships: ships, all: gate(all), allT: gateT(all), shipsAll: shipsAll,
@@ -6287,8 +6290,11 @@ function _incentivePageInner(foldQ, pre){
     }), P.noFee ? [] : [
       { label:'Management Fees (15%)', sub:true, ded:true, type:'cur', color:'#475569', vals:P.fee, total:P.feeT }
     ]);
+    // Bar label: the % that applies (75 or 100); both only if the columns differ, "75% / 100%" if not eligible
+    var bp = P.surplus ? (P.barPct || []).concat([P.barPctT]).filter(function(v){ return v != null; }) : [];
+    var bpL = bp.length && bp.every(function(v){ return v === bp[0]; }) ? bp[0] + '%' : '75% / 100%';
     if (P.surplus) rows.push(
-      { label:'Bar (75% / 100% of Target GP)', sub:true, ded:true, type:'cur', color:'#475569', vals:P.bar, total:P.barT },
+      { label:'Bar ('+bpL+' of Target GP)', sub:true, ded:true, type:'cur', color:'#475569', vals:P.bar, total:P.barT },
       { label:'Surplus (Final GP − Bar)', type:'cur', bold:true, shade:true, color:'#0B5E7A', vals:P.sur, total:P.surT });
     rows.push({ label:'Total Incentive', type:'inc', bold:true, primary:true, shade:true, color:'#6B3FA0', vals:P.inc, total:P.incT, rates:P.rate, rateT:P.rateT,
       // Each amount says why: this person's GP% and the rate it gives (rate table above the table)
