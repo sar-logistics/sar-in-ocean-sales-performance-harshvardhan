@@ -5818,11 +5818,12 @@ var INC_MGMT_FEE_PCT = 0.15; // Management fees: 15% of GP
 // The tier uses the level's own GP% for that period and part (Core / Cross). Below 75%: not eligible, no incentive.
 var INC_RATES = { sales:{ t1:3, t2:7 }, zm:{ t1:2, t2:3 } };
 function _incRate(level, gp, tgt){ var R = INC_RATES[level]; return R && tgt > 0 ? (gp / tgt >= 1 ? R.t2 : R.t1) : null; }
-// Sales reps (Incentive Demo only for now, user 26-Nov-2026): the rate is paid on the SURPLUS, not on Final GP.
-// Surplus = Final GP after Deductions − the bar: 75% of GP Target at 75–99.99%, 100% of GP Target at 100%+.
-// 0 or negative → no incentive. Zonal managers keep the rate on Final GP.
+// Sales reps (user 26-Nov-2026, Incentive Demo first, then everywhere): the rate is paid on the SURPLUS, not on
+// Final GP. Surplus = Final GP after Deductions − the bar: 75% of GP Target at 75–99.99%, 100% of GP Target at 100%+.
+// 0 or negative → no incentive. Zonal managers: rate on the zone's Final GP, with no management fees.
+// Also applied by the server's payout runs (api/_incentive.js, rules.surplusBar).
 var INC_SURPLUS_BAR = { t1:0.75, t2:1 };
-function _incSurplusOn(){ return typeof state !== 'undefined' && state.page === 'incdemo'; }
+function _incSurplusOn(){ return true; }
 var INC_MIN_ACHV = 75;        // Outstanding GP, fees and everything after them only apply from this ACHV % (GP ÷ GP Target)
 var INC_CORE_LOBS = ['SEA EXPORT', 'SEA IMPORT']; // Core; every other LOB is Cross
 // GP taken off before fees, once the target is met. A job counts under the first reason that fits, so the
@@ -6237,7 +6238,7 @@ function _incentivePageInner(foldQ, pre){
         ships[r.k] = isCore ? R.shipCore : R.ship - R.shipCore; shipsAll += ships[r.k];
       });
       var net = minus(gp, all), N = sum(net);
-      // Zonal managers (Incentive Demo only for now, user 26-Nov-2026): no management fees on the zone's GP
+      // Zonal managers (user 26-Nov-2026): no management fees on the zone's GP
       var noFee = !!e.isZone && _incSurplusOn();
       function feeOf(g){ return noFee ? 0 : fee(g); }
       // Rate per period (only where eligible), and the incentive on Final GP (nothing on a negative Final GP)
@@ -7598,7 +7599,7 @@ function _incBuildRun(q, held){
     action:'incentiveRunSave', quarter:q.key, label:q.label, months:q.months, mode:'trial',
     asOn:incOutMeta && incOutMeta.asOn, arPaidDocs:incOutMeta ? incOutMeta.paidDocs : 0,
     by:currentUser ? { name:currentUser.name || '', email:currentUser.email || '' } : null,
-    rules:{ lobs:INC_RUN_LOBS, minAchv:INC_MIN_ACHV, feePct:INC_MGMT_FEE_PCT, lateDays:(incOutMeta && incOutMeta.lateDays) || 30, rates:INC_RATES, coreLobs:INC_CORE_LOBS },
+    rules:{ lobs:INC_RUN_LOBS, minAchv:INC_MIN_ACHV, feePct:INC_MGMT_FEE_PCT, lateDays:(incOutMeta && incOutMeta.lateDays) || 30, rates:INC_RATES, coreLobs:INC_CORE_LOBS, surplusBar:_incSurplusOn() ? INC_SURPLUS_BAR : null },
     reps:repsOut, ships:Object.keys(ships).map(function(k){ var x = ships[k]; x.gp = Math.round(x.gp * 100) / 100; return x; }),
     recheck:recheck, checks:{ spGp:spGp, unassignedGp:unassignedGp, unassignedRows:unassignedRows }
   };

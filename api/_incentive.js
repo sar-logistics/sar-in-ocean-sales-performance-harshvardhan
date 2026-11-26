@@ -321,7 +321,9 @@ async function incentiveRunSave(db, body) {
     add(Object.assign(e, { status: "paid", why: null, closed: mode === "final" }));
   }
 
-  // 3. Per rep: the base paid on = paid GP; fees 15% of it (when positive); incentive = rate × what is left
+  // 3. Per rep: the base paid on = paid GP; fees 15% of it (when positive); final = what is left.
+  //    rules.surplusBar (runs from 26-Nov-2026): incentive = rate × (final − bar × GP Target), bar = 75% at
+  //    75–99.99% GP%, 100% at 100%+; 0 or negative pays nothing. Without it (older runs): rate × final.
   const repsOut = Object.values(repInfo).map((x) => {
     for (const p of PARTS) {
       const P = x[p];
@@ -330,7 +332,12 @@ async function incentiveRunSave(db, body) {
       P.fee = r2(Math.max(0, P.paid) * rules.feePct);
       P.final = r2(P.paid - P.fee);
       P.rate = salesRate && P.elig && P.tgt > 0 ? (P.gp / P.tgt >= 1 ? salesRate.t2 : salesRate.t1) : null;
-      P.incentive = P.rate == null ? null : r2(Math.max(0, P.final) * P.rate / 100);
+      const SB = rules.surplusBar;
+      if (SB && P.rate != null) {
+        P.bar = r2((P.gp / P.tgt >= 1 ? SB.t2 : SB.t1) * P.tgt);
+        P.surplus = r2(P.final - P.bar);
+      }
+      P.incentive = P.rate == null ? null : r2(Math.max(0, SB ? P.surplus : P.final) * P.rate / 100);
       // Every rupee of the rep's GP this quarter is in exactly one bucket
       P.gap = r2(P.gp - P.shipGp);
     }
