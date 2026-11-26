@@ -5818,6 +5818,11 @@ var INC_MGMT_FEE_PCT = 0.15; // Management fees: 15% of GP
 // The tier uses the level's own GP% for that period and part (Core / Cross). Below 75%: not eligible, no incentive.
 var INC_RATES = { sales:{ t1:3, t2:7 }, zm:{ t1:2, t2:3 } };
 function _incRate(level, gp, tgt){ var R = INC_RATES[level]; return R && tgt > 0 ? (gp / tgt >= 1 ? R.t2 : R.t1) : null; }
+// Sales reps (Incentive Demo only for now, user 26-Nov-2026): the rate is paid on the SURPLUS, not on Final GP.
+// Surplus = Final GP after Deductions − the bar: 75% of GP Target at 75–99.99%, 100% of GP Target at 100%+.
+// 0 or negative → no incentive. Zonal managers keep the rate on Final GP.
+var INC_SURPLUS_BAR = { t1:0.75, t2:1 };
+function _incSurplusOn(){ return typeof state !== 'undefined' && state.page === 'incdemo'; }
 var INC_MIN_ACHV = 75;        // Outstanding GP, fees and everything after them only apply from this ACHV % (GP ÷ GP Target)
 var INC_CORE_LOBS = ['SEA EXPORT', 'SEA IMPORT']; // Core; every other LOB is Cross
 // GP taken off before fees, once the target is met. A job counts under the first reason that fits, so the
@@ -6232,19 +6237,31 @@ function _incentivePageInner(foldQ, pre){
         ships[r.k] = isCore ? R.shipCore : R.ship - R.shipCore; shipsAll += ships[r.k];
       });
       var net = minus(gp, all), N = sum(net);
+      // Zonal managers (Incentive Demo only for now, user 26-Nov-2026): no management fees on the zone's GP
+      var noFee = !!e.isZone && _incSurplusOn();
+      function feeOf(g){ return noFee ? 0 : fee(g); }
       // Rate per period (only where eligible), and the incentive on Final GP (nothing on a negative Final GP)
       var level = e.isZone ? 'zm' : e.isGrand ? null : 'sales';
       var rate = gp.map(function(g, i){ return okC[i] && level ? _incRate(level, g, e.tgt[i]) : null; });
       var rateT = okT && level ? _incRate(level, sum(gp), sum(e.tgt)) : null;
-      function incOf(g, r){ return r === null ? null : Math.max(0, g - fee(g)) * r / 100; }
+      function incOf(g, r){ return r === null ? null : Math.max(0, g - feeOf(g)) * r / 100; }
+      // Sales reps, surplus rule (see INC_SURPLUS_BAR): the rate applies to Final GP − the bar, never below 0
+      var sur = level === 'sales' && _incSurplusOn();
+      function barOf(g, t){ return t > 0 ? (g / t >= 1 ? INC_SURPLUS_BAR.t2 : INC_SURPLUS_BAR.t1) * t : null; }
+      function surOf(n, g, t){ var b = barOf(g, t); return b === null ? null : n - feeOf(n) - b; }
+      var surC = sur ? net.map(function(g, i){ return okC[i] ? surOf(g, gp[i], e.tgt[i]) : null; }) : null;
+      var surT = sur && okT ? surOf(N, sum(gp), sum(e.tgt)) : null;
+      function payOf(s, r){ return r === null || s === null ? null : Math.max(0, s) * r / 100; }
       return {
-        rate: rate, rateT: rateT,
-        inc: net.map(function(g, i){ return okC[i] ? incOf(g, rate[i]) : null; }), incT: okT ? incOf(N, rateT) : null,
+        rate: rate, rateT: rateT, surplus: sur, noFee: noFee,
+        sur: surC, surT: surT,
+        bar: sur ? gp.map(function(g, i){ return okC[i] ? barOf(g, e.tgt[i]) : null; }) : null, barT: sur && okT ? barOf(sum(gp), sum(e.tgt)) : null,
+        inc: net.map(function(g, i){ return okC[i] ? (sur ? payOf(surC[i], rate[i]) : incOf(g, rate[i])) : null; }), incT: okT ? (sur ? payOf(surT, rateT) : incOf(N, rateT)) : null,
         gp: gp, ach: ach, achT: achT, elig: ach.map(yn), eligT: yn(achT),
         rm: rm, rmT: rmT, ships: ships, all: gate(all), allT: gateT(all), shipsAll: shipsAll,
         net: gate(net), netT: gateT(net),
-        fee: net.map(function(g, i){ return okC[i] ? fee(g) : null; }), feeT: okT ? fee(N) : null,
-        amt: net.map(function(g, i){ return okC[i] ? g - fee(g) : null; }), amtT: okT ? N - fee(N) : null
+        fee: net.map(function(g, i){ return okC[i] ? feeOf(g) : null; }), feeT: okT ? feeOf(N) : null,
+        amt: net.map(function(g, i){ return okC[i] ? g - feeOf(g) : null; }), amtT: okT ? N - feeOf(N) : null
       };
     }
     return (e._calc = { core: part(true), cross: part(false) });
@@ -6267,9 +6284,12 @@ function _incentivePageInner(foldQ, pre){
     rows.push({ label:'Final GP after Deductions', type:'cur', color:'#0B7A4B', bold:true, primary:true, shade:true, vals:P.amt, total:P.amtT, toggle:'A:' + gk, open:aOpen });
     if (aOpen) rows = rows.concat(INC_RM.map(function(r){
       return { label:r.label, sub:true, ded:true, type:'cur', color:'#475569', vals:P.rm[r.k], total:P.rmT[r.k], drill:ent.drillCells, rm:r.k, part:part, note:ships(P.ships[r.k]) };
-    }), [
+    }), P.noFee ? [] : [
       { label:'Management Fees (15%)', sub:true, ded:true, type:'cur', color:'#475569', vals:P.fee, total:P.feeT }
     ]);
+    if (P.surplus) rows.push(
+      { label:'Bar (75% / 100% of Target GP)', sub:true, ded:true, type:'cur', color:'#475569', vals:P.bar, total:P.barT },
+      { label:'Surplus (Final GP − Bar)', type:'cur', bold:true, shade:true, color:'#0B5E7A', vals:P.sur, total:P.surT });
     rows.push({ label:'Total Incentive', type:'inc', bold:true, primary:true, shade:true, color:'#6B3FA0', vals:P.inc, total:P.incT, rates:P.rate, rateT:P.rateT,
       // Each amount says why: this person's GP% and the rate it gives (rate table above the table)
       isZone:!!ent.isZone, ach:P.ach, noTgt:!!noT });
@@ -6409,6 +6429,9 @@ function _incentivePageInner(foldQ, pre){
         + ['Below 75%', '75% – 99.99%', '100% or more'].map(function(h, i){ return '<th style="padding:8px '+(i === 2 ? 40 : 18)+'px 8px 18px;font-size:11px;font-weight:700;color:#1E3A66;text-align:center;white-space:nowrap;">'+h+'</th>'; }).join('') + '</tr>'
       + '<tr><td style="'+td+'text-align:left;font-weight:700;color:#14213D;">Sales rep</td><td style="'+td+'">'+no+'</td><td style="'+td+'">'+pc(R.sales.t1)+'</td><td style="'+td+'">'+pc(R.sales.t2)+'</td></tr>'
       + '<tr><td style="'+td+'text-align:left;font-weight:700;color:#14213D;">Zonal manager <span style="font-weight:500;color:#8A9AB5;">(on the zone\'s GP)</span></td><td style="'+td+'">'+no+'</td><td style="'+td+'">'+pc(R.zm.t1)+'</td><td style="'+td+'">'+pc(R.zm.t2)+'</td></tr>'
+      + (_incSurplusOn() ? '<tr><td colspan="4" style="'+td+'text-align:left;white-space:normal;max-width:520px;font-size:11.5px;color:#475569;">'
+          + '<b style="color:#14213D;">Sales rep:</b> the rate is paid on the <b>surplus</b> = Final GP after Deductions − 75% of Target GP (at 75–99.99%) or − 100% of Target GP (at 100%+). 0 or negative → no incentive. '
+          + '<b style="color:#14213D;">Zonal manager:</b> rate on the zone\'s Final GP after Deductions, with no management fees.</td></tr>' : '')
       + '</table></div>';
   })();
   return '<div style="padding:20px 24px 32px;">'
@@ -6737,17 +6760,18 @@ function _incAccessPanel(kind){
 
 /* ---------------------- Incentive Demo (sidebar page) ----------------------
    Shows everyone how the incentive is worked out, on made-up data: 4 zones with 2 sales reps each, one zone per
-   scenario (ZM paid + both reps paid / one rep paid, ZM not / reps paid but not the ZM / ZM paid but not the reps). The data
+   scenario (ZM paid + both reps paid / one rep paid, ZM not / one rep paid, one with no surplus, ZM not / ZM paid but not the reps). The data
    has the same shape as the real Sales Performance and shipment data, so the page runs the real calculation, table
    and shipment drill-down on it, exactly like the Calculation tab. Filters, per-rep visibility and the Incentive
    Targets tab never apply here. Nothing is saved anywhere. */
 var _incDemoF = null;
 var INC_DEMO_Q = { key:'DEMO', label:'Q1 FY27', months:['Apr-26', 'May-26', 'Jun-26'], payLabel:'Q3 FY27' };
-// One zone per scenario: 1 ZM + both reps paid, 2 one rep paid / ZM not, 3 both reps paid / ZM not, 4 ZM paid / reps not
+// One zone per scenario: 1 ZM + both reps paid (7% and 3% surplus), 2 one rep paid / ZM not, 3 one rep paid, one eligible
+// at 80% but no surplus / ZM not, 4 ZM paid / reps not
 var INC_DEMO_ZONES = [
-  { zone:'DZ01 (Arjun Mehta)', region:'North', tgt:1500000, scen:1, reps:[{ n:'Rohan Kapoor', tgt:1000000, core:1150000 }, { n:'Sneha Iyer', tgt:800000, core:700000 }] },
-  { zone:'DZ02 (Kavita Rao)', region:'West', tgt:2500000, scen:2, reps:[{ n:'Vikram Joshi', tgt:1000000, core:920000 }, { n:'Neha Kulkarni', tgt:900000, core:500000 }] },
-  { zone:'DZ03 (Imran Qureshi)', region:'South', tgt:2000000, scen:3, reps:[{ n:'Aditya Menon', tgt:600000, core:660000 }, { n:'Priya Nambiar', tgt:700000, core:560000 }] },
+  { zone:'DZ01 (Arjun Mehta)', region:'North', tgt:1500000, scen:1, reps:[{ n:'Rohan Kapoor', tgt:1000000, core:1400000 }, { n:'Sneha Iyer', tgt:800000, core:784000 }] },
+  { zone:'DZ02 (Kavita Rao)', region:'West', tgt:2500000, scen:2, reps:[{ n:'Vikram Joshi', tgt:1000000, core:970000 }, { n:'Neha Kulkarni', tgt:900000, core:500000 }] },
+  { zone:'DZ03 (Imran Qureshi)', region:'South', tgt:2000000, scen:3, reps:[{ n:'Aditya Menon', tgt:600000, core:800000 }, { n:'Priya Nambiar', tgt:700000, core:560000 }] },
   { zone:'DZ04 (Pooja Nair)', region:'East', tgt:1600000, scen:4, reps:[{ n:'Karan Malhotra', tgt:1200000, core:720000 }, { n:'Ananya Das', tgt:1100000, core:770000 }] }
 ];
 function _incDemoData(){
@@ -6755,7 +6779,7 @@ function _incDemoData(){
   var months = INC_DEMO_Q.months, rows = [], reps = [], zones = [], refs = {}, late = {}, n = 0;
   var CUST = ['Apex Polymers Pvt Ltd', 'Bluewave Textiles', 'Coastal Agro Exports', 'Delta Pharma Ltd', 'Everest Auto Parts', 'Fusion Chemicals', 'Greenleaf Foods', 'Horizon Steel Works'];
   var PORTS = [['Port Jawaharlal Nehru', 'Jebel Ali'], ['Mundra', 'Rotterdam'], ['Chennai', 'Singapore'], ['Kolkata', 'Colombo']];
-  var W = [0.22, 0.18, 0.16, 0.15, 0.15, 0.14];   // how a rep's Core GP is spread over 6 shipments
+  var W = [0.30, 0.03, 0.30, 0.02, 0.33, 0.02];   // how a rep's Core GP is spread over 6 shipments (2nd/4th/6th are the deductions)
   function iso(m, day){ var b = m.split('-'), mi = MONTH_NAME_TO_IDX[b[0]], y = 2000 + parseInt(b[1], 10); return new Date(Date.UTC(y, mi, day, 6, 0)).toISOString(); }
   function wk(m, day){ var d = new Date(iso(m, day)), j = new Date(Date.UTC(d.getUTCFullYear(), 0, 1)); return d.getUTCFullYear() + '-W' + String(Math.ceil(((d - j) / 864e5 + j.getUTCDay() + 1) / 7)).padStart(2, '0'); }
   function zero(){ return months.map(function(){ return 0; }); }
@@ -7156,7 +7180,7 @@ function _incSumData(M, part){
     parts.forEach(function(k){
       var P = c[k];
       o.parts[k] = { gp:T(P.gp), ach:P.achT, elig:P.eligT === true, rate:P.rateT, inc:P.incT, fin:P.amtT, fee:P.feeT, ded:P.allT,
-                     rm:P.rmT, ships:P.ships };
+                     rm:P.rmT, ships:P.ships, noFee:!!P.noFee, surplus:!!P.surplus, sur:P.surT, bar:P.barT };
       gp += T(P.gp);
       if (P.eligT === true) elig = true;
       if (P.amtT != null) { fin += P.amtT; finAny = true; }
@@ -7327,15 +7351,18 @@ function incSummaryPage(){
     var brk = ks.map(function(k){
       var P = r.parts[k];
       if (!P.elig) return kv(partLabel(k), '<span style="font-family:\'DM Sans\',sans-serif;color:'+MUTED+';white-space:normal;">Not eligible: '+why(k)+'</span>');
-      return kv(partLabel(k)+' rate', P.rate == null ? '–' : P.rate+'%') + kv(partLabel(k)+' incentive', money(P.inc), PURPLE);
-    }).join('') + '<div style="font-size:10.5px;color:'+MUTED+';margin-top:6px;">'+(Z ? 'ZM rates' : 'Rates')+': '+RT.t1+'% at 75–99.99% GP%, '+RT.t2+'% at 100% or more</div>';
+      return (P.surplus ? kv(partLabel(k)+' bar ('+(P.rate === RT.t2 ? '100' : '75')+'% of target)', P.bar == null ? '–' : fmtCur(P.bar))
+          + kv(partLabel(k)+' surplus (Final GP − bar)', P.sur == null ? '–' : fmtCur(P.sur), P.sur != null && P.sur <= 0 ? '#DC2626' : null) : '')
+        + kv(partLabel(k)+' rate', P.rate == null ? '–' : P.rate+'%') + kv(partLabel(k)+' incentive', money(P.inc), PURPLE);
+    }).join('') + '<div style="font-size:10.5px;color:'+MUTED+';margin-top:6px;">'+(Z ? 'ZM rates' : 'Rates')+': '+RT.t1+'% at 75–99.99% GP%, '+RT.t2+'% at 100% or more'
+      + (!Z && _incSurplusOn() ? ', paid on the surplus over 75% / 100% of target (0 if none)' : '')+'</div>';
     var fin = ks.map(function(k){
       var P = r.parts[k];
       if (!P.elig) return two ? kv(partLabel(k), '<span style="font-family:\'DM Sans\',sans-serif;color:'+MUTED+';">nothing deducted (not eligible)</span>') : '';
       function ded(v){ return v == null ? '–' : v > 0 ? '−' + fmtCur(v) : v < 0 ? '+' + fmtCur(-v) : fmtCur(0); }
       return (two ? '<div style="font-size:11px;font-weight:700;color:'+NAVY+';margin:6px 0 2px;">'+partLabel(k)+'</div>' : '')
         + INC_RM.map(function(x){ var n = P.ships && P.ships[x.k]; return kv(esc(x.label)+(n ? ' <span style="color:'+MUTED+';">· '+n+' job'+(n === 1 ? '' : 's')+'</span>' : ''), ded(P.rm && P.rm[x.k]), '#5B6678'); }).join('')
-        + kv('Management fees (15%)', ded(P.fee), '#5B6678')
+        + (P.noFee ? '' : kv('Management fees (15%)', ded(P.fee), '#5B6678'))
         + kv('Final GP after deductions', money(P.fin), '#0B7A4B', true);
     }).join('')
       + '<div style="border-top:1px solid '+LINE+';margin-top:6px;padding-top:4px;">'+kv(Z ? 'ZM incentive' : 'Total incentive', r.pay > 0 ? fmtCur(r.pay) : r.elig ? fmtCur(0) : '–', PURPLE, true)+'</div>';
