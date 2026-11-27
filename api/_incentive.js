@@ -185,7 +185,9 @@ async function ensureIndexes(db) {
   indexesReady = true;
 }
 
-const PARTS = ["core", "cross"];
+// core = Sea Export / Import (GP); cross = Air (kgs) and tank = ISO Tank (TEUs) when rules.unitParts is set (runs from
+// 27-Nov-2026; before that cross was every non-core LOB on GP); other = GENERAL etc., never paid (unit-part runs only)
+const PARTS = ["core", "cross", "tank", "other"];
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const qOk = (q) => /^FY\d{2}-Q[1-4]$/.test(String(q || ""));
 
@@ -200,7 +202,7 @@ async function priorEntries(db, quarter, mode) {
   runs.forEach((r) => { runInfo[r._id] = r; });
   const entries = await db.collection(LEDGER)
     .find({ runId: { $in: runs.map((r) => r._id) }, status: { $ne: "already" } },
-      { projection: { _id: 0, runId: 1, key: 1, base: 1, s: 1, rep: 1, zone: 1, part: 1, month: 1, gp: 1, status: 1, why: 1, customer: 1, fromRun: 1, fromLabel: 1 } })
+      { projection: { _id: 0, runId: 1, key: 1, base: 1, s: 1, rep: 1, zone: 1, part: 1, month: 1, gp: 1, q: 1, status: 1, why: 1, customer: 1, fromRun: 1, fromLabel: 1 } })
     .toArray();
   entries.sort((a, b) => (runInfo[a.runId].quarter < runInfo[b.runId].quarter ? -1 : 1));
   const byKey = {};       // key → its latest entry (held / paid / removed)
@@ -256,6 +258,9 @@ async function incentiveRunSave(db, body) {
   const rules = Object.assign({ minAchv: 75, feePct: 0.15, lateDays: LATE_DAYS, rates: null, coreLobs: ["SEA EXPORT", "SEA IMPORT"] }, body.rules || {});
   // Sales rep rate by GP% tier: 75%–99.99% → t1, 100% and above → t2 (per part, on that part's GP ÷ GP Target)
   const salesRate = rules.rates && rules.rates.sales;
+  // Cross Sales - Air / - Tank: { unit, per (₹ per unit), minAchv }. Paid on units, no fees, no surplus.
+  const UP = rules.unitParts || null;
+  const minFor = (p) => (UP && UP[p] ? UP[p].minAchv : rules.minAchv);
 
   // Rep eligibility per part: GP ÷ GP Target, rounded as the page shows it, at least minAchv
   const repInfo = {};
@@ -264,8 +269,8 @@ async function incentiveRunSave(db, body) {
     for (const p of PARTS) {
       const gp = r2(r[p] && r[p].gp), tgt = r2(r[p] && r[p].tgt);
       const pct = tgt > 0 ? Math.round((gp / tgt) * 100) : null;
-      x[p] = { gp, tgt, pct, elig: !x.noTarget && pct !== null && pct >= rules.minAchv,
-        paid: 0, released: 0, held: 0, removed: 0, removedBelow: 0, removedLate: 0, already: 0, heldFl: 0, heldOs: 0, shipGp: 0 };
+      x[p] = { gp, tgt, pct, elig: !x.noTarget && pct !== null && pct >= minFor(p) && !(UP && p === "other"),
+        paid: 0, released: 0, held: 0, removed: 0, removedBelow: 0, removedLate: 0, already: 0, heldFl: 0, heldOs: 0, shipGp: 0, paidQ: 0, shipQ: 0 };
     }
   }
 
@@ -277,7 +282,7 @@ async function incentiveRunSave(db, body) {
   const seen = {};
   const add = (e) => { out.push(Object.assign({ runId, quarter, mode, at: now }, e)); };
   const repPart = (rep, part) => (repInfo[rep] || (repInfo[rep] = { rep, zone: "", noTarget: true, core: null, cross: null }))[part]
-    || (repInfo[rep][part] = { gp: 0, tgt: 0, pct: null, elig: false, paid: 0, released: 0, held: 0, removed: 0, removedBelow: 0, removedLate: 0, already: 0, heldFl: 0, heldOs: 0, shipGp: 0 });
+    || (repInfo[rep][part] = { gp: 0, tgt: 0, pct: null, elig: false, paid: 0, released: 0, held: 0, removed: 0, removedBelow: 0, removedLate: 0, already: 0, heldFl: 0, heldOs: 0, shipGp: 0, paidQ: 0, shipQ: 0 });
 
   // 1. Shipments held by an earlier run: paid now if clean, removed if it turned out paid late, else still held
   const recheck = body.recheck || {};
@@ -287,37 +292,38 @@ async function incentiveRunSave(db, body) {
     seen[key] = true;
     const now2 = recheck[key] || { missing: true };
     const P = repPart(h.rep, h.part);
-    const base = { key: h.key, base: h.base, s: h.s, rep: h.rep, zone: h.zone, part: h.part, month: h.month, gp: h.gp, customer: h.customer,
+    const base = { key: h.key, base: h.base, s: h.s, rep: h.rep, zone: h.zone, part: h.part, month: h.month, gp: h.gp, q: h.q || 0, customer: h.customer,
       fromRun: h.fromRun || h.runId, fromLabel: h.fromLabel || h.runLabel };
     if (prior.closedShip[h.base]) { add(Object.assign(base, { status: "already", why: "already", prevRun: prior.closedShip[h.base] })); continue; }
     if (now2.missing) { P.held += h.gp; add(Object.assign(base, { status: "held", why: h.why, note: "Not in the current shipment data" })); continue; }
     if (now2.why === "late") { P.removed += h.gp; P.removedLate += h.gp; add(Object.assign(base, { status: "removed", why: "late", closed: mode === "final" })); continue; }
     if (now2.why === "fl" || now2.why === "unpaid") { P.held += h.gp; if (now2.why === "fl") P.heldFl += h.gp; else P.heldOs += h.gp; add(Object.assign(base, { status: "held", why: now2.why })); continue; }
-    P.paid += h.gp; P.released += h.gp;
+    P.paid += h.gp; P.released += h.gp; P.paidQ += h.q || 0;
     add(Object.assign(base, { status: "paid", why: null, released: true, closed: mode === "final" }));
   }
 
   // 2. This quarter's shipments
   let shipGp = 0;
   for (const x of ships) {
-    const part = x.part === "cross" ? "cross" : "core";
+    const part = PARTS.indexOf(x.part) > -1 ? x.part : "core";
     const s = String(x.s || "").trim().toUpperCase();
     const rep = String(x.rep || "");
     const base = s ? s + "|" + part : null;
     const key = s ? base + "|" + rep : "NOREF|" + (x.month || "") + "|" + part + "|" + rep;
     if (seen[key]) continue; // released above (its date moved into this quarter)
     seen[key] = true;
-    const gp = r2(x.gp);
+    const gp = r2(x.gp), q = r2(x.q);
     shipGp += gp;
     const P = repPart(rep, part);
-    P.shipGp += gp;
-    const e = { key, base, s: s || null, rep, zone: x.zone || (repInfo[rep] && repInfo[rep].zone) || "", part, month: x.month || "", gp,
+    P.shipGp += gp; P.shipQ += q;
+    const e = { key, base, s: s || null, rep, zone: x.zone || (repInfo[rep] && repInfo[rep].zone) || "", part, month: x.month || "", gp, q,
       customer: x.customer || "", fromRun: runId, fromLabel: label };
     if (base && prior.closedShip[base]) { P.already += gp; add(Object.assign(e, { status: "already", why: "already", prevRun: prior.closedShip[base] })); continue; }
+    if (UP && part === "other") { P.removed += gp; add(Object.assign(e, { status: "removed", why: "nopart", closed: mode === "final" })); continue; }
     if (!P.elig) { P.removed += gp; P.removedBelow += gp; add(Object.assign(e, { status: "removed", why: "below", closed: mode === "final" })); continue; }
     if (x.why === "late") { P.removed += gp; P.removedLate += gp; add(Object.assign(e, { status: "removed", why: "late", closed: mode === "final" })); continue; }
     if (x.why === "fl" || x.why === "unpaid") { P.held += gp; if (x.why === "fl") P.heldFl += gp; else P.heldOs += gp; add(Object.assign(e, { status: "held", why: x.why })); continue; }
-    P.paid += gp;
+    P.paid += gp; P.paidQ += q;
     add(Object.assign(e, { status: "paid", why: null, closed: mode === "final" }));
   }
 
@@ -328,7 +334,16 @@ async function incentiveRunSave(db, body) {
     for (const p of PARTS) {
       const P = x[p];
       if (!P) continue;
-      ["paid", "released", "held", "removed", "removedBelow", "removedLate", "already", "heldFl", "heldOs", "shipGp"].forEach((k) => { P[k] = r2(P[k]); });
+      ["paid", "released", "held", "removed", "removedBelow", "removedLate", "already", "heldFl", "heldOs", "shipGp", "paidQ", "shipQ"].forEach((k) => { P[k] = r2(P[k]); });
+      // Cross Sales - Air / - Tank: final = units paid on (kgs / TEUs), incentive = ₹per × units; other: nothing
+      const U = UP && UP[p];
+      if (UP && (U || p === "other")) {
+        P.unit = U ? U.unit : null; P.fee = 0; P.final = U ? P.paidQ : 0;
+        P.rate = U && P.elig && P.tgt > 0 ? U.per : null;
+        P.incentive = P.rate == null ? null : r2(Math.max(0, P.final) * P.rate);
+        P.gap = r2(P.gp - P.shipGp);
+        continue;
+      }
       P.fee = r2(Math.max(0, P.paid) * rules.feePct);
       P.final = r2(P.paid - P.fee);
       P.rate = salesRate && P.elig && P.tgt > 0 ? (P.gp / P.tgt >= 1 ? salesRate.t2 : salesRate.t1) : null;
@@ -347,7 +362,7 @@ async function incentiveRunSave(db, body) {
   // 4. Checks
   const tot = { paid: 0, released: 0, held: 0, removed: 0, already: 0, fee: 0, final: 0, gp: 0, incentive: 0 };
   const count = { paid: 0, held: 0, removed: 0, already: 0, released: 0 };
-  repsOut.forEach((x) => PARTS.forEach((p) => { const P = x[p]; if (!P) return; ["paid", "released", "held", "removed", "already", "fee", "final", "gp", "incentive"].forEach((k) => { tot[k] += P[k] || 0; }); }));
+  repsOut.forEach((x) => PARTS.forEach((p) => { const P = x[p]; if (!P) return; ["paid", "released", "held", "removed", "already", "fee", "final", "gp", "incentive"].forEach((k) => { if (k === "final" && P.unit) return; tot[k] += P[k] || 0; }); }));
   Object.keys(tot).forEach((k) => { tot[k] = r2(tot[k]); });
   out.forEach((e) => { count[e.status]++; if (e.released) count.released++; });
   const c = body.checks || {};

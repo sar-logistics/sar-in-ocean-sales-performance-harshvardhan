@@ -5841,11 +5841,12 @@ function _incRmReason(row){
   if (incLateRefs && incLateRefs[k]) return 'late';
   return null;
 }
-// Cross Sales parts paid per unit (user 27-Nov-2026, Incentive Demo first). The key is the part's key in calc():
+// Cross Sales parts paid per unit (user 27-Nov-2026; demo first, main page and payout runs since). Key = part key in calc():
 // 'cross' = Cross Sales - Air (chargeable kgs, ₹1 per kg), 'tank' = Cross Sales - Tank (TEUs, ₹2,500 per TEU).
 // Both: eligible at INC_UNIT_MIN_ACHV% (that part's GP ÷ GP Target), sales reps and zonal managers alike. Then the
 // same deductions as Core taken in units (FL not done, O/S, paid late; each job once), no management fees and no
-// surplus. Incentive = ₹per × Final units after Deductions.
+// surplus. Incentive = ₹per × Final units after Deductions. Other LOBs (GENERAL) are in no part and earn nothing.
+// The payout runs (api/_incentive.js) get the same rule through rules.unitParts.
 var INC_UNIT_MIN_ACHV = 50;
 var INC_UNIT_PARTS = {
   cross: { label:'Cross Sales - Air', short:'Air', lobs:'Air Export + Air Import', re:/^AIR\b/, unit:'kg', units:'kgs', qtyLabel:'Air chargeable kgs', per:1,
@@ -5853,11 +5854,13 @@ var INC_UNIT_PARTS = {
   tank:  { label:'Cross Sales - Tank', short:'Tank', lobs:'ISO Tank Export + ISO Tank Import', re:/^ISO\s*TANK/, unit:'TEU', units:'TEUs', qtyLabel:'Tank TEUs', per:2500,
            qty:function(r){ var v = parseFloat(r && (r.t != null ? r.t : r.teu)); return isFinite(v) && v > 0 ? v : 0; } }
 };
-function _incUnitOn(){ return typeof state !== 'undefined' && state.page === 'incdemo'; }
+function _incUnitOn(){ return true; }
 function _incUnitOf(lob){ var L = String(lob || '').toUpperCase().trim(); for (var k in INC_UNIT_PARTS) if (INC_UNIT_PARTS[k].re.test(L)) return k; return null; }
 function _incFmtUnit(v, unit){ return v == null ? '–' : (unit === 'kg' ? Math.round(v) : Math.round(v * 100) / 100).toLocaleString('en-IN') + ' ' + unit; }
 function _incParts(){ return _incUnitOn() ? ['core', 'cross', 'tank'] : ['core', 'cross']; }
 function _incPartName(k){ return k === 'core' ? 'Core' : _incUnitOn() && INC_UNIT_PARTS[k] ? INC_UNIT_PARTS[k].label : k === 'cross' ? 'Cross' : k === 'all' ? (_incUnitOn() ? 'All' : 'Core + Cross') : k; }
+// Payout-run part of a shipment: core, cross (Air), tank, or other (GENERAL …: no incentive)
+function _incRunPart(lob){ return _incIsCore(lob) ? 'core' : _incUnitOf(lob) || 'other'; }
 function _incIsCore(lob){ return INC_CORE_LOBS.indexOf(String(lob || '').toUpperCase().trim()) > -1; }
 
 // Shipments with a positive outstanding in ar_outstanding (matched on "Ref No")
@@ -7668,19 +7671,20 @@ function _incBuildRun(q, held){
   if (!reps.length) throw new Error('No sales reps found for ' + q.label);
   var inQ = {}; q.months.forEach(function(m){ inQ[m] = true; });
   var repByName = {}; reps.forEach(function(r){ repByName[r.name] = r; });
-  var core = {}, ships = {}, unassignedGp = 0, unassignedRows = 0;
+  var pgp = { core:{}, cross:{}, tank:{}, other:{} }, ships = {}, unassignedGp = 0, unassignedRows = 0;
   var rank = { fl:1, unpaid:2, late:3 };
   allDrillRows.forEach(function(row){
     if (!inQ[row._ml] || INC_RUN_LOBS.indexOf(row.lob) === -1) return;
     var g = row.g || 0;
     var r = row._dn && repByName[row._dn];
     if (!r) { unassignedGp += g; unassignedRows++; return; }
-    var isCore = _incIsCore(row.lob), part = isCore ? 'core' : 'cross';
-    if (isCore) core[r.name] = (core[r.name] || 0) + g;
+    var part = _incRunPart(row.lob);
+    pgp[part][r.name] = (pgp[part][r.name] || 0) + g;
     var s = row.shipmentNo && row.shipmentNo !== '—' ? _incShipKey(row.shipmentNo) : '';
     var key = (s || 'NOREF:' + row._ml) + '|' + part + '|' + r.name;
-    var x = ships[key] || (ships[key] = { s:s, rep:r.name, zone:r.zone || 'Cross Sales', part:part, month:row._ml, gp:0, customer:row.customer || '', why:null });
+    var x = ships[key] || (ships[key] = { s:s, rep:r.name, zone:r.zone || 'Cross Sales', part:part, month:row._ml, gp:0, q:0, customer:row.customer || '', why:null });
     x.gp += g;
+    if (INC_UNIT_PARTS[part]) x.q += INC_UNIT_PARTS[part].qty(row);   // kgs (Air) / TEUs (Tank)
     var why = _incRmReason(row);
     if (why && (!x.why || rank[why] < rank[x.why])) x.why = why;
   });
@@ -7688,7 +7692,7 @@ function _incBuildRun(q, held){
   var now = {};
   allDrillRows.forEach(function(row){
     if (!row.shipmentNo || row.shipmentNo === '—') return;
-    var k = _incShipKey(row.shipmentNo) + '|' + (_incIsCore(row.lob) ? 'core' : 'cross');
+    var k = _incShipKey(row.shipmentNo) + '|' + _incRunPart(row.lob);
     var why = _incRmReason(row), n = now[k] || (now[k] = { why:null });
     if (why && (!n.why || rank[why] < rank[n.why])) n.why = why;
   });
@@ -7696,19 +7700,23 @@ function _incBuildRun(q, held){
   held.forEach(function(h){ recheck[h.key] = now[h.s + '|' + h.part] || { missing:true }; });
   var spGp = 0;
   var repsOut = reps.map(function(r){
-    var gp = sum(r.gp), tgt = sum(r.tgt), c = core[r.name] || 0;
+    var gp = sum(r.gp), tgt = sum(r.tgt);
+    function G(k){ return pgp[k][r.name] || 0; }
     // Incentive Targets tab, when set for this quarter
     var T = _incTargetFor('rep', r.name, q.key.slice(0, 4), +q.key.slice(-1));
     if (T !== null) tgt = T;
     spGp += gp;
-    return { rep:r.name, zone:r.zone || 'Cross Sales', noTarget:!!r.noTarget && !(T > 0), core:{ gp:c, tgt:tgt }, cross:{ gp:gp - c, tgt:tgt } };
+    // Other (GENERAL …) takes whatever the rep's GP has beyond Core, Air and Tank, so every rupee is in one part
+    return { rep:r.name, zone:r.zone || 'Cross Sales', noTarget:!!r.noTarget && !(T > 0), core:{ gp:G('core'), tgt:tgt }, cross:{ gp:G('cross'), tgt:tgt },
+             tank:{ gp:G('tank'), tgt:tgt }, other:{ gp:gp - G('core') - G('cross') - G('tank'), tgt:tgt } };
   });
   return {
     action:'incentiveRunSave', quarter:q.key, label:q.label, months:q.months, mode:'trial',
     asOn:incOutMeta && incOutMeta.asOn, arPaidDocs:incOutMeta ? incOutMeta.paidDocs : 0,
     by:currentUser ? { name:currentUser.name || '', email:currentUser.email || '' } : null,
-    rules:{ lobs:INC_RUN_LOBS, minAchv:INC_MIN_ACHV, feePct:INC_MGMT_FEE_PCT, lateDays:(incOutMeta && incOutMeta.lateDays) || 30, rates:INC_RATES, coreLobs:INC_CORE_LOBS, surplusBar:_incSurplusOn() ? INC_SURPLUS_BAR : null },
-    reps:repsOut, ships:Object.keys(ships).map(function(k){ var x = ships[k]; x.gp = Math.round(x.gp * 100) / 100; return x; }),
+    rules:{ lobs:INC_RUN_LOBS, minAchv:INC_MIN_ACHV, feePct:INC_MGMT_FEE_PCT, lateDays:(incOutMeta && incOutMeta.lateDays) || 30, rates:INC_RATES, coreLobs:INC_CORE_LOBS, surplusBar:_incSurplusOn() ? INC_SURPLUS_BAR : null,
+           unitParts:{ cross:{ unit:'kg', per:INC_UNIT_PARTS.cross.per, minAchv:INC_UNIT_MIN_ACHV }, tank:{ unit:'TEU', per:INC_UNIT_PARTS.tank.per, minAchv:INC_UNIT_MIN_ACHV } } },
+    reps:repsOut, ships:Object.keys(ships).map(function(k){ var x = ships[k]; x.gp = Math.round(x.gp * 100) / 100; x.q = Math.round(x.q * 100) / 100; return x; }),
     recheck:recheck, checks:{ spGp:spGp, unassignedGp:unassignedGp, unassignedRows:unassignedRows }
   };
 }
