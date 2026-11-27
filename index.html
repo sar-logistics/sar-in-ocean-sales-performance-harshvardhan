@@ -5841,15 +5841,23 @@ function _incRmReason(row){
   if (incLateRefs && incLateRefs[k]) return 'late';
   return null;
 }
-// Cross = Air (user 27-Nov-2026, Incentive Demo first): AIR EXPORT / AIR IMPORT only for now, ISO Tank next.
-// Eligible at INC_AIR_MIN_ACHV% (Air GP ÷ GP Target), sales reps and zonal managers alike. Then the same deductions
-// as Core, but on chargeable kgs (FL not done, O/S, paid late; each job once), no management fees and no surplus.
-// Incentive = ₹INC_AIR_PER_KG × Final kgs after Deductions.
-var INC_AIR_MIN_ACHV = 50, INC_AIR_PER_KG = 1;
-function _incAirOn(){ return typeof state !== 'undefined' && state.page === 'incdemo'; }
-function _incIsAir(lob){ return /^AIR\b/.test(String(lob || '').toUpperCase().trim()); }
-function _incKg(row){ var v = parseFloat(row && row.chargeableWeight); return isFinite(v) && v > 0 ? v : 0; }
-function _incFmtKg(v){ return v == null ? '–' : Math.round(v).toLocaleString('en-IN') + ' kg'; }
+// Cross Sales parts paid per unit (user 27-Nov-2026, Incentive Demo first). The key is the part's key in calc():
+// 'cross' = Cross Sales - Air (chargeable kgs, ₹1 per kg), 'tank' = Cross Sales - Tank (TEUs, ₹2,500 per TEU).
+// Both: eligible at INC_UNIT_MIN_ACHV% (that part's GP ÷ GP Target), sales reps and zonal managers alike. Then the
+// same deductions as Core taken in units (FL not done, O/S, paid late; each job once), no management fees and no
+// surplus. Incentive = ₹per × Final units after Deductions.
+var INC_UNIT_MIN_ACHV = 50;
+var INC_UNIT_PARTS = {
+  cross: { label:'Cross Sales - Air', short:'Air', lobs:'Air Export + Air Import', re:/^AIR\b/, unit:'kg', units:'kgs', qtyLabel:'Air chargeable kgs', per:1,
+           qty:function(r){ var v = parseFloat(r && r.chargeableWeight); return isFinite(v) && v > 0 ? v : 0; } },
+  tank:  { label:'Cross Sales - Tank', short:'Tank', lobs:'ISO Tank Export + ISO Tank Import', re:/^ISO\s*TANK/, unit:'TEU', units:'TEUs', qtyLabel:'Tank TEUs', per:2500,
+           qty:function(r){ var v = parseFloat(r && (r.t != null ? r.t : r.teu)); return isFinite(v) && v > 0 ? v : 0; } }
+};
+function _incUnitOn(){ return typeof state !== 'undefined' && state.page === 'incdemo'; }
+function _incUnitOf(lob){ var L = String(lob || '').toUpperCase().trim(); for (var k in INC_UNIT_PARTS) if (INC_UNIT_PARTS[k].re.test(L)) return k; return null; }
+function _incFmtUnit(v, unit){ return v == null ? '–' : (unit === 'kg' ? Math.round(v) : Math.round(v * 100) / 100).toLocaleString('en-IN') + ' ' + unit; }
+function _incParts(){ return _incUnitOn() ? ['core', 'cross', 'tank'] : ['core', 'cross']; }
+function _incPartName(k){ return k === 'core' ? 'Core' : _incUnitOn() && INC_UNIT_PARTS[k] ? INC_UNIT_PARTS[k].label : k === 'cross' ? 'Cross' : k === 'all' ? (_incUnitOn() ? 'All' : 'Core + Cross') : k; }
 function _incIsCore(lob){ return INC_CORE_LOBS.indexOf(String(lob || '').toUpperCase().trim()) > -1; }
 
 // Shipments with a positive outstanding in ar_outstanding (matched on "Ref No")
@@ -5872,7 +5880,7 @@ function fetchIncentiveOutstanding(callback, force){
 }
 function incRetry(){ incOutError = ''; fetchIncentiveOutstanding(function(){ render(); }, true); render(); }
 // Core (SEA EXPORT / SEA IMPORT) or Cross (every other LOB): which part every row shows. Core by default.
-function incSetPart(p){ state[state.page === 'incdemo' ? 'incDemoPart' : 'incPart'] = p === 'cross' ? 'cross' : 'core'; render(); }
+function incSetPart(p){ state[state.page === 'incdemo' ? 'incDemoPart' : 'incPart'] = _incParts().indexOf(p) > -1 ? p : 'core'; render(); }
 function incToggleZone(z){ state.incZoneOpen = state.incZoneOpen || {}; state.incZoneOpen[z] = !state.incZoneOpen[z]; render(); }
 function incRateInfo(){ state.incRateOpen = !state.incRateOpen; render(); }
 function incToggleAllZones(open){
@@ -5900,13 +5908,13 @@ function _incDrillOne(el){
     if (rm) { var why = _incRmReason(r); if (rm === 'all' ? !why : why !== rm) return false; }
     if (part === 'core' && !_incIsCore(r.lob)) return false;
     if (part === 'cross' && _incIsCore(r.lob)) return false;
-    if (part === 'air' && !_incIsAir(r.lob)) return false;
+    if (part.indexOf('unit:') === 0 && _incUnitOf(r.lob) !== part.slice(5)) return false;
     return true;
   });
   var gp = 0, prov = 0, act = 0, rev = 0, met = 0;
   rows.forEach(function(r){ gp += r.g || 0; rev += r.r || 0; met += r.m || 0; if (r.prov === 1) prov += r.g || 0; else act += r.g || 0; });
   var rmL = rm === 'all' ? 'GP removed' : rm ? 'GP removed: ' + ((INC_RM.filter(function(x){ return x.k === rm; })[0] || {}).label || rm) : 'GP';
-  var tag = rmL + (part ? ' – ' + (part === 'core' ? 'Core' : part === 'air' ? 'Cross (Air)' : 'Cross') : '');
+  var tag = rmL + (part ? ' – ' + (part.indexOf('unit:') === 0 ? INC_UNIT_PARTS[part.slice(5)].label : part === 'core' ? 'Core' : 'Cross') : '');
   state.drill = Object.assign({}, state.drill, { entity: entity + ' (' + tag + ')', rows: rows, count: rows.length,
     totalGP: gp, totalProvGP: prov, totalActualGP: act, totalRevenue: rev, totalCost: rev - gp, totalMetric: met,
     columnFilters: {}, openFilterCol: null, filterDraft: {} });
@@ -6000,16 +6008,22 @@ function _incYearPicker(Y, last){
     + '<option value="last"'+(last ? ' selected' : '')+'>'+fy(Y.fy - 1)+' · last year</option></select>';
 }
 // Several quarters, each worked out on its own (frozen) data, put side by side as the table's columns
-// Air figures per column: GP, chargeable kgs, kgs removed per INC_RM reason (and how many jobs)
-function newAir(blank){
-  var o = { gp:blank(), kg:blank(), rm:{}, ship:{} };
-  INC_RM.forEach(function(r){ o.rm[r.k] = blank(); o.ship[r.k] = 0; });
-  return o;
+// Per-unit parts (INC_UNIT_PARTS), per column: GP, units, units removed per INC_RM reason (and how many jobs)
+function newUnits(blank){
+  var out = {};
+  Object.keys(INC_UNIT_PARTS).forEach(function(k){
+    var o = out[k] = { gp:blank(), q:blank(), rm:{}, ship:{} };
+    INC_RM.forEach(function(r){ o.rm[r.k] = blank(); o.ship[r.k] = 0; });
+  });
+  return out;
 }
-function _incAddAir(dst, src, off){
-  if (!src) return;
-  ['gp', 'kg'].forEach(function(k){ (src[k] || []).forEach(function(v, i){ dst[k][off + i] = v; }); });
-  INC_RM.forEach(function(r){ ((src.rm || {})[r.k] || []).forEach(function(v, i){ dst.rm[r.k][off + i] = v; }); dst.ship[r.k] += (src.ship || {})[r.k] || 0; });
+function _incAddUnits(dstAll, srcAll, off){
+  if (!srcAll) return;
+  Object.keys(INC_UNIT_PARTS).forEach(function(k){
+    var dst = dstAll[k], src = srcAll[k]; if (!src) return;
+    ['gp', 'q'].forEach(function(f){ (src[f] || []).forEach(function(v, i){ dst[f][off + i] = v; }); });
+    INC_RM.forEach(function(r){ ((src.rm || {})[r.k] || []).forEach(function(v, i){ dst.rm[r.k][off + i] = v; }); dst.ship[r.k] += (src.ship || {})[r.k] || 0; });
+  });
 }
 function _incMergeQuarters(ms, qs){
   var offs = [], nTot = 0;
@@ -6029,7 +6043,7 @@ function _incMergeQuarters(ms, qs){
     var by = {}, out = [];
     for (var qi = list.length - 1; qi >= 0; qi--) list[qi].forEach(function(e){
       if (by[e.name]) return;
-      var o = Object.assign({}, e, { gp:blank(), tgt:blank(), coreGp:blank(), rm:blankRm(), air:newAir(blank), noTarget:true,
+      var o = Object.assign({}, e, { gp:blank(), tgt:blank(), coreGp:blank(), rm:blankRm(), units:newUnits(blank), noTarget:true,
                                      drillCells:[e.drillCells ? e.drillCells[0] : null].concat(new Array(nTot).fill(null)) });
       delete o._calc; by[e.name] = o; out.push(o);
     });
@@ -6040,7 +6054,7 @@ function _incMergeQuarters(ms, qs){
         e.gp.forEach(function(v, i){ o.gp[off + i] = v; });
         e.tgt.forEach(function(v, i){ o.tgt[off + i] = v; });
         if (e.coreGp) e.coreGp.forEach(function(v, i){ o.coreGp[off + i] = v; });
-        if (isRep) { addRm(o.rm, e.rm, off); _incAddAir(o.air, e.air, off); }
+        if (isRep) { addRm(o.rm, e.rm, off); _incAddUnits(o.units, e.units, off); }
         if (isRep || e.isZone) o.noTarget = o.noTarget && !!e.noTarget;
         (e.drillCells || []).slice(1).forEach(function(c, i){ if (c) o.drillCells[off + i + 1] = Object.assign({}, c, { q:qs[qi].key }); });
       });
@@ -6050,10 +6064,10 @@ function _incMergeQuarters(ms, qs){
   var byZone = {};
   ms.forEach(function(m, qi){
     Object.keys(m.byZone).forEach(function(z){
-      var A = byZone[z] || (byZone[z] = { core:blank(), rm:blankRm(), air:newAir(blank) }), a = m.byZone[z];
+      var A = byZone[z] || (byZone[z] = { core:blank(), rm:blankRm(), units:newUnits(blank) }), a = m.byZone[z];
       a.core.forEach(function(v, i){ A.core[offs[qi] + i] = v; });
       addRm(A.rm, a.rm, offs[qi]);
-      _incAddAir(A.air, a.air, offs[qi]);
+      _incAddUnits(A.units, a.units, offs[qi]);
     });
   });
   var heads = [];
@@ -6133,11 +6147,11 @@ function _incentivePageInner(foldQ, pre){
   function newAgg(){
     var rm = {};
     INC_RM.forEach(function(r){ rm[r.k] = { all:zeros(), core:zeros(), ship:0, shipCore:0 }; });
-    return { core:zeros(), rm:rm, air:newAir(zeros) };
+    return { core:zeros(), rm:rm, units:newUnits(zeros) };
   }
   function withAgg(ent, A){
     A = A || newAgg();
-    ent.coreGp = A.core; ent.rm = A.rm; ent.air = A.air;
+    ent.coreGp = A.core; ent.rm = A.rm; ent.units = A.units;
     return ent;
   }
   // Step 1 (one quarter, on whatever data is in place): GP, Target, Core GP and GP removed per rep and zone.
@@ -6209,10 +6223,11 @@ function _incentivePageInner(foldQ, pre){
   var fr = state.filterReps && state.filterReps.length ? state.filterReps.map(function(x){ return normalizeName(x); }) : null;
   var rls = _getRLSReps().map(function(n){ return normalizeName(n); });
   function bump(A, ci, g, isCore, why, row){
-    if (_incIsAir(row.lob)) {   // Air: GP (for eligibility), chargeable kgs, kgs removed per reason
-      var X = A.air, kg = _incKg(row);
-      X.gp[ci] += g; X.kg[ci] += kg;
-      if (why) { X.rm[why][ci] += kg; X.ship[why]++; }
+    var uk = _incUnitOf(row.lob);
+    if (uk) {   // Air / Tank: GP (for eligibility), units (kgs / TEUs), units removed per reason
+      var X = A.units[uk], q = INC_UNIT_PARTS[uk].qty(row);
+      X.gp[ci] += g; X.q[ci] += q;
+      if (why) { X.rm[why][ci] += q; X.ship[why]++; }
     }
     if (isCore) A.core[ci] += g;
     if (why) { var R = A.rm[why]; R.all[ci] += g; R.ship++; if (isCore) { R.core[ci] += g; R.shipCore++; } }
@@ -6295,12 +6310,12 @@ function _incentivePageInner(foldQ, pre){
         amt: net.map(function(g, i){ return okC[i] ? g - feeOf(g) : null; }), amtT: okT ? N - feeOf(N) : null
       };
     }
-    // Cross = Air (see INC_AIR_MIN_ACHV): eligibility on Air GP ÷ GP Target, then kgs instead of GP
-    function airPart(){
-      var Z = e.gp.map(function(){ return 0; }), A = e.air || {};
-      var gp = A.gp || Z, kg = A.kg || Z;
+    // Cross Sales - Air / - Tank (INC_UNIT_PARTS): eligibility on that part's GP ÷ GP Target, then units, not GP
+    function unitPart(k){
+      var U = INC_UNIT_PARTS[k], Z = e.gp.map(function(){ return 0; }), A = (e.units || {})[k] || {};
+      var gp = A.gp || Z, qty = A.q || Z;
       var ach = gp.map(function(g, i){ return pct(g, e.tgt[i]); }), achT = pct(sum(gp), sum(e.tgt));
-      function yn(a){ return e.noTarget || a === null ? null : a >= INC_AIR_MIN_ACHV; }
+      function yn(a){ return e.noTarget || a === null ? null : a >= INC_UNIT_MIN_ACHV; }
       var okC = ach.map(function(a){ return yn(a) === true; }), okT = yn(achT) === true;
       function gate(arr){ return arr.map(function(v, i){ return okC[i] ? v : null; }); }
       function gateT(arr){ return okT ? sum(arr) : null; }
@@ -6311,11 +6326,11 @@ function _incentivePageInner(foldQ, pre){
         rm[r.k] = gate(v); rmT[r.k] = gateT(v);
         ships[r.k] = (A.ship && A.ship[r.k]) || 0; shipsAll += ships[r.k];
       });
-      var net = minus(kg, all), N = sum(net), level = !e.isGrand;
-      var rate = gp.map(function(g, i){ return okC[i] && level ? INC_AIR_PER_KG : null; }), rateT = okT && level ? INC_AIR_PER_KG : null;
+      var net = minus(qty, all), N = sum(net), level = !e.isGrand;
+      var rate = gp.map(function(g, i){ return okC[i] && level ? U.per : null; }), rateT = okT && level ? U.per : null;
       return {
-        kg: true, minAchv: INC_AIR_MIN_ACHV, noFee: true, rate: rate, rateT: rateT,
-        kgs: gate(kg), kgsT: gateT(kg), kgsAll: kg,
+        unit: U, unitKey: k, minAchv: INC_UNIT_MIN_ACHV, noFee: true, rate: rate, rateT: rateT,
+        qty: gate(qty), qtyT: gateT(qty),
         inc: net.map(function(n, i){ return rate[i] == null ? null : Math.max(0, n) * rate[i]; }), incT: rateT == null ? null : Math.max(0, N) * rateT,
         gp: gp, ach: ach, achT: achT, elig: ach.map(yn), eligT: yn(achT),
         rm: rm, rmT: rmT, ships: ships, all: gate(all), allT: gateT(all), shipsAll: shipsAll,
@@ -6323,7 +6338,8 @@ function _incentivePageInner(foldQ, pre){
         amt: gate(net), amtT: gateT(net)
       };
     }
-    return (e._calc = { core: part(true), cross: _incAirOn() ? airPart() : part(false) });
+    var U = _incUnitOn();
+    return (e._calc = { core: part(true), cross: U ? unitPart('cross') : part(false), tank: U ? unitPart('tank') : null });
   }
   function particulars(ent){
     var c = calc(ent), tgt = ent.tgt, T = sum(tgt);
@@ -6332,7 +6348,7 @@ function _incentivePageInner(foldQ, pre){
     function ships(n){ return n ? n + ' job' + (n === 1 ? '' : 's') : ''; }
     // Same layout as the incentive sheet. Only the part picked with the Core / Cross switch, worked out on its
     // own GP (Eligibility and GP% included). Not eligible → everything below GP% shows "–".
-    var cross = state.incPart === 'cross', part = cross ? 'cross' : 'core', P = cross ? c.cross : c.core;
+    var part = c[state.incPart] ? state.incPart : 'core', P = c[part];
     var noT = ent.noTarget, open = state.incGpOpen || {};
     var eOpen = !!open['E:' + gk], aOpen = !!open['A:' + gk]; // drill-downs, closed until clicked
     var rows = [{ label:'Eligibility', type:noT ? 'na' : 'yn', bold:true, shade:true, color:'#1E3A66', vals:P.elig, total:P.eligT, toggle:'E:' + gk, open:eOpen }];
@@ -6340,16 +6356,17 @@ function _incentivePageInner(foldQ, pre){
       { label:'GP Achieved', sub:true, type:'cur', color:'#15233B', vals:P.gp, total:sum(P.gp), drill:ent.drillCells, part:part },
       { label:'Target GP', sub:true, type:noT ? 'na' : 'cur', color:'#64748B', vals:tgt, total:T },
       { label:'GP%', sub:true, type:noT ? 'na' : 'pct', vals:P.ach, total:P.achT });
-    if (P.kg) {
-      // Cross (Air): kgs instead of GP. GP Achieved above is the Air GP (for the 50% eligibility).
-      if (eOpen) { rows[1].label = 'Air GP Achieved'; rows[1].part = 'air'; rows[3].minA = INC_AIR_MIN_ACHV; }
-      rows.push({ label:'Final Kgs after Deductions', type:'kg', color:'#0B7A4B', bold:true, primary:true, shade:true, vals:P.amt, total:P.amtT, toggle:'A:' + gk, open:aOpen });
+    if (P.unit) {
+      // Cross Sales - Air / - Tank: units (kgs / TEUs) instead of GP. GP Achieved above is that part's GP (for the 50%).
+      var Un = P.unit, dp = 'unit:' + P.unitKey;
+      if (eOpen) { rows[1].label = Un.short + ' GP Achieved'; rows[1].part = dp; rows[3].minA = INC_UNIT_MIN_ACHV; }
+      rows.push({ label:'Final ' + Un.units.charAt(0).toUpperCase() + Un.units.slice(1) + ' after Deductions', type:'qty', unit:Un.unit, color:'#0B7A4B', bold:true, primary:true, shade:true, vals:P.amt, total:P.amtT, toggle:'A:' + gk, open:aOpen });
       if (aOpen) rows = rows.concat([
-        { label:'Air chargeable kgs', sub:true, type:'kg', color:'#15233B', vals:P.kgs, total:P.kgsT, drill:ent.drillCells, part:'air' }
+        { label:Un.qtyLabel, sub:true, type:'qty', unit:Un.unit, color:'#15233B', vals:P.qty, total:P.qtyT, drill:ent.drillCells, part:dp }
       ], INC_RM.map(function(r){
-        return { label:r.label, sub:true, ded:true, type:'kg', color:'#475569', vals:P.rm[r.k], total:P.rmT[r.k], drill:ent.drillCells, rm:r.k, part:'air', note:ships(P.ships[r.k]) };
+        return { label:r.label, sub:true, ded:true, type:'qty', unit:Un.unit, color:'#475569', vals:P.rm[r.k], total:P.rmT[r.k], drill:ent.drillCells, rm:r.k, part:dp, note:ships(P.ships[r.k]) };
       }));
-      rows.push({ label:'Total Incentive', type:'inc', kg:true, minA:INC_AIR_MIN_ACHV, bold:true, primary:true, shade:true, color:'#6B3FA0', vals:P.inc, total:P.incT, rates:P.rate, rateT:P.rateT,
+      rows.push({ label:'Total Incentive', type:'inc', unit:Un.unit, minA:INC_UNIT_MIN_ACHV, bold:true, primary:true, shade:true, color:'#6B3FA0', vals:P.inc, total:P.incT, rates:P.rate, rateT:P.rateT,
         isZone:!!ent.isZone, ach:P.ach, noTgt:!!noT });
       return rows;
     }
@@ -6377,14 +6394,14 @@ function _incentivePageInner(foldQ, pre){
     if (p.type === 'na' || v === null || v === undefined) return { t:'–', c:'#CBD3DF', dash:true };
     // Total Incentive: this person's GP% → the rate it gives, then the amount
     if (p.type === 'inc') {
-      var why = r == null ? '' : (a != null ? a + '% GP → ' : '') + (p.kg ? '₹' + r + '/kg' : r + '%');
+      var why = r == null ? '' : (a != null ? a + '% GP → ' : '') + (p.unit ? '₹' + r.toLocaleString('en-IN') + '/' + p.unit : r + '%');
       return { t:(r != null ? '<span style="font-size:10.5px;font-weight:600;color:#8E7BB5;">'+why+' · </span>' : '')+fmtCur(v), c:'#6B3FA0' };
     }
     if (p.type === 'yn') return v ? { t:'✓ Yes', c:'#15875A' } : { t:'✕ No', c:'#C2410C' };
-    var F = p.type === 'kg' ? _incFmtKg : fmtCur;
+    var F = p.type === 'qty' ? function(x){ return _incFmtUnit(x, p.unit); } : fmtCur;
     if (p.ded) return { t:v > 0 ? '−' + F(v) : v < 0 ? '+' + F(-v) : F(0), c:v < 0 ? '#15875A' : '#475569' };
     if (p.type === 'pct') return { t:v+'%', c: v >= 100 ? '#15875A' : v >= (p.minA || 75) ? '#A8720E' : '#DC2626' };
-    if (p.type === 'kg') return { t:_incFmtKg(v), c: v < 0 ? '#DC2626' : (p.color || '#15233B') };
+    if (p.type === 'qty') return { t:_incFmtUnit(v, p.unit), c: v < 0 ? '#DC2626' : (p.color || '#15233B') };
     return { t:fmtCur(v), c: v < 0 ? '#DC2626' : (p.color || '#15233B') };
   }
 
@@ -6509,9 +6526,9 @@ function _incentivePageInner(foldQ, pre){
       + (_incSurplusOn() ? '<tr><td colspan="4" style="'+td+'text-align:left;white-space:normal;max-width:520px;font-size:11.5px;color:#475569;">'
           + '<b style="color:#14213D;">Sales rep:</b> the rate is paid on the <b>surplus</b> = Final GP after Deductions − 75% of Target GP (at 75–99.99%) or − 100% of Target GP (at 100%+). 0 or negative → no incentive. '
           + '<b style="color:#14213D;">Zonal manager:</b> rate on the zone\'s Final GP after Deductions, with no management fees.</td></tr>' : '')
-      + (_incAirOn() ? '<tr><td colspan="4" style="'+td+'text-align:left;white-space:normal;max-width:520px;font-size:11.5px;color:#475569;">'
-          + '<b style="color:#14213D;">Cross (Air), sales rep and zonal manager:</b> eligible at '+INC_AIR_MIN_ACHV+'% or more (Air GP ÷ Target GP). '
-          + 'Then ₹'+INC_AIR_PER_KG+' per chargeable kg, after taking off the kgs of jobs with FL not done, O/S amount or paid late. No management fees.</td></tr>' : '')
+      + (_incUnitOn() ? '<tr><td colspan="4" style="'+td+'text-align:left;white-space:normal;max-width:520px;font-size:11.5px;color:#475569;">'
+          + '<b style="color:#14213D;">Cross Sales - Air / - Tank, sales rep and zonal manager:</b> eligible at '+INC_UNIT_MIN_ACHV+'% or more (that part\'s GP ÷ Target GP). '
+          + 'Then ₹'+INC_UNIT_PARTS.cross.per+' per chargeable kg (Air) or ₹'+INC_UNIT_PARTS.tank.per.toLocaleString('en-IN')+' per TEU (Tank), after taking off the jobs with FL not done, O/S amount or paid late. No management fees.</td></tr>' : '')
       + '</table></div>';
   })();
   return '<div style="padding:20px 24px 32px;">'
@@ -6526,15 +6543,17 @@ function _incentivePageInner(foldQ, pre){
           : '<span style="font-size:11px;color:#9AAFC8;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+(foldQ ? 'Quarterly' : state.reportView)+' · '+state.currency+'</span>')
         +(window._incPay ? _incLockBadge(window._incPay.key) : '')
         +(function(){
-          var cur = state.incPart === 'cross' ? 'cross' : 'core';
+          var cur = _incParts().indexOf(state.incPart) > -1 ? state.incPart : 'core', U = _incUnitOn() && INC_UNIT_PARTS[cur];
           function seg(k, label, hint){
             var on = cur === k;
             return '<button onclick="incSetPart(\''+k+'\')" class="btnq" role="radio" aria-checked="'+on+'" title="'+hint+'" style="border:none;border-radius:999px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;'
               +(on ? 'background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');color:#FFFFFF;box-shadow:0 1px 3px rgba(30,58,102,0.3);' : 'background:transparent;color:#1E3A66;')+'">'+label+'</button>';
           }
           return '<div role="radiogroup" aria-label="Core or Cross" style="display:inline-flex;gap:2px;padding:2px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;">'
-            + seg('core', 'Core', 'SEA EXPORT and SEA IMPORT') + seg('cross', 'Cross', _incAirOn() ? 'AIR EXPORT and AIR IMPORT (ISO Tank next)' : 'Every other LOB') + '</div>'
-            + '<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+(cur === 'cross' ? (_incAirOn() ? 'Cross: Air Export + Air Import · '+INC_AIR_MIN_ACHV+'% of GP Target to qualify · ₹'+INC_AIR_PER_KG+' per kg (ISO Tank next)' : 'Cross: every LOB except Sea Export / Sea Import') : 'Core: Sea Export + Sea Import')+'</span>';
+            + seg('core', 'Core', 'SEA EXPORT and SEA IMPORT')
+            + (_incUnitOn() ? seg('cross', INC_UNIT_PARTS.cross.label, 'AIR EXPORT and AIR IMPORT') + seg('tank', INC_UNIT_PARTS.tank.label, 'ISOTANK EXPORT and ISOTANK IMPORT') : seg('cross', 'Cross', 'Every other LOB')) + '</div>'
+            + '<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+(U ? U.label + ': ' + U.lobs + ' · ' + INC_UNIT_MIN_ACHV + '% of GP Target to qualify · ₹' + U.per.toLocaleString('en-IN') + ' per ' + U.unit
+              : cur === 'cross' ? 'Cross: every LOB except Sea Export / Sea Import' : 'Core: Sea Export + Sea Import')+'</span>';
         })()
         +(zones.length ? '<button onclick="incToggleAllZones('+(allOpen ? 'false' : 'true')+')" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+(allOpen ? 'Collapse All' : 'Expand All')+'</button>' : '')
         +'<span style="font-size:11px;color:#6B82A0;font-weight:600;">'+zones.length+' zones · '+reps.length+' sales reps</span>'
@@ -6845,13 +6864,14 @@ function _incAccessPanel(kind){
    Targets tab never apply here. Nothing is saved anywhere. */
 var _incDemoF = null;
 var INC_DEMO_Q = { key:'DEMO', label:'Q1 FY27', months:['Apr-26', 'May-26', 'Jun-26'], payLabel:'Q3 FY27' };
-// One zone per scenario: 1 ZM + both reps paid (7% and 3% surplus), 2 one rep paid / ZM not, 3 one rep paid, one eligible
+// Cross Sales - Air / - Tank: each rep's air GP + kg and tank GP + TEUs, so some qualify (50%+) and some don't.
+// One zone per scenario (Core): 1 ZM + both reps paid (7% and 3% surplus), 2 one rep paid / ZM not, 3 one rep paid, one eligible
 // at 80% but no surplus / ZM not, 4 ZM paid / reps not
 var INC_DEMO_ZONES = [
-  { zone:'DZ01 (Arjun Mehta)', region:'North', tgt:1500000, scen:1, reps:[{ n:'Rohan Kapoor', tgt:1000000, core:1400000, air:600000, kg:12000 }, { n:'Sneha Iyer', tgt:800000, core:784000, air:300000, kg:6000 }] },
-  { zone:'DZ02 (Kavita Rao)', region:'West', tgt:2500000, scen:2, reps:[{ n:'Vikram Joshi', tgt:1000000, core:970000, air:520000, kg:9000 }, { n:'Neha Kulkarni', tgt:900000, core:500000 }] },
-  { zone:'DZ03 (Imran Qureshi)', region:'South', tgt:2000000, scen:3, reps:[{ n:'Aditya Menon', tgt:600000, core:800000, air:250000, kg:5000 }, { n:'Priya Nambiar', tgt:700000, core:560000, air:400000, kg:8000 }] },
-  { zone:'DZ04 (Pooja Nair)', region:'East', tgt:1600000, scen:4, reps:[{ n:'Karan Malhotra', tgt:1200000, core:720000, air:700000, kg:15000 }, { n:'Ananya Das', tgt:1100000, core:770000, air:200000, kg:4000 }] }
+  { zone:'DZ01 (Arjun Mehta)', region:'North', tgt:1500000, scen:1, reps:[{ n:'Rohan Kapoor', tgt:1000000, core:1400000, air:600000, kg:12000, tank:300000, teu:20 }, { n:'Sneha Iyer', tgt:800000, core:784000, air:300000, kg:6000, tank:480000, teu:30 }] },
+  { zone:'DZ02 (Kavita Rao)', region:'West', tgt:2500000, scen:2, reps:[{ n:'Vikram Joshi', tgt:1000000, core:970000, air:520000, kg:9000 }, { n:'Neha Kulkarni', tgt:900000, core:500000, tank:500000, teu:24 }] },
+  { zone:'DZ03 (Imran Qureshi)', region:'South', tgt:2000000, scen:3, reps:[{ n:'Aditya Menon', tgt:600000, core:800000, air:250000, kg:5000, tank:360000, teu:20 }, { n:'Priya Nambiar', tgt:700000, core:560000, air:400000, kg:8000, tank:100000, teu:6 }] },
+  { zone:'DZ04 (Pooja Nair)', region:'East', tgt:1600000, scen:4, reps:[{ n:'Karan Malhotra', tgt:1200000, core:720000, air:700000, kg:15000 }, { n:'Ananya Das', tgt:1100000, core:770000, air:200000, kg:4000, tank:600000, teu:36 }] }
 ];
 function _incDemoData(){
   if (_incDemoF) return _incDemoF;
@@ -6859,7 +6879,8 @@ function _incDemoData(){
   var CUST = ['Apex Polymers Pvt Ltd', 'Bluewave Textiles', 'Coastal Agro Exports', 'Delta Pharma Ltd', 'Everest Auto Parts', 'Fusion Chemicals', 'Greenleaf Foods', 'Horizon Steel Works'];
   var PORTS = [['Port Jawaharlal Nehru', 'Jebel Ali'], ['Mundra', 'Rotterdam'], ['Chennai', 'Singapore'], ['Kolkata', 'Colombo']];
   var W = [0.30, 0.03, 0.30, 0.02, 0.33, 0.02];
-  var WA = [0.40, 0.10, 0.30, 0.08, 0.12];             // a rep's Air GP and kgs over 5 shipments (2nd/4th/5th are the deductions)   // how a rep's Core GP is spread over 6 shipments (2nd/4th/6th are the deductions)
+  var WA = [0.40, 0.10, 0.30, 0.08, 0.12];
+  var WT = [0.40, 0.10, 0.30, 0.10, 0.10];             // a rep's Tank GP and TEUs over 5 shipments (2nd/4th/5th are the deductions)             // a rep's Air GP and kgs over 5 shipments (2nd/4th/5th are the deductions)   // how a rep's Core GP is spread over 6 shipments (2nd/4th/6th are the deductions)
   function iso(m, day){ var b = m.split('-'), mi = MONTH_NAME_TO_IDX[b[0]], y = 2000 + parseInt(b[1], 10); return new Date(Date.UTC(y, mi, day, 6, 0)).toISOString(); }
   function wk(m, day){ var d = new Date(iso(m, day)), j = new Date(Date.UTC(d.getUTCFullYear(), 0, 1)); return d.getUTCFullYear() + '-W' + String(Math.ceil(((d - j) / 864e5 + j.getUTCDay() + 1) / 7)).padStart(2, '0'); }
   function zero(){ return months.map(function(){ return 0; }); }
@@ -6867,20 +6888,21 @@ function _incDemoData(){
     var code = Z.zone.split(' ')[0], zgp = zero(), zship = zero();
     Z.reps.forEach(function(R, ri){
       var name = R.n + ' | ' + code, gp = zero(), prov = zero(), ship = zero(), rev = zero(), lobData = {};
-      function add(lob, g, k, kind, kg){
+      function add(lob, g, k, kind, q){   // q: chargeable kgs (Air) or TEUs (ISO Tank)
         var mi = k % 3, m = months[mi], day = 3 + (k * 4) % 24; n++;
         var sno = 'DEMO' + String(n).padStart(5, '0'), port = PORTS[(zi + k) % PORTS.length], r = Math.round(g * 6.5), isProv = kind === 'fl';
         if (kind === 'unpaid') refs[sno] = true;
         if (kind === 'late') late[sno] = 45;
-        var dir = /IMPORT/.test(lob) ? 'IMPORT' : 'EXPORT', sea = /^SEA/.test(lob);
+        var dir = /IMPORT/.test(lob) ? 'IMPORT' : 'EXPORT', air = /^AIR/.test(lob), sea = !air, tank = /^ISOTANK/.test(lob);
+        var teu = tank ? (q || 0) : /^SEA/.test(lob) ? 2 : 0, kg = air ? (q || 850) : 0;
         rows.push({ _sp:name.toLowerCase(), _ml:m, _d:iso(m, day), _wk:wk(m, day), _cl:(sea ? 'jobs_sea_' : 'jobs_air_') + dir.toLowerCase(), _cls:{ kind:sea ? 'SEA' : 'AIR', direction:dir },
           shipmentNo:sno, jobDate:iso(m, day), lob:lob, masterNo:'', houseNo:'', consolNo:sno, cargoType:sea ? 'FCL' : 'LOOSE', carrier:sea ? 'Demo Line' : 'Demo Air',
           provRevenue:r, billedRevenue:isProv ? 0 : r, unbilledRevenue:isProv ? r : 0, provCost:r - g, postedCost:isProv ? 0 : r - g, unpostedCost:isProv ? r - g : 0,
           provisionalProfit:g, actualProfit:isProv ? 0 : g, customer:CUST[(zi * 2 + ri + k) % CUST.length], ataDischarge:'', atdLoading:iso(m, day),
           dischargePort:dir === 'EXPORT' ? port[1] : port[0], loadingPort:dir === 'EXPORT' ? port[0] : port[1], location:'Mumbai', consignee:'Demo Consignee', consolType:'Direct',
-          teu:sea ? 2 : 0, destAgent:'', etaDischarge:'', etdLoading:iso(m, day), jobOwner:'Demo Ops', jobRevRecogDate:iso(m, day), originAgent:'', salesPerson:name,
+          teu:teu, destAgent:'', etaDischarge:'', etdLoading:iso(m, day), jobOwner:'Demo Ops', jobRevRecogDate:iso(m, day), originAgent:'', salesPerson:name,
           shipper:CUST[(zi * 2 + ri + k) % CUST.length], volume:0, volumeUnit:'CBM', operationLock:iso(m, day), financialLock:isProv ? '' : iso(m, day + 3),
-          g:g, r:r, x:r - g, t:sea ? 2 : 0, chargeableWeight:sea ? 0 : (kg || 850), chargeableWeightUnit:'KGS', tons:sea ? 0 : (kg || 850) / 1000, vol:0, prov:isProv ? 1 : 0,
+          g:g, r:r, x:r - g, t:teu, chargeableWeight:kg, chargeableWeightUnit:'KGS', tons:kg / 1000, vol:0, prov:isProv ? 1 : 0,
           _zone:Z.zone, _dn:name, _tg:'', dischargeCountry:'', srrLoadingCountry:'' });
         gp[mi] += g; ship[mi] += 1; rev[mi] += r; if (isProv) prov[mi] += g; zgp[mi] += g; zship[mi] += 1;
         var L = lobData[lob] || (lobData[lob] = {}), c = L[m] || (L[m] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0, rev:0, revBilled:0, revProv:0 });
@@ -6889,6 +6911,8 @@ function _incDemoData(){
       // Core only: 6 shipments, one each with FL not done, O/S amount and paid late
       W.forEach(function(w, k){ add(k % 2 ? 'SEA IMPORT' : 'SEA EXPORT', Math.round(R.core * w), k, k === 1 ? 'fl' : k === 3 ? 'unpaid' : k === 5 ? 'late' : ''); });
       // Cross (Air): 5 shipments, one each with FL not done, O/S amount and paid late (Air GP and chargeable kgs)
+      // Cross Sales - Tank: 5 shipments the same way (Tank GP and TEUs)
+      if (R.tank) WT.forEach(function(w, k){ add(k % 2 ? 'ISOTANK IMPORT' : 'ISOTANK EXPORT', Math.round(R.tank * w), k + 11, k === 1 ? 'fl' : k === 3 ? 'unpaid' : k === 4 ? 'late' : '', Math.round(R.teu * w)); });
       if (R.air) WA.forEach(function(w, k){ add(k % 2 ? 'AIR IMPORT' : 'AIR EXPORT', Math.round(R.air * w), k + 6, k === 1 ? 'fl' : k === 3 ? 'unpaid' : k === 4 ? 'late' : '', Math.round(R.kg * w)); });
       var core = W.reduce(function(a, w){ return a + Math.round(R.core * w); }, 0);
       R.core = core;   // the exact rounded total
@@ -6912,7 +6936,7 @@ function _incDemoRun(fn){
   var keep = { fl:state.filterLobs, fz:state.filterZones, fr:state.filterReps, fg:state.filterRegions, fgl:state.filterGl,
                rls:window._getRLSReps, tg:incTargets, cu:currentUser, part:state.incPart };
   try {
-    state.incPart = state.incDemoPart === 'cross' ? 'cross' : 'core';   // the demo's own Core / Cross switch
+    state.incPart = ['cross', 'tank'].indexOf(state.incDemoPart) > -1 ? state.incDemoPart : 'core';   // the demo's own part switch
     // The demo's own filters (its filter bar), never the top bar's
     var DF = state.incDemoF || {};
     state.filterLobs = []; state.filterGl = [];
@@ -7235,7 +7259,7 @@ function incSumSearch(v){
 // Jump to a rep (or a zone) in the Calculation tab, with its groups open
 function incSumGoCalc(zone, rep, part){
   if (state.page === 'incdemo') state.incDemoTab = 'calc'; else state.incTab = 'calc';
-  if (part === 'core' || part === 'cross') state[state.page === 'incdemo' ? 'incDemoPart' : 'incPart'] = part;
+  if (_incParts().indexOf(part) > -1) state[state.page === 'incdemo' ? 'incDemoPart' : 'incPart'] = part;
   if (zone) { state.incZoneOpen = state.incZoneOpen || {}; state.incZoneOpen[zone] = true; }
   if (rep) { state.incGpOpen = state.incGpOpen || {}; state.incGpOpen['E:R:' + rep] = true; state.incGpOpen['A:R:' + rep] = true; }
   render();
@@ -7252,26 +7276,26 @@ function incSumGoCalc(zone, rep, part){
   }, 60);
 }
 
-// Rep and zone figures for the Summary, read off the engine. part: 'core' | 'cross' | 'all' (Core + Cross)
+// Rep and zone figures for the Summary, read off the engine. part: 'core' | 'cross' | 'tank' (demo) | 'all' (every part)
 function _incSumData(M, part){
   function T(a){ return sum(a || []); }
   function pick(ent){
-    var c = M.calc(ent), parts = part === 'all' ? ['core','cross'] : [part];
+    var c = M.calc(ent), parts = (part === 'all' ? _incParts() : [part]).filter(function(k){ return c[k]; });
     var o = { name:ent.name, zone:ent.isZone ? ent.name : (ent.zone || 'Cross Sales'), noTarget:!!ent.noTarget, tgt:T(ent.tgt), parts:{} };
     var inc = 0, any = false, elig = false, gp = 0, fin = 0, finAny = false;
     parts.forEach(function(k){
       var P = c[k];
       o.parts[k] = { gp:T(P.gp), ach:P.achT, elig:P.eligT === true, rate:P.rateT, inc:P.incT, fin:P.amtT, fee:P.feeT, ded:P.allT,
                      rm:P.rmT, ships:P.ships, noFee:!!P.noFee, surplus:!!P.surplus, sur:P.surT, bar:P.barT,
-                     kg:!!P.kg, kgs:P.kgsT, minA:P.minAchv || INC_MIN_ACHV };
+                     unit:P.unit ? P.unit.unit : null, uL:P.unit ? P.unit.qtyLabel : '', units:P.unit ? P.unit.units : '', qty:P.qtyT, minA:P.minAchv || INC_MIN_ACHV };
       gp += T(P.gp);
       if (P.eligT === true) elig = true;
-      if (P.kg) { if (P.amtT != null) o.finKg = (o.finKg || 0) + P.amtT; }   // kgs, not ₹: kept apart from Final GP
+      if (P.unit) { /* kgs / TEUs, not ₹: never added to Final GP */ }
       else if (P.amtT != null) { fin += P.amtT; finAny = true; }
       if (P.incT != null) { inc += P.incT; any = true; }
     });
     o.gp = gp; o.elig = elig; o.fin = finAny ? fin : null; o.inc = any ? inc : null;
-    if (parts.length === 1 && o.parts[parts[0]].kg) { o.fin = o.finKg == null ? null : o.finKg; o.finIsKg = true; }
+    if (parts.length === 1 && o.parts[parts[0]].unit) { var P0 = o.parts[parts[0]]; o.fin = P0.fin == null ? null : P0.fin; o.finUnit = P0.unit; }
     o.pay = o.elig && o.inc != null && o.inc > 0 ? o.inc : 0;   // what is actually payable
     if (parts.length === 1) { var P1 = o.parts[parts[0]]; o.ach = P1.ach; o.rate = P1.rate; }
     return o;
@@ -7291,7 +7315,7 @@ function _incSumData(M, part){
 }
 
 function incSummaryPage(){
-  var minL = '75%';   // the eligibility bar named on the cards (Cross/Air: INC_AIR_MIN_ACHV)
+  var minL = '75%';   // the eligibility bar named on the cards (Cross Sales - Air / - Tank: INC_UNIT_MIN_ACHV)
   var S = _incSum();
   // The quarter picked in the dropdown (the quarter being paid now unless another one is chosen)
   var SQ = _incSumQuarter(), pq = SQ.q, period = pq, isPayQ = true;
@@ -7310,7 +7334,7 @@ function incSummaryPage(){
   var INK = '#14213D', SUB = '#5B6678', MUTED = '#8A9AB5', LINE = '#E3E9F2', PURPLE = '#6B3FA0', NAVY = '#0D2B5E';
   function pct(a, b){ return b > 0 ? Math.round(a / b * 100) : 0; }
   function zoneParts(z){ if (z === 'Cross Sales') return ['Cross Sales', '']; var m = /^(\S+)\s*(.*)$/.exec(z || ''); return m ? [m[1], m[2]] : [z, '']; }
-  function partLabel(k){ return k === 'core' ? 'Core' : k === 'cross' ? 'Cross' : 'Core + Cross'; }
+  function partLabel(k){ return _incPartName(k); }
   function btn(on){ return 'border:none;border-radius:999px;padding:5px 13px;font-size:11px;font-weight:700;cursor:pointer;'+(on ? 'background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');color:#FFFFFF;' : 'background:transparent;color:#1E3A66;'); }
   var pill = 'background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;';
   var card = 'background:#FFFFFF;border:1px solid #D5DCE6;border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.06);';
@@ -7324,7 +7348,7 @@ function incSummaryPage(){
       + '</select>')
     + (SQ.demo ? '' : _incLockBadge(pq.key))
     + ('<div role="radiogroup" aria-label="Core or Cross" style="display:inline-flex;gap:2px;padding:2px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;">'
-      + ['all','core','cross'].map(function(k){ return '<button onclick="incSumSet(\'part\',\''+k+'\')" class="btnq" role="radio" aria-checked="'+(S.part === k)+'" style="'+btn(S.part === k)+'">'+partLabel(k)+'</button>'; }).join('')
+      + ['all'].concat(_incParts()).map(function(k){ return '<button onclick="incSumSet(\'part\',\''+k+'\')" class="btnq" role="radio" aria-checked="'+(S.part === k)+'" style="'+btn(S.part === k)+'">'+partLabel(k)+'</button>'; }).join('')
     + '</div>')
     + '<span style="flex:1;"></span>'
     + '<button onclick="incSumExport()" class="btnq" style="'+pill+'">Export CSV</button>'
@@ -7389,7 +7413,7 @@ function incSummaryPage(){
         + '</div>'
       + '</div>'
       + '<div style="display:flex;flex-wrap:wrap;gap:20px 40px;padding-left:28px;border-left:1px solid '+LINE+';">'
-        + (function(){ var sp = _incSum().part; minL = !_incAirOn() || sp === 'core' ? '75%' : sp === 'cross' ? INC_AIR_MIN_ACHV + '%' : '75% Core / ' + INC_AIR_MIN_ACHV + '% Cross'; return ''; })()
+        + (function(){ var sp = _incSum().part; minL = !_incUnitOn() || sp === 'core' ? '75%' : sp !== 'all' ? INC_UNIT_MIN_ACHV + '%' : '75% Core / ' + INC_UNIT_MIN_ACHV + '% Cross'; return ''; })()
         + sec('Eligible sales reps', D.nElig + '<span style="font-size:13px;color:'+MUTED+';font-weight:500;"> of '+nReps+'</span>', pct(D.nElig, nReps)+'% reached '+minL+' GP%')
         + sec('Not eligible', String(nReps - D.nElig), 'Below '+minL+' GP% or no target')
       + '</div>'
@@ -7424,7 +7448,7 @@ function incSummaryPage(){
       + label + '<span style="display:inline-block;width:12px;color:'+PURPLE+';font-size:9px;">'+(on ? (S.dir > 0 ? ' ▲' : ' ▼') : '')+'</span></th>';
   }
   var cols = sortTh('name','Sales rep',0,'26%') + sortTh('zone','Zone',0,'24%') + '<th class="incs-th" style="text-align:left;width:12%;">Status</th>'
-    + sortTh('tgt','Target GP',1,'12%') + sortTh('fin',S.part === 'cross' && _incAirOn() ? 'Final kgs' : 'Final GP',1,'12%') + sortTh('inc','Total incentive',1,'14%','color:'+PURPLE+';');
+    + sortTh('tgt','Target GP',1,'12%') + sortTh('fin',(_incUnitOn() && INC_UNIT_PARTS[S.part] ? 'Final ' + INC_UNIT_PARTS[S.part].units : 'Final GP'),1,'12%') + sortTh('inc','Total incentive',1,'14%','color:'+PURPLE+';');
   var NCOL = 6;
 
   // ── 3. The working for one rep (or one zonal manager: Z = that zone's team totals), in groups ──
@@ -7440,21 +7464,21 @@ function incSummaryPage(){
       if (!P.elig) return kv(partLabel(k), '<span style="font-family:\'DM Sans\',sans-serif;color:'+MUTED+';white-space:normal;">Not eligible: '+why(k)+'</span>');
       return (P.surplus ? kv(partLabel(k)+' bar ('+(P.rate === RT.t2 ? '100' : '75')+'% of target)', P.bar == null ? '–' : fmtCur(P.bar))
           + kv(partLabel(k)+' surplus (Final GP − bar)', P.sur == null ? '–' : fmtCur(P.sur), P.sur != null && P.sur <= 0 ? '#DC2626' : null) : '')
-        + kv(partLabel(k)+' rate', P.rate == null ? '–' : P.kg ? '₹'+P.rate+' per kg' : P.rate+'%') + kv(partLabel(k)+' incentive', money(P.inc), PURPLE);
+        + kv(partLabel(k)+' rate', P.rate == null ? '–' : P.unit ? '₹'+P.rate.toLocaleString('en-IN')+' per '+P.unit : P.rate+'%') + kv(partLabel(k)+' incentive', money(P.inc), PURPLE);
     }).join('') + '<div style="font-size:10.5px;color:'+MUTED+';margin-top:6px;">'
-      + (ks.indexOf('core') > -1 || !_incAirOn() ? (Z ? 'ZM rates' : 'Rates')+': '+RT.t1+'% at 75–99.99% GP%, '+RT.t2+'% at 100% or more'
-        + (!Z && _incSurplusOn() ? ', paid on the surplus over 75% / 100% of target (0 if none)' : '') + (two && _incAirOn() ? '. ' : '') : '')
-      + (_incAirOn() && ks.indexOf('cross') > -1 ? 'Cross (Air): '+INC_AIR_MIN_ACHV+'% GP% to qualify, ₹'+INC_AIR_PER_KG+' per kg' : '')+'</div>';
+      + (ks.indexOf('core') > -1 || !_incUnitOn() ? (Z ? 'ZM rates' : 'Rates')+': '+RT.t1+'% at 75–99.99% GP%, '+RT.t2+'% at 100% or more'
+        + (!Z && _incSurplusOn() ? ', paid on the surplus over 75% / 100% of target (0 if none)' : '') + (two && _incUnitOn() ? '. ' : '') : '')
+      + ks.filter(function(k){ return r.parts[k].unit; }).map(function(k){ var U = INC_UNIT_PARTS[k]; return U.label+': '+INC_UNIT_MIN_ACHV+'% GP% to qualify, ₹'+U.per.toLocaleString('en-IN')+' per '+U.unit; }).join('. ')+'</div>';
     var fin = ks.map(function(k){
       var P = r.parts[k];
       if (!P.elig) return two ? kv(partLabel(k), '<span style="font-family:\'DM Sans\',sans-serif;color:'+MUTED+';">nothing deducted (not eligible)</span>') : '';
-      var F = P.kg ? _incFmtKg : fmtCur;
+      var F = P.unit ? function(x){ return _incFmtUnit(x, P.unit); } : fmtCur;
       function ded(v){ return v == null ? '–' : v > 0 ? '−' + F(v) : v < 0 ? '+' + F(-v) : F(0); }
       return (two ? '<div style="font-size:11px;font-weight:700;color:'+NAVY+';margin:6px 0 2px;">'+partLabel(k)+'</div>' : '')
-        + (P.kg ? kv('Air chargeable kgs', _incFmtKg(P.kgs), '#5B6678') : '')
+        + (P.unit ? kv(P.uL, F(P.qty), '#5B6678') : '')
         + INC_RM.map(function(x){ var n = P.ships && P.ships[x.k]; return kv(esc(x.label)+(n ? ' <span style="color:'+MUTED+';">· '+n+' job'+(n === 1 ? '' : 's')+'</span>' : ''), ded(P.rm && P.rm[x.k]), '#5B6678'); }).join('')
         + (P.noFee ? '' : kv('Management fees (15%)', ded(P.fee), '#5B6678'))
-        + (P.kg ? kv('Final kgs after deductions', _incFmtKg(P.fin), '#0B7A4B', true) : kv('Final GP after deductions', money(P.fin), '#0B7A4B', true));
+        + (P.unit ? kv('Final '+P.units+' after deductions', F(P.fin), '#0B7A4B', true) : kv('Final GP after deductions', money(P.fin), '#0B7A4B', true));
     }).join('')
       + '<div style="border-top:1px solid '+LINE+';margin-top:6px;padding-top:4px;">'+kv(Z ? 'ZM incentive' : 'Total incentive', r.pay > 0 ? fmtCur(r.pay) : r.elig ? fmtCur(0) : '–', PURPLE, true)+'</div>';
     var links = isPayQ
@@ -7486,7 +7510,7 @@ function incSummaryPage(){
       + '<td style="overflow:hidden;text-overflow:ellipsis;"><span style="font-weight:600;color:'+NAVY+';">'+esc(zp[0])+'</span>'+(zp[1] ? '<span style="color:'+MUTED+';margin-left:6px;">'+esc(zp[1])+'</span>' : '')+'</td>'
       + '<td>'+chip(st)+'</td>'
       + '<td class="incs-n" style="color:'+(r.noTarget ? '#CBD3DF' : INK)+';">'+(r.noTarget ? '–' : fmtCur(r.tgt))+'</td>'
-      + '<td class="incs-n" style="color:'+(r.fin == null ? '#CBD3DF' : '#0B7A4B')+';">'+(r.finIsKg ? _incFmtKg(r.fin) : money(r.fin))+'</td>'
+      + '<td class="incs-n" style="color:'+(r.fin == null ? '#CBD3DF' : '#0B7A4B')+';">'+(r.finUnit ? _incFmtUnit(r.fin, r.finUnit) : money(r.fin))+'</td>'
       + '<td class="incs-n" style="background:#FBF8FE;font-size:13.5px;font-weight:700;color:'+(r.pay > 0 ? PURPLE : '#CBD3DF')+';">'+(r.pay > 0 ? fmtCur(r.pay) : r.elig ? fmtCur(0) : '–')+'</td>'
     + '</tr>';
     return tr + (open ? '<tr data-detail="1"'+(hide ? ' style="display:none;"' : '')+'><td colspan="'+NCOL+'" style="padding:0;border-bottom:1px solid #EEF2F7;background:#FFFFFF;">'+detail(r)+'</td></tr>' : '');
@@ -7540,7 +7564,7 @@ function incSummaryPage(){
       + '<td style="overflow:hidden;text-overflow:ellipsis;"><span style="font-weight:600;color:'+NAVY+';">'+esc(zp[0])+'</span>'+'<span style="color:'+MUTED+';margin-left:6px;">'+Z.reps+' rep'+(Z.reps === 1 ? '' : 's')+'</span></td>'
       + '<td>'+chip(status(e))+'</td>'
       + '<td class="incs-n" style="color:'+(e.noTarget ? '#CBD3DF' : INK)+';">'+(e.noTarget ? '–' : fmtCur(e.tgt))+'</td>'
-      + '<td class="incs-n" style="color:'+(e.fin == null ? '#CBD3DF' : '#0B7A4B')+';">'+(e.finIsKg ? _incFmtKg(e.fin) : money(e.fin))+'</td>'
+      + '<td class="incs-n" style="color:'+(e.fin == null ? '#CBD3DF' : '#0B7A4B')+';">'+(e.finUnit ? _incFmtUnit(e.fin, e.finUnit) : money(e.fin))+'</td>'
       + '<td class="incs-n" style="background:#FBF8FE;font-size:13.5px;font-weight:700;color:'+(Z.zm > 0 ? PURPLE : '#CBD3DF')+';">'+(Z.zm > 0 ? fmtCur(Z.zm) : e.elig ? fmtCur(0) : '–')+'</td>'
     + '</tr>'
     + (open ? '<tr data-detail="1"'+(hide ? ' style="display:none;"' : '')+'><td colspan="6" style="padding:0;border-bottom:1px solid #EEF2F7;background:#FFFFFF;">'+detail(e, Z)+'</td></tr>' : '');
@@ -7567,7 +7591,7 @@ function incSummaryPage(){
     + '<div style="padding:8px 16px;font-size:11.5px;color:'+MUTED+';border-bottom:1px solid #EEF2F7;">Their own incentive on the zone\'s GP ('+INC_RATES.zm.t1+'% / '+INC_RATES.zm.t2+'%), separate from the reps\'.</div>'
     + '<table style="width:100%;border-collapse:collapse;table-layout:fixed;"><thead><tr>'
       + zTh('name','Zonal manager',0,'26%') + zTh('zone','Zone',0,'24%') + '<th class="incs-th" style="position:static;text-align:left;width:12%;">Status</th>'
-      + zTh('tgt','Zone target GP',1,'12%') + zTh('fin',S.part === 'cross' && _incAirOn() ? 'Final kgs' : 'Final GP',1,'12%') + zTh('inc','ZM incentive',1,'14%','color:'+PURPLE+';')
+      + zTh('tgt','Zone target GP',1,'12%') + zTh('fin',(_incUnitOn() && INC_UNIT_PARTS[S.part] ? 'Final ' + INC_UNIT_PARTS[S.part].units : 'Final GP'),1,'12%') + zTh('inc','ZM incentive',1,'14%','color:'+PURPLE+';')
     + '</tr></thead><tbody>' + (zBody || '<tr><td colspan="6" style="padding:32px;text-align:center;color:'+MUTED+';font-size:12px;">No zonal managers match these filters.</td></tr>') + '</tbody></table>'
     + '<div style="padding:9px 16px;font-size:11px;color:'+MUTED+';border-top:1px solid #EEF2F7;">Click a zonal manager to see the zone\'s performance, deductions, how the ZM incentive was worked out, and the zone\'s team.</div>'
     + '<div style="border-top:1px solid '+LINE+';"><div style="max-width:820px;padding:16px 18px 18px;"><div class="incs-grp" style="margin-bottom:8px;">Payout by zone (reps + ZM) · click a bar to see its reps</div>'+(bars || '<div style="font-size:11.5px;color:'+MUTED+';">No zones.</div>')+'</div></div>'
@@ -7589,7 +7613,7 @@ function _incSumExportOne(){
   var D = _incSumData(M, S.part), cur = state.currency;
   function amt(v){ return v == null ? '' : (cur === 'USD' ? v / state.rate : v).toFixed(2); }
   function q(v){ v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
-  var part = S.part === 'core' ? 'Core' : S.part === 'cross' ? 'Cross' : 'Core + Cross';
+  var part = _incPartName(S.part);
   var L = [];
   function row(a){ L.push(a.map(q).join(',')); }
   row(['Incentive payout summary']);
@@ -7609,11 +7633,11 @@ function _incSumExportOne(){
   });
   row([]);
   var single = S.part !== 'all';
-  row(['Sales rep', 'Zone', 'Eligible', 'GP achieved', 'Target GP'].concat(single ? ['GP%', 'Rate %'] : ['Core GP%', 'Core rate %', 'Core incentive', 'Cross GP%', 'Cross rate %', 'Cross incentive']).concat([S.part === 'cross' && _incAirOn() ? 'Final kgs' : 'Final GP', 'Total incentive']));
+  row(['Sales rep', 'Zone', 'Eligible', 'GP achieved', 'Target GP'].concat(single ? ['GP%', 'Rate %'] : _incParts().reduce(function(o, k){ var n = _incPartName(k); return o.concat([n + ' GP%', n + (_incUnitOn() && INC_UNIT_PARTS[k] ? ' rate ₹/' + INC_UNIT_PARTS[k].unit : ' rate %'), n + ' incentive']); }, [])).concat([(_incUnitOn() && INC_UNIT_PARTS[S.part] ? 'Final ' + INC_UNIT_PARTS[S.part].units : 'Final GP'), 'Total incentive']));
   D.reps.slice().sort(function(a, b){ return a.elig !== b.elig ? (a.elig ? -1 : 1) : b.pay - a.pay || a.name.localeCompare(b.name); }).forEach(function(r){
     var mid = single ? [r.ach == null ? '' : r.ach, r.elig && r.rate != null ? r.rate : '']
-      : ['core', 'cross'].reduce(function(o, k){ var P = r.parts[k]; return o.concat([P.ach == null ? '' : P.ach, P.elig && P.rate != null ? P.rate : '', P.elig ? amt(P.inc) : '']); }, []);
-    row([r.name, r.zone, r.elig ? 'Yes' : 'No', amt(r.gp), r.noTarget ? '' : amt(r.tgt)].concat(mid).concat([amt(r.fin), amt(r.pay)]));
+      : _incParts().reduce(function(o, k){ var P = r.parts[k] || {}; return o.concat([P.ach == null ? '' : P.ach, P.elig && P.rate != null ? P.rate : '', P.elig ? amt(P.inc) : '']); }, []);
+    row([r.name, r.zone, r.elig ? 'Yes' : 'No', amt(r.gp), r.noTarget ? '' : amt(r.tgt)].concat(mid).concat([r.finUnit ? (r.fin == null ? '' : Math.round(r.fin * 100) / 100) : amt(r.fin), amt(r.pay)]));
   });
   var a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['﻿' + L.join('\n')], { type:'text/csv' }));
